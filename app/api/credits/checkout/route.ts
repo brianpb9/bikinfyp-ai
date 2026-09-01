@@ -3,7 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
 import { config, paymentsEnv } from "@/lib/config";
 import { createSnapTransaction, newOrderId, MidtransCallbackNotConfigured, MidtransNotConfigured } from "@/lib/midtrans";
-import { createDuitkuInvoice, DuitkuCallbackNotConfigured, DuitkuNotConfigured } from "@/lib/duitku";
+import { createDuitkuInvoice, createDuitkuTransaction, kanalSah, KANAL_DUITKU, DuitkuCallbackNotConfigured, DuitkuNotConfigured } from "@/lib/duitku";
 import { pgCreateCheckout, pgMarkPaymentInitiationFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { initiateCheckout, type CheckoutDeps } from "@/lib/payment-checkout";
 
@@ -29,8 +29,11 @@ const productionCheckoutDeps = (): CheckoutDeps => {
       ).run(uuid(), userId, gateway, orderId, amountIdr, amountIdr, "pending", JSON.stringify({ package_id: packageId, payments_env: paymentsEnv() }), now());
       audit(userId, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: amountIdr, gateway });
     },
-    async createPayment({ orderId, packageId, phone, email }) {
+    async createPayment({ orderId, packageId, phone, email, method }) {
       if (gateway === "duitku") {
+        // Kanal dipilih pembeli -> jalur v2 (QRIS/VA saja, sesuai daftar kita).
+        // Tanpa kanal -> POP lama, dipertahankan sebagai jalur mundur.
+        if (method) return createDuitkuTransaction({ orderId, packageId, phone, email, method });
         return createDuitkuInvoice({ orderId, packageId, phone, email });
       }
       // Kompatibilitas Duitku lama: field phone diisi email bila kosong.
@@ -61,9 +64,27 @@ export async function POST(req: Request) {
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));
     const packageId = String(body.package_id ?? "");
+    // Kanal DIVALIDASI di server, bukan dipercaya dari klien: daftar yang
+    // dikirim klien bisa memuat kanal berbiaya yang sengaja tidak kita tawarkan.
+    const method = body.payment_method ? String(body.payment_method) : undefined;
+    if (method && !kanalSah(method)) {
+      throw ERR.BAD_REQUEST(
+        `Metode pembayarannya nggak tersedia. Pilih: ${KANAL_DUITKU.map((k) => k.nama).join(", ")}.`,
+        `Unsupported payment method: ${method}`,
+      );
+    }
     try {
-      const checkout = await initiateCheckout(user, packageId, productionCheckoutDeps());
-      return Response.json({ order_id: checkout.orderId, provider_ref: checkout.providerRef, redirect_url: checkout.redirectUrl }, { status: 201 });
+      const checkout = await initiateCheckout(user, packageId, productionCheckoutDeps(), method);
+      return Response.json(
+        {
+          order_id: checkout.orderId,
+          provider_ref: checkout.providerRef,
+          redirect_url: checkout.redirectUrl,
+          ...(checkout.vaNumber ? { va_number: checkout.vaNumber } : {}),
+          ...(checkout.qrString ? { qr_string: checkout.qrString } : {}),
+        },
+        { status: 201 },
+      );
     } catch (err) {
       if (
         err instanceof MidtransNotConfigured ||

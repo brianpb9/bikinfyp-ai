@@ -38,7 +38,11 @@ test("tombol top-up mati sampai server menyatakan pembayaran aktif", () => {
   // lingkungan yang diminta Duitku untuk diperlihatkan — dan pendaftaran
   // merchant kita ditolak karenanya. Klaim uang sungguhan tetap dijaga
   // payments_live, diperiksa di tests/pembayaran-sandbox.test.ts.
-  assert.match(s, /disabled=\{busy !== null \|\| bisaBayar !== true\}/, "default harus tertutup sampai server bilang boleh");
+    // Syarat kanal (QRIS/VA) ditambahkan 2 Sep dan MEMPERKETAT, bukan
+  // melonggarkan: tombol kini juga tertutup selama pembeli belum memilih
+  // cara bayar. Asersi memeriksa awalan ekspresinya, supaya syarat baru
+  // yang menambah ketat tidak dianggap regresi.
+  assert.match(s, /disabled=\{busy !== null \|\| bisaBayar !== true/, "default harus tertutup sampai server bilang boleh");
   assert.ok(!/bisaBayar === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
   assert.match(s, /pembayaran belum aktif/, "label tombol harus menjelaskan kenapa mati");
 });

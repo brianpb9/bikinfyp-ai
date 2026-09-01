@@ -157,7 +157,10 @@ test("meta memisahkan 'kunci terpasang' dari 'uang sungguhan'", () => {
 test("tombol beli TIDAK lagi digantung pada payments_live", () => {
   // Kalau tombolnya kembali dikunci payments_live, checkout mati lagi di
   // sandbox dan penolakan Duitku terulang.
-  assert.match(HALAMAN, /disabled=\{busy !== null \|\| bisaBayar !== true\}/);
+  // Awalan ekspresi, bukan seluruhnya. Sejak 2 Sep tombol juga menunggu
+  // pembeli memilih kanal (QRIS/VA) — syarat yang MEMPERKETAT, jadi
+  // memaksa kecocokan persis akan menandai pengetatan sebagai regresi.
+  assert.match(HALAMAN, /disabled=\{busy !== null \|\| bisaBayar !== true/);
   assert.doesNotMatch(HALAMAN, /disabled=\{busy !== null \|\| paymentsLive !== true\}/);
 });
 

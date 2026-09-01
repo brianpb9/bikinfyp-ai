@@ -62,6 +62,12 @@ function KreditInner() {
   // disembunyikan dengan mematikan tombolnya.
   const [bisaBayar, setBisaBayar] = useState<boolean | null>(null);
   const [modeSandbox, setModeSandbox] = useState<boolean | null>(null);
+  // Kanal DATANG DARI SERVER, tidak diketik di klien. Daftar yang diketik di
+  // sini bisa memuat kanal yang server tolak — pembeli baru tahu setelah
+  // menekan, dan itu kegagalan yang bisa diramalkan.
+  const [kanal, setKanal] = useState<{ code: string; name: string; type: string }[]>([]);
+  const [kanalDipilih, setKanalDipilih] = useState<string | null>(null);
+  const [instruksi, setInstruksi] = useState<{ va?: string; url?: string; nama?: string } | null>(null);
   const checkoutLock = useRef(false);
 
   async function refresh() {
@@ -75,11 +81,17 @@ function KreditInner() {
   }
   useEffect(() => {
     refresh();
-    apiFetch<{ payments_live: boolean; payments_env: string; payments_configured: boolean }>("/api/meta")
+    apiFetch<{
+      payments_live: boolean;
+      payments_env: string;
+      payments_configured: boolean;
+      payment_channels?: { code: string; name: string; type: string }[];
+    }>("/api/meta")
       .then((m) => {
         setPaymentsLive(m.payments_live);
         setBisaBayar(m.payments_configured);
         setModeSandbox(m.payments_env === "sandbox");
+        setKanal(Array.isArray(m.payment_channels) ? m.payment_channels : []);
       })
       .catch(() => { setPaymentsLive(false); setBisaBayar(false); setModeSandbox(null); });
   }, []);
@@ -111,17 +123,36 @@ function KreditInner() {
     setBusy(packageId);
     setMsg(null);
     setError(null);
+    setInstruksi(null);
     try {
       // Jalur utama: checkout gateway aktif (Duitku POP; Midtrans Snap tetap
       // ada sebagai rollback — sama-sama redirect URL). Bila gateway belum
       // dipasang kuncinya (mode demo tanpa key), jatuh ke topup instan dev.
-      const res = await apiFetch<{ order_id: string; redirect_url: string }>("/api/credits/checkout", {
-        json: { package_id: packageId },
+      const res = await apiFetch<{
+        order_id: string;
+        redirect_url: string;
+        va_number?: string;
+        qr_string?: string;
+      }>("/api/credits/checkout", {
+        json: { package_id: packageId, ...(kanalDipilih ? { payment_method: kanalDipilih } : {}) },
       });
       setPendingOrder(res.order_id);
       setOrderStatus("pending");
-      window.open(res.redirect_url, "_blank");
-      setMsg("Order dibuat — selesaikan pembayaran di halaman pembayaran yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
+      const nama = kanal.find((k) => k.code === kanalDipilih)?.name;
+
+      if (res.va_number) {
+        // NOMOR VA DITAMPILKAN DI TEMPAT, tidak dilempar ke tab lain.
+        // Pembeli harus menyalinnya ke aplikasi banknya; membuka tab baru
+        // justru memindahkan nomor itu menjauh dari jempolnya.
+        setInstruksi({ va: res.va_number, nama });
+        setMsg(null);
+      } else {
+        // QRIS: halaman Duitku yang menggambar kodenya. Kita belum memuat
+        // pustaka QR sendiri, dan menambah satu hanya untuk ini tidak sepadan.
+        setInstruksi({ url: res.redirect_url, nama });
+        window.open(res.redirect_url, "_blank");
+        setMsg("Scan QRIS di halaman yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
+      }
     } catch (err) {
       // r13 (review produk 2026-08-07): jalur demo HANYA boleh dicoba kalau
       // server sudah bilang pembayaran belum aktif; sebelumnya err2 (fallback
@@ -226,6 +257,35 @@ function KreditInner() {
             penuh — ini yang sedang diverifikasi penyedia pembayaran kami.
           </p>
         )}
+        {/* PILIH KANAL SEBELUM PAKET, bukan sesudah.
+            Urutannya disengaja: harga VA dan QRIS sama, tapi cara bayarnya
+            berbeda jauh — menekan paket lalu baru ditanya "bayar pakai apa"
+            membuat orang merasa sudah terlanjur. */}
+        {bisaBayar === true && kanal.length > 0 && (
+          <div className="rounded-2xl border-2 border-zinc-200 bg-white p-3">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">Bayar pakai</p>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {kanal.map((k) => (
+                <button
+                  key={k.code}
+                  type="button"
+                  onClick={() => setKanalDipilih(k.code)}
+                  aria-pressed={kanalDipilih === k.code}
+                  className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                    kanalDipilih === k.code
+                      ? "border-amber-500 bg-amber-50 text-zinc-900"
+                      : "border-zinc-200 text-zinc-600 active:bg-zinc-50"
+                  }`}
+                >
+                  {k.name}
+                  {k.type === "qris" && <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">Scan dari aplikasi apa pun</span>}
+                </button>
+              ))}
+            </div>
+            {!kanalDipilih && <p className="mt-2 text-xs text-zinc-500">Pilih dulu cara bayarnya, baru pilih paket.</p>}
+          </div>
+        )}
+
         {PACKAGES.map((p) => (
           <button
             key={p.id}
@@ -242,8 +302,8 @@ function KreditInner() {
             // Default aman: tertutup sampai server BILANG boleh. Yang berubah
             // 26 Agu hanya PERTANYAANNYA — dari "sudah uang sungguhan?" jadi
             // "kuncinya sudah terpasang?" — bukan longgarnya default.
-            disabled={busy !== null || bisaBayar !== true}
-            aria-disabled={busy !== null || bisaBayar !== true}
+            disabled={busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih)}
+            aria-disabled={busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih)}
             className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
           >
             {p.tag && (
@@ -275,6 +335,35 @@ function KreditInner() {
         </p>
         {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}
         <ErrorText message={error} />
+        {instruksi?.va && (
+          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4">
+            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{instruksi.nama}</p>
+            <p className="mt-1 text-xs text-amber-900">Transfer ke nomor Virtual Account ini:</p>
+            <p className="mt-2 select-all font-display text-2xl font-extrabold tracking-wider text-zinc-900">
+              {instruksi.va}
+            </p>
+            <button
+              type="button"
+              onClick={() => { try { navigator.clipboard.writeText(instruksi.va!); setMsg("Nomor VA disalin."); } catch { setMsg("Salin manual ya."); } }}
+              className="mt-3 min-h-[44px] w-full rounded-xl border-2 border-amber-500 font-bold text-amber-800 active:bg-amber-100"
+            >
+              Salin nomor
+            </button>
+            <p className="mt-2 text-xs leading-5 text-amber-900">
+              Berlaku 60 menit. Setelah transfer, tap &quot;Sudah bayar? Cek status&quot; di bawah.
+            </p>
+          </div>
+        )}
+        {instruksi?.url && !instruksi.va && (
+          <a
+            href={instruksi.url}
+            target="_blank"
+            rel="noreferrer"
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50"
+          >
+            Buka lagi halaman {instruksi.nama ?? "pembayaran"}
+          </a>
+        )}
         {pendingOrder && orderStatus !== "paid" && (
           <button
             type="button"

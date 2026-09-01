@@ -54,6 +54,135 @@ export function duitkuBase(): string {
     : "https://api-sandbox.duitku.com";
 }
 
+/**
+ * Host API v2 (inquiry + getPaymentMethod) — BERBEDA dari host POP di atas.
+ *
+ * Ini bukan kelalaian penamaan Duitku, dan bukan hal yang bisa ditebak:
+ * createInvoice hidup di api-sandbox/api-prod, sedangkan v2 hidup di
+ * sandbox.duitku.com/webapi. Memakai host yang salah menjawab 404, bukan galat
+ * yang menjelaskan.
+ *
+ * Host sandbox DIVERIFIKASI langsung 2 Sep 2026 dengan merchant DS34363.
+ * Host produksi BELUM diverifikasi — belum ada akun produksi untuk mengujinya,
+ * jadi ia ditandai di sini alih-alih dianggap benar diam-diam.
+ */
+export function duitkuBaseV2(): string {
+  return config.duitkuIsProduction
+    ? "https://passport.duitku.com/webapi" // BELUM DIUJI — konfirmasi sebelum go-live
+    : "https://sandbox.duitku.com/webapi";
+}
+
+/**
+ * KANAL PEMBAYARAN YANG KITA TERIMA — QRIS dan Virtual Account.
+ *
+ * Kodenya BUKAN dari dokumentasi maupun ingatan. Diambil langsung dari
+ * getPaymentMethod milik merchant DS34363 pada 2 Sep 2026, karena kanal yang
+ * aktif berbeda per merchant — daftar dari sumber lain bisa memuat kanal yang
+ * akun ini tidak punya, dan itu baru ketahuan saat pembeli menekannya.
+ *
+ * BCA VA (kode BC) SENGAJA TIDAK ADA DI SINI. Ia satu-satunya kanal yang
+ * berbiaya: totalFee Rp5.000, sementara semua kanal di bawah nol. Kalau
+ * dimasukkan tanpa keputusan sadar, setiap pembelian lewat BCA menyusutkan
+ * margin diam-diam sebesar itu. BCA bank paling umum di Indonesia, jadi
+ * ketiadaannya berbiaya juga — tapi itu keputusan harga, bukan keputusan kode.
+ */
+export type KanalDuitku = { kode: string; nama: string; jenis: "qris" | "va" };
+
+export const KANAL_DUITKU: readonly KanalDuitku[] = [
+  { kode: "NQ", nama: "QRIS", jenis: "qris" },
+  { kode: "I1", nama: "BNI Virtual Account", jenis: "va" },
+  { kode: "BR", nama: "BRI Virtual Account", jenis: "va" },
+  { kode: "M2", nama: "Mandiri Virtual Account", jenis: "va" },
+  { kode: "BT", nama: "Permata Virtual Account", jenis: "va" },
+  { kode: "B1", nama: "CIMB Niaga Virtual Account", jenis: "va" },
+];
+
+export function kanalSah(kode: string): boolean {
+  return KANAL_DUITKU.some((k) => k.kode === kode);
+}
+
+export type TransaksiDuitku = {
+  providerRef: string;
+  redirectUrl: string;
+  /** Terisi untuk kanal VA. */
+  vaNumber?: string;
+  /** Terisi untuk QRIS — muatan mentah untuk digambar jadi kode QR. */
+  qrString?: string;
+};
+
+/**
+ * Buat transaksi pada SATU kanal yang dipilih pembeli (Duitku API v2).
+ *
+ * Bedanya dengan createDuitkuInvoice (POP): POP menyerahkan pemilihan kanal ke
+ * halaman Duitku dan menampilkan SELURUH kanal milik merchant, termasuk yang
+ * berbiaya dan yang tidak kita tawarkan. Jalur ini memilihkan kanalnya di sisi
+ * kita, jadi daftar yang dilihat pembeli sama dengan daftar yang benar-benar
+ * kita terima.
+ *
+ * Formula tanda tangan diverifikasi terhadap sandbox nyata, bukan disalin:
+ *   md5(merchantCode + merchantOrderId + paymentAmount + apiKey)
+ */
+export async function createDuitkuTransaction(opts: {
+  orderId: string;
+  packageId: string;
+  method: string;
+  phone: string;
+  email: string;
+  customerName?: string;
+}): Promise<TransaksiDuitku> {
+  if (!config.duitkuMerchantCode || !config.duitkuApiKey) throw new DuitkuNotConfigured();
+  if (!kanalSah(opts.method)) throw new Error(`Kanal pembayaran tidak dikenal: ${opts.method}`);
+
+  const pkg = TOPUP_PACKAGES.find((p) => p.id === opts.packageId);
+  if (!pkg) throw new Error(`Paket tidak dikenal: ${opts.packageId}`);
+
+  const callbackUrl = publicUrl("/api/webhooks/duitku");
+  const returnUrl = publicUrl("/kredit");
+  const signature = crypto
+    .createHash("md5")
+    .update(config.duitkuMerchantCode + opts.orderId + String(pkg.priceIdr) + config.duitkuApiKey)
+    .digest("hex");
+
+  const res = await fetch(`${duitkuBaseV2()}/api/merchant/v2/inquiry`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      merchantCode: config.duitkuMerchantCode,
+      paymentAmount: pkg.priceIdr,
+      paymentMethod: opts.method,
+      merchantOrderId: opts.orderId,
+      productDetails: `${pkg.name} BikinFYP AI`,
+      email: opts.email || "hdrvstudio@gmail.com",
+      phoneNumber: opts.phone,
+      // Nama pemilik VA yang tampil di aplikasi bank pembeli.
+      customerVaName: opts.customerName?.slice(0, 20) || "BikinFYP AI",
+      itemDetails: [{ name: `${pkg.name} BikinFYP AI`, price: pkg.priceIdr, quantity: 1 }],
+      callbackUrl,
+      returnUrl,
+      signature,
+      expiryPeriod: 60,
+    }),
+  });
+
+  const data = (await res.json().catch(() => ({}))) as {
+    statusCode?: string;
+    statusMessage?: string;
+    reference?: string;
+    paymentUrl?: string;
+    vaNumber?: string;
+    qrString?: string;
+  };
+  if (!res.ok || data.statusCode !== "00" || !data.reference) {
+    throw new Error(`duitku v2: HTTP ${res.status} ${data.statusMessage ?? "inquiry gagal"}`);
+  }
+  return {
+    providerRef: data.reference,
+    redirectUrl: data.paymentUrl ?? returnUrl,
+    ...(data.vaNumber ? { vaNumber: data.vaNumber } : {}),
+    ...(data.qrString ? { qrString: data.qrString } : {}),
+  };
+}
+
 export async function createDuitkuInvoice(opts: {
   orderId: string;
   packageId: string;

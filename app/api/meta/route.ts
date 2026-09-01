@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config, paymentsConfigured, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
+import { KANAL_DUITKU } from "@/lib/duitku";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,13 @@ export async function GET(req: Request) {
       // ditolak: mereka minta melihat checkout sampai pembayaran, di sandbox
       // mereka sendiri.
       payments_configured: paymentsConfigured(),
+      // Kanal yang benar-benar kita terima — QRIS dan VA saja.
+      //
+      // Dikirim DARI SERVER, bukan diketik di klien: daftar yang diketik di
+      // layar bisa memuat kanal yang server tolak, dan pembeli baru tahu
+      // sesudah menekan. Server juga yang memvalidasinya lagi saat checkout,
+      // jadi klien tidak pernah menjadi sumber kebenaran soal ini.
+      payment_channels: KANAL_DUITKU.map((k) => ({ code: k.kode, name: k.nama, type: k.jenis })),
     });
   } catch (err) {
     return errorResponse(err);
