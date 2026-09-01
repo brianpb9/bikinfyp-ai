@@ -3,6 +3,7 @@ import { canRequestOtp, generateCode, storeOtp, isValidEmail } from "@/lib/otp";
 import { sendOtpEmail, hasEmailKey, isProduction } from "@/lib/email-otp";
 import { pgCanRequestOtp, pgStoreOtp, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 
+import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -10,6 +11,9 @@ export const dynamic = "force-dynamic";
 // Rate limit: maks 3 kirim/email/15 menit.
 export async function POST(req: Request) {
   try {
+    // Kredensial bisa diganti dari dashboard tanpa restart; segarkan
+    // sebelum dipakai. Ber-TTL, jadi paling sering satu query/30 detik.
+    await pastikanSegar();
     const body = await req.json().catch(() => ({}));
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!isValidEmail(email)) {

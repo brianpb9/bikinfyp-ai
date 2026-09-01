@@ -7,6 +7,7 @@ import { createDuitkuInvoice, createDuitkuTransaction, kanalSah, KANAL_DUITKU, D
 import { pgCreateCheckout, pgMarkPaymentInitiationFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { initiateCheckout, type CheckoutDeps } from "@/lib/payment-checkout";
 
+import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -60,6 +61,9 @@ const productionCheckoutDeps = (): CheckoutDeps => {
 // invoice di gateway aktif (Duitku POP; Midtrans Snap = jalur rollback).
 export async function POST(req: Request) {
   try {
+    // Kredensial bisa diganti dari dashboard tanpa restart; segarkan
+    // sebelum dipakai. Ber-TTL, jadi paling sering satu query/30 detik.
+    await pastikanSegar();
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));

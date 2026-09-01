@@ -25,6 +25,7 @@
 // harga yang pantas selama jumlahnya masih bisa dihitung dengan jari.
 
 import { redirect } from "next/navigation";
+import { ERR } from "./errors";
 import { getAuthUserFromCookies } from "./dashboard-auth";
 import type { UserRow } from "./db";
 
@@ -53,5 +54,24 @@ export async function wajibAdmin(): Promise<UserRow> {
   const user = await getAuthUserFromCookies();
   if (!user) redirect("/onboarding");
   if (!apakahAdmin(user.email)) redirect("/");
+  return user;
+}
+
+/**
+ * Gerbang admin untuk RUTE API.
+ *
+ * Terpisah dari wajibAdmin() karena bentuk penolakannya berbeda: Server
+ * Component me-redirect ke halaman, rute API harus MELEMPAR supaya klien
+ * menerima kode galat — redirect di rute API menghasilkan HTML di tempat JSON
+ * diharapkan, dan itu terbaca sebagai kerusakan, bukan penolakan.
+ *
+ * Sengaja menjawab 403 saat sudah login tapi bukan admin, dan 401 saat belum
+ * login sama sekali: keduanya masalah yang berbeda bagi orang yang membacanya.
+ */
+export async function wajibAdminApi(req: Request): Promise<UserRow> {
+  const { getAuthUser } = await import("./auth");
+  const user = await getAuthUser(req);
+  if (!user) throw ERR.UNAUTHORIZED();
+  if (!apakahAdmin(user.email)) throw ERR.FORBIDDEN("Halaman ini khusus admin.", "Admin only.");
   return user;
 }

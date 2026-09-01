@@ -12,6 +12,12 @@ import { redactWorkerError } from "../lib/worker-log";
 import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
 import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
 import { processPromoJob } from "../lib/promo/worker";
+import { mulaiPenyegaranKredensial } from "../lib/kredensial";
+
+// Kredensial yang diganti lewat halaman admin harus ikut terpakai di sini.
+// Tanpa ini worker memakai nilai .env sampai container di-recreate — dan
+// menghindari recreate itulah seluruh alasan fitur ini dibangun.
+mulaiPenyegaranKredensial();
 
 // Provider sengaja buta database (lib/providers/task-memo.ts). Worker-lah yang
 // memasang implementasi nyatanya, dan HARUS sebelum job pertama diambil —

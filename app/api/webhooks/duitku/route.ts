@@ -7,6 +7,7 @@ import { grossAmountMatchesStoredAmount } from "@/lib/payment-amount";
 import { creditTopup } from "@/lib/credits";
 import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 
+import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,9 @@ async function emailPemilik(userId: string): Promise<string | null> {
 
 export async function POST(req: Request) {
   try {
+    // Kredensial bisa diganti dari dashboard tanpa restart; segarkan
+    // sebelum dipakai. Ber-TTL, jadi paling sering satu query/30 detik.
+    await pastikanSegar();
     // Duitku mengirim form-urlencoded, bukan JSON.
     const form = await req.formData().catch(() => null);
     const payload: Record<string, string> = {};

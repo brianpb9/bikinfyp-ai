@@ -99,3 +99,11 @@ export function mediaUrlKey(): Buffer {
 export function otpHashKey(): Buffer {
   return cached("bikinfyp/otp-hash/v1");
 }
+
+/** Kunci enkripsi kredensial partner yang tersimpan di database
+ *  (lib/kredensial.ts). Diturunkan terpisah dari kunci media dan OTP: bocornya
+ *  salah satu tidak membocorkan yang lain, dan tiap kunci bisa dirotasi
+ *  sendiri dengan mengganti purpose-nya. */
+export function kredensialKey(): Buffer {
+  return cached("bikinfyp/kredensial/v1");
+}

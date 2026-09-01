@@ -5,6 +5,7 @@ import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oaut
 import { cookieState } from "@/lib/cookies";
 import { tujuanAman } from "@/lib/tujuan-login";
 
+import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -20,6 +21,9 @@ function kembaliDenganGalat(alasan: string): Response {
 
 export async function GET(req: Request) {
   try {
+    // Kredensial bisa diganti dari dashboard tanpa restart; segarkan
+    // sebelum dipakai. Ber-TTL, jadi paling sering satu query/30 detik.
+    await pastikanSegar();
     // INI NAVIGASI BROWSER, BUKAN PANGGILAN API.
     //
     // Sebelumnya kedua penjagaan di bawah melempar BAD_REQUEST, dan pengguna
