@@ -286,3 +286,46 @@ export async function duitkuTransactionStatus(orderId: string): Promise<{
     amount?: string;
   };
 }
+
+/**
+ * Tanya Duitku status sebuah order — jaring pengaman kalau callback tidak tiba.
+ *
+ * Callback bisa hilang karena hal-hal yang di luar kendali kita: jaringan,
+ * deploy yang kebetulan berlangsung, atau Duitku menyerah setelah beberapa
+ * percobaan. Tanpa cara menanyakan ulang, satu callback yang hilang berarti
+ * uang pembeli masuk tapi kreditnya tidak pernah ada — dan satu-satunya yang
+ * tahu adalah pembeli yang komplain.
+ *
+ * Formula tanda tangan: md5(merchantCode + merchantOrderId + apiKey).
+ * Endpoint POP, bukan v2 — verifikasi sebelum mengubah host-nya.
+ */
+export async function duitkuStatusTransaksi(orderId: string): Promise<{
+  statusCode: string;
+  statusMessage: string;
+  /** "00" sukses · "01" diproses · "02" batal/gagal */
+  amount?: string;
+  reference?: string;
+}> {
+  if (!config.duitkuMerchantCode || !config.duitkuApiKey) throw new DuitkuNotConfigured();
+  const signature = crypto
+    .createHash("md5")
+    .update(config.duitkuMerchantCode + orderId + config.duitkuApiKey)
+    .digest("hex");
+  const res = await fetch(`${duitkuBase()}/api/merchant/transactionStatus`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      merchantCode: config.duitkuMerchantCode,
+      merchantOrderId: orderId,
+      signature,
+    }),
+  });
+  const d = (await res.json().catch(() => ({}))) as Record<string, string>;
+  if (!res.ok) throw new Error(`duitku status: HTTP ${res.status} ${JSON.stringify(d).slice(0, 200)}`);
+  return {
+    statusCode: d.statusCode ?? "",
+    statusMessage: d.statusMessage ?? "",
+    amount: d.amount,
+    reference: d.reference,
+  };
+}

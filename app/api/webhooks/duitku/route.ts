@@ -1,13 +1,14 @@
 import { errorResponse } from "@/lib/errors";
 import { paymentsEnv } from "@/lib/config";
-import { apakahAdmin } from "@/lib/admin-auth";
+import { apakahPengujiSandbox } from "@/lib/admin-auth";
 import { getDb, audit } from "@/lib/db";
 import { verifyDuitkuCallbackSignature } from "@/lib/duitku";
 import { grossAmountMatchesStoredAmount } from "@/lib/payment-amount";
-import { creditTopup } from "@/lib/credits";
+import { creditTopup, TOPUP_PACKAGES } from "@/lib/credits";
 import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 
 import { pastikanSegar } from "@/lib/kredensial";
+import { emailPembayaranLunas } from "@/lib/email-pembayaran";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,28 @@ async function emailPemilik(userId: string): Promise<string | null> {
   }
   const row = getDb().prepare("SELECT email FROM users WHERE id = ?").get(userId) as { email: string | null } | undefined;
   return row?.email ?? null;
+}
+
+/**
+ * Tulis status pembayaran apa adanya, lewat jalur yang benar untuk runtime-nya.
+ *
+ * `AND status != 'paid'` menjaga agar callback susulan tidak menurunkan order
+ * yang sudah lunas — Duitku mengulang callback saat tidak yakin diterima, dan
+ * pengulangan tidak boleh membatalkan uang yang sudah masuk.
+ */
+async function tandaiStatus(paymentId: string, status: string, payload: unknown): Promise<void> {
+  if (postgresRuntimeEnabled()) {
+    const { getPool } = await import("@/lib/postgres/pool");
+    const { config } = await import("@/lib/config");
+    await getPool(config.databaseUrl).query(
+      "UPDATE payments SET status = $1, raw_payload = $2 WHERE id = $3 AND status != 'paid'",
+      [status, JSON.stringify(payload), paymentId],
+    );
+    return;
+  }
+  getDb()
+    .prepare("UPDATE payments SET status = ?, raw_payload = ? WHERE id = ? AND status != 'paid'")
+    .run(status, JSON.stringify(payload), paymentId);
 }
 
 export async function POST(req: Request) {
@@ -101,11 +124,30 @@ export async function POST(req: Request) {
     // mengkredit apa pun, dan penolakannya diaudit.
     if (resultCode === "00" && paymentsEnv() === "sandbox") {
       const email = await emailPemilik(payment.user_id);
-      if (!apakahAdmin(email)) {
+      if (!apakahPengujiSandbox(email)) {
+        // STATUS TETAP DICATAT, WALAU KREDIT DITAHAN.
+        //
+        // Versi sebelumnya keluar di sini tanpa menyentuh baris payments, jadi
+        // ia tinggal "pending" SELAMANYA. Akibatnya persis yang dilaporkan
+        // Brian 2 Sep: transaksi sukses di Duitku, tapi layar terus berkata
+        // "Pembayaran belum masuk" — dan tidak ada cara membedakan order yang
+        // benar-benar belum dibayar dari yang sudah dibayar tapi sengaja tidak
+        // dikreditkan.
+        //
+        // "sandbox_paid" mengatakan kedua hal itu sekaligus: uangnya
+        // terkonfirmasi, kreditnya tidak diberikan. Ia BUKAN "paid" — memakai
+        // status yang sama akan membuat laporan keuangan menghitung uang
+        // mainan sebagai pendapatan.
+        await tandaiStatus(payment.id, "sandbox_paid", payload);
         const meta = { merchant_order_id: orderId, payments_env: "sandbox", order_env: jejakOrder.payments_env ?? null };
         if (postgresRuntimeEnabled()) await pgAudit("duitku", "webhook.sandbox_ditolak", "payments", orderId, meta);
         else audit("duitku", "webhook.sandbox_ditolak", "payments", orderId, meta);
-        return Response.json({ ok: true, credited: false, reason: "sandbox: hanya penguji terdaftar yang dikredit" });
+        return Response.json({
+          ok: true,
+          credited: false,
+          status: "sandbox_paid",
+          reason: "sandbox: hanya penguji terdaftar yang dikredit",
+        });
       }
     }
 
@@ -124,6 +166,24 @@ export async function POST(req: Request) {
       }) : creditTopup({ userId: payment.user_id, packageId, gateway: "duitku", gatewayRef: orderId, rawPayload: payload });
       if (postgresRuntimeEnabled()) await pgAudit("duitku", "webhook.settlement", "payments", orderId, { duplicated: result.duplicated });
       else audit("duitku", "webhook.settlement", "payments", orderId, { duplicated: result.duplicated });
+
+      // Kabari pembelinya — dan HANYA sekali. `duplicated` menandai callback
+      // ulangan dari Duitku; mengirim email di setiap ulangan berarti orang
+      // menerima tiga kabar untuk satu pembayaran, dan berhenti mempercayai
+      // kabar berikutnya. Kegagalan email tidak pernah membatalkan kredit yang
+      // sudah masuk (lihat lib/email-pembayaran.ts).
+      if (!result.duplicated) {
+        const email = await emailPemilik(payment.user_id);
+        const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
+        if (email) {
+          await emailPembayaranLunas({
+            ke: email,
+            orderId,
+            namaPaket: pkg?.name ?? packageId,
+            jumlahIdr: payment.amount_idr,
+          });
+        }
+      }
       return Response.json({ ok: true, credited: !result.duplicated, duplicated: result.duplicated });
     }
 

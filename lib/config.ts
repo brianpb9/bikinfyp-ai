@@ -244,6 +244,17 @@ export const config = {
   duitkuApiKey: env("DUITKU_API_KEY", ""),
   duitkuIsProduction: env("DUITKU_IS_PRODUCTION", "false") === "true",
   /**
+   * Email yang boleh DIKREDIT oleh callback sandbox, terpisah dari ADMIN_EMAILS.
+   *
+   * Sebelum 2 Sep 2026 gerbangnya memakai daftar admin. Akibatnya penguji yang
+   * bukan admin — orang yang justru paling sering diminta mencoba alur beli —
+   * membayar di Duitku, callback masuk dan tanda tangannya sah, tapi tidak ada
+   * yang terjadi. Menjadikan mereka admin demi menguji pembayaran berarti
+   * memberi akses dashboard operator untuk alasan yang sama sekali tidak
+   * berhubungan.
+   */
+  sandboxTesterEmails: env("SANDBOX_TESTER_EMAILS", ""),
+  /**
    * IZIN EKSPLISIT bahwa pembayaran benar-benar hidup untuk uang sungguhan.
    *
    * Dipisah dari "kunci sudah terpasang" karena keduanya bukan hal yang sama:

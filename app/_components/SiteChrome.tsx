@@ -55,13 +55,45 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
           <NavItem href="/" label="Beranda" icon="/icons/ui/nav-home.png" active={pathname === "/"} />
           <NavItem href="/video" label="Video" icon="/icons/ui/nav-video.png" active={pathname.startsWith("/video")} />
           <NavItem href="/kredit" label="Kredit" icon="/icons/ui/nav-kredit.png" active={pathname.startsWith("/kredit")} />
+          {/* Profil: satu tempat untuk "punyaku sekarang apa?". Sebelumnya
+              jawabannya tersebar — saldo di /kredit, video di /video, dan
+              riwayat pembelian tidak di mana-mana. */}
+          <NavItem
+            href="/profil"
+            label="Profil"
+            active={pathname.startsWith("/profil")}
+            icon={
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="3.5" />
+                <path d="M4.5 20a7.5 7.5 0 0 1 15 0" />
+              </svg>
+            }
+          />
         </nav>
       )}
     </div>
   );
 }
 
-function NavItem({ href, label, icon, active }: { href: string; label: string; icon: string; active: boolean }) {
+/**
+ * `icon` boleh berupa path gambar ATAU elemen SVG.
+ *
+ * Profil tidak punya berkas ikonnya sendiri, dan memakai ulang nav-kredit.png
+ * berarti dua tab bersebelahan bergambar sama — pengguna memilih tab dengan
+ * MELIHAT, bukan membaca, jadi dua gambar identik menghapus gunanya ikon.
+ * Menggambarnya inline lebih jujur daripada meminjam gambar yang salah.
+ */
+function NavItem({
+  href,
+  label,
+  icon,
+  active,
+}: {
+  href: string;
+  label: string;
+  icon: string | React.ReactNode;
+  active: boolean;
+}) {
   return (
     <Link
       href={href}
@@ -69,8 +101,12 @@ function NavItem({ href, label, icon, active }: { href: string; label: string; i
         active ? "font-bold text-amber-600" : "text-zinc-500"
       }`}
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={icon} alt="" className={`h-6 w-6 ${active ? "" : "opacity-60"}`} />
+      {typeof icon === "string" ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={icon} alt="" className={`h-6 w-6 ${active ? "" : "opacity-60"}`} />
+      ) : (
+        <span className={`flex h-6 w-6 items-center justify-center ${active ? "" : "opacity-60"}`}>{icon}</span>
+      )}
       {label}
     </Link>
   );

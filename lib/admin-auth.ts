@@ -25,6 +25,7 @@
 // harga yang pantas selama jumlahnya masih bisa dihitung dengan jari.
 
 import { redirect } from "next/navigation";
+import { config } from "./config";
 import { ERR } from "./errors";
 import { getAuthUserFromCookies } from "./dashboard-auth";
 import type { UserRow } from "./db";
@@ -35,6 +36,26 @@ export function daftarAdmin(): string[] {
     .split(",")
     .map((e) => e.trim().toLowerCase())
     .filter(Boolean);
+}
+
+/**
+ * Boleh dikreditkan oleh callback SANDBOX?
+ *
+ * Admin selalu boleh; selain itu harus terdaftar di SANDBOX_TESTER_EMAILS.
+ * Dipisah dari apakahAdmin() supaya menguji pembayaran tidak menuntut akses
+ * dashboard operator — dua kewenangan yang tidak ada hubungannya.
+ */
+export function apakahPengujiSandbox(email: string | null | undefined): boolean {
+  if (!email) return false;
+  if (apakahAdmin(email)) return true;
+  // DIBACA DARI config, BUKAN process.env. Halaman kredensial menulis ke
+  // config saat nilainya diganti tanpa restart; membaca process.env di sini
+  // membuat penggantian dari dashboard tidak berpengaruh sama sekali —
+  // kegagalan diam yang paling membingungkan, karena halamannya bilang
+  // "tersimpan".
+  const daftar = (config.sandboxTesterEmails ?? "")
+    .split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  return daftar.includes(email.toLowerCase());
 }
 
 export function apakahAdmin(email: string | null | undefined): boolean {

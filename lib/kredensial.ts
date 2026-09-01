@@ -68,6 +68,7 @@ export const KREDENSIAL: readonly Kredensial[] = [
   { nama: "DUITKU_API_KEY", label: "Duitku — API key", properti: "duitkuApiKey", rahasia: true, kelompok: "Pembayaran" },
   { nama: "MIDTRANS_SERVER_KEY", label: "Midtrans server key (cadangan)", properti: "midtransServerKey", rahasia: true, kelompok: "Pembayaran" },
   { nama: "MIDTRANS_CLIENT_KEY", label: "Midtrans client key (cadangan)", properti: "midtransClientKey", rahasia: true, kelompok: "Pembayaran" },
+  { nama: "SANDBOX_TESTER_EMAILS", label: "Email penguji sandbox (dipisah koma)", properti: "sandboxTesterEmails", rahasia: false, kelompok: "Pembayaran" },
 
   { nama: "RESEND_API_KEY", label: "Resend (OTP email)", properti: "resendApiKey", rahasia: true, kelompok: "Email & Login" },
   { nama: "RESEND_FROM_EMAIL", label: "Alamat pengirim", properti: "resendFromEmail", rahasia: false, kelompok: "Email & Login" },

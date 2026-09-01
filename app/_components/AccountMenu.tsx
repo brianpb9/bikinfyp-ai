@@ -60,6 +60,12 @@ export function AccountMenu() {
       {buka && (
         <div className="absolute right-0 top-11 z-20 w-56 overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-lg">
           <p className="truncate border-b border-zinc-100 px-4 py-3 text-xs text-zinc-500">{email}</p>
+          <a
+            href="/profil"
+            className="flex min-h-[48px] w-full items-center gap-2 border-b border-zinc-100 px-4 text-left text-sm font-semibold text-zinc-800 active:bg-zinc-50"
+          >
+            <span aria-hidden="true">👤</span> Profil &amp; riwayat
+          </a>
           {admin && (
             <>
               <a

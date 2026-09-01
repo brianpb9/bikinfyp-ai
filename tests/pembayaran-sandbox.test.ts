@@ -92,7 +92,19 @@ test("callback sandbox TIDAK mengkredit dompet pengguna biasa", async () => {
   assert.equal(body.credited, false, "dompet pengguna biasa TIDAK boleh terisi dari sandbox");
   assert.equal(getBalance(user.id), sebelum, "saldo tidak boleh berubah");
   const pay = db.prepare("SELECT status FROM payments WHERE gateway_ref = ?").get(orderId) as { status: string };
-  assert.equal(pay.status, "pending", "order tetap pending untuk rekonsiliasi, bukan diam-diam paid");
+  // ASERSI INI DULU BERBUNYI `pending`, DAN JUSTRU ITU CACATNYA.
+  //
+  // Maksud aslinya benar dan tetap dijaga: pembayaran sandbox TIDAK BOLEH
+  // diam-diam menjadi "paid". Tapi memaksanya tetap "pending" berarti order
+  // yang uangnya sudah terkonfirmasi Duitku tidak bisa dibedakan dari order
+  // yang memang belum dibayar — dan layar pembeli berkata "belum masuk"
+  // selamanya. Itu persis yang dilaporkan Brian 2 Sep 2026.
+  //
+  // "sandbox_paid" menjawab keduanya: bukan "paid" (jadi laporan keuangan
+  // tidak menghitung uang mainan sebagai pendapatan), tapi juga bukan
+  // "pending" (jadi kemacetannya terlihat).
+  assert.equal(pay.status, "sandbox_paid", "hasil callback tidak dicatat — order akan menggantung selamanya");
+  assert.notEqual(pay.status, "paid", "uang mainan tidak boleh tercatat sebagai lunas");
   const jejak = db.prepare("SELECT action FROM audit_log WHERE entity_id = ? ORDER BY rowid DESC LIMIT 1").get(orderId) as { action: string } | undefined;
   assert.equal(jejak?.action, "webhook.sandbox_ditolak", "penolakan wajib meninggalkan jejak audit");
 });

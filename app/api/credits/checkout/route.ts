@@ -6,6 +6,8 @@ import { createSnapTransaction, newOrderId, MidtransCallbackNotConfigured, Midtr
 import { createDuitkuInvoice, createDuitkuTransaction, kanalSah, KANAL_DUITKU, DuitkuCallbackNotConfigured, DuitkuNotConfigured } from "@/lib/duitku";
 import { pgCreateCheckout, pgMarkPaymentInitiationFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { initiateCheckout, type CheckoutDeps } from "@/lib/payment-checkout";
+import { emailOrderDibuat } from "@/lib/email-pembayaran";
+import { TOPUP_PACKAGES } from "@/lib/credits";
 
 import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
@@ -79,6 +81,31 @@ export async function POST(req: Request) {
     }
     try {
       const checkout = await initiateCheckout(user, packageId, productionCheckoutDeps(), method);
+
+      // KABARI LEWAT EMAIL, karena nomor VA dibutuhkan NANTI.
+      //
+      // Pembeli membuka aplikasi banknya beberapa menit kemudian, di perangkat
+      // lain, setelah tab ini ditutup. Nomor yang cuma ada di layar sudah
+      // hilang tepat saat ia dibutuhkan.
+      //
+      // Sengaja TIDAK di-await bersama respons: order sudah terbentuk di
+      // Duitku, dan menahan jawaban demi email membuat checkout yang sudah
+      // berhasil terasa lambat — atau lebih buruk, gagal. Kegagalan email
+      // ditelan dan dicatat di lib/email-pembayaran.ts.
+      if (user.email) {
+        const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
+        void emailOrderDibuat({
+          ke: user.email,
+          orderId: checkout.orderId,
+          namaPaket: pkg?.name ?? packageId,
+          jumlahIdr: pkg?.priceIdr ?? 0,
+          namaKanal: KANAL_DUITKU.find((k) => k.kode === method)?.nama ?? "pembayaran",
+          vaNumber: checkout.vaNumber,
+          redirectUrl: checkout.redirectUrl,
+          kedaluwarsaMenit: 60,
+        });
+      }
+
       return Response.json(
         {
           order_id: checkout.orderId,
