@@ -99,6 +99,17 @@ export default function OnboardingPage() {
       .catch(() => { setPaymentsLive(false); setGoogleLogin(false); });
   }, []);
 
+  // MASUK LANGSUNG KE FORM kalau diminta.
+  //
+  // Dari /coba, tombol "Render jadi video" dulu melempar ke /onboarding polos
+  // — dan itu mendarat di halaman marketing LAGI, bukan di form daftar. Orang
+  // yang baru saja melihat skripnya sendiri dan sudah mau lanjut malah disuruh
+  // membaca ulang hero. Sekarang jalurnya menembus.
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("daftar") === "1" || window.location.hash === "#daftar") setStep(2);
+  }, []);
+
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get("google_error");
     if (!reason) return;
@@ -220,6 +231,19 @@ export default function OnboardingPage() {
               >
                 Belum yakin? Lihat contoh skripnya dulu — tanpa daftar
               </a>
+              {/* MASUK — sebelumnya TIDAK ADA di halaman ini sama sekali.
+                  Pengguna lama yang membuka bikinfyp.com tidak punya satu pun
+                  jalan kembali ke akunnya selain menebak alamat. Formnya sama
+                  dengan daftar (OTP email), jadi tombolnya membuka langkah
+                  yang sama — yang berbeda cuma kalimatnya, dan itu memang
+                  yang dicari orang dengan matanya. */}
+              <button
+                type="button"
+                onClick={() => { track("signin_click", { from: "hero" }); setStep(2); }}
+                className="mx-auto flex min-h-[44px] w-fit items-center justify-center text-sm text-zinc-500"
+              >
+                Sudah punya akun? <span className="ml-1 font-semibold text-amber-700 underline underline-offset-4">Masuk</span>
+              </button>
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">

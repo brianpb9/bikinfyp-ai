@@ -156,7 +156,10 @@ export default function CobaPage() {
             Skor FYP = pola yang cenderung menang di data video jualan yang kami pelajari — korelasi, bukan jaminan.
           </p>
           <Link
-            href="/onboarding"
+            // ?daftar=1 — menembus ke FORM, bukan ke hero. Tanpa ini, orang
+            // yang baru melihat skripnya sendiri dikembalikan ke halaman
+            // marketing dan harus mencari lagi cara mendaftar.
+            href="/onboarding?daftar=1"
             onClick={() => track("try_signup_click")}
             className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 font-display text-lg font-bold text-white shadow-sm active:bg-amber-600"
           >
