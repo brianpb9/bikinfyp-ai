@@ -57,6 +57,51 @@ services:
       timeout: 3s
       retries: 20
 
+  # PENYIMPANAN MEDIA — MinIO, menggantikan Cloudflare R2.
+  #
+  # Keputusan Brian 2 Sep 2026: hapus ketergantungan pihak ketiga. Kode
+  # penyimpanan memakai S3 SDK dengan forcePathStyle:true (lib/storage.ts),
+  # yang persis bahasa MinIO — jadi peralihan ini NOL perubahan kode, hanya env.
+  #
+  # TIDAK DIBUKA KE INTERNET, dan itu bukan kompromi.
+  # Media tidak pernah disajikan lewat URL bucket: aplikasi sendiri yang
+  # melayaninya di /api/files/[...] dengan URL bertanda-tangan HMAC. Jadi
+  # "bisa diakses lewat path saya" sudah terpenuhi oleh domain sendiri, dan
+  # MinIO cukup hidup di jaringan internal Docker. Membukanya ke publik justru
+  # akan MELEWATI pemeriksaan tanda tangan itu.
+  minio:
+    image: minio/minio:latest
+    restart: unless-stopped
+    command: ["server", "/data", "--console-address", ":9001"]
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?wajib}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?wajib}
+    volumes:
+      - miniodata:/data
+    expose: ["9000", "9001"]
+    cpus: 1.0
+    mem_limit: 2g
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+
+  # Bucket dibuat oleh container sekali-jalan, bukan oleh perintah manual yang
+  # harus diingat orang. Aman diulang: --ignore-existing.
+  minio-init:
+    image: minio/mc:latest
+    restart: "no"
+    depends_on:
+      minio: { condition: service_healthy }
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?wajib}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?wajib}
+      BUCKET: ${R2_BUCKET:-bikinfyp-production}
+    entrypoint: ["sh", "-c", "mc alias set lokal http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"lokal/$$BUCKET\" && mc ls lokal && echo 'bucket siap'"]
+
+
   web:
     build:
       context: .
@@ -79,6 +124,7 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 15s
@@ -105,7 +151,9 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      minio: { condition: service_healthy }
 
 volumes:
   pgdata:
   redisdata:
+  miniodata:
