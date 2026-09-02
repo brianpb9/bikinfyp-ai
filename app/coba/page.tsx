@@ -78,7 +78,7 @@ export default function CobaPage() {
       <h1 className="font-display text-2xl font-bold text-zinc-900">Lihat skrip jualanmu dalam 30 detik</h1>
       <p className="mt-1 text-sm leading-6 text-zinc-600">
         Isi 3 kolom, langsung dapat 3 skrip video + Skor FYP. Suka? Baru daftar buat render videonya —
-        user baru dapat bonus Rp12.000 (1 video AI Bersuara gratis).
+        user baru dapat 1 video gratis.
       </p>
 
       <div className="mt-4 space-y-2">
@@ -163,7 +163,7 @@ export default function CobaPage() {
             onClick={() => track("try_signup_click")}
             className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 font-display text-lg font-bold text-white shadow-sm active:bg-amber-600"
           >
-            Render jadi video → daftar gratis (bonus Rp12.000)
+            Render jadi video → daftar gratis (1 video gratis)
           </Link>
           <p className="text-center text-xs text-zinc-500">Produkmu sudah kami ingat — tinggal upload foto setelah daftar.</p>
         </section>

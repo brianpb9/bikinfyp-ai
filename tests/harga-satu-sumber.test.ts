@@ -99,3 +99,36 @@ test("template retail diambil dari katalog yang sama, disaring untuk FYP", async
     assert.equal(p.durationSec, asli.durationSec);
   }
 });
+
+// ── Layar promosi berhenti mengarang harga ──────────────────────────────────
+//
+// Angka di layar promosi adalah angka yang paling lama tidak ada yang
+// memperbaiki: "Rp12.000 per video" masih terpampang sesudah harganya berubah,
+// dan "bonus Rp12.000" masih terpampang sesudah bonusnya berhenti berupa
+// rupiah. Keduanya klaim ke publik, bukan detail internal.
+
+test("halaman promosi tidak menuliskan harga sendiri", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const baca = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
+
+  for (const halaman of ["app/onboarding/page.tsx", "app/coba/page.tsx", "app/mulai/page.tsx", "app/layout.tsx"]) {
+    const src = baca(halaman);
+    // Baris komentar boleh menyebut angka lama sebagai catatan sejarah; yang
+    // dilarang adalah angka yang benar-benar dirender ke layar.
+    const terlihat = src
+      .split("\n")
+      .filter((b) => !b.trim().startsWith("//") && !b.trim().startsWith("*"))
+      .join("\n");
+    assert.ok(
+      !/Rp\s?12[.,]000|Rp\s?5[.,]000|Rp\s?80[.,]000/.test(terlihat),
+      `${halaman} masih menuliskan harga sendiri — ia akan hanyut dari yang ditagih`,
+    );
+  }
+
+  // Dan sumber publiknya benar-benar ada, tanpa login.
+  const rute = baca("app/api/harga-publik/route.ts");
+  assert.match(rute, /hargaKredit\(\)/, "rute publik tidak membaca harga yang berlaku");
+  assert.ok(!/getAuthUser/.test(rute), "rute harga publik menuntut login — halaman promosi tidak bisa memakainya");
+  assert.match(baca("app/onboarding/page.tsx"), /\/api\/harga-publik/, "onboarding tidak membaca harga dari server");
+});

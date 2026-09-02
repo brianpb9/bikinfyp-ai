@@ -23,14 +23,22 @@ export const metadata: Metadata = {
     siteName: "BikinFYP AI",
     locale: "id_ID",
     title: "BikinFYP AI — Video jualan tanpa syuting",
-    description: "Bikin video jualan 15 detik dari foto produk. Rp12.000 per video, tanpa langganan.",
+    // Angka harga SENGAJA tidak ada di sini. Metadata layout bersifat statis
+    // dan berlaku untuk seluruh situs, sementara harga per video kini diatur
+    // admin tanpa deploy — menuliskannya berarti menyiarkan angka yang cepat
+    // atau lambat berbeda dari yang ditagih. Harga hidup ada di /harga.
+    description: "Bikin video jualan 15 detik dari foto produk. Bayar per video, tanpa langganan.",
     url: "https://bikinfyp.com",
     images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "BikinFYP AI" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "BikinFYP AI — Video jualan tanpa syuting",
-    description: "Bikin video jualan 15 detik dari foto produk. Rp12.000 per video, tanpa langganan.",
+    // Angka harga SENGAJA tidak ada di sini. Metadata layout bersifat statis
+    // dan berlaku untuk seluruh situs, sementara harga per video kini diatur
+    // admin tanpa deploy — menuliskannya berarti menyiarkan angka yang cepat
+    // atau lambat berbeda dari yang ditagih. Harga hidup ada di /harga.
+    description: "Bikin video jualan 15 detik dari foto produk. Bayar per video, tanpa langganan.",
     images: ["/icons/icon-512.png"],
   },
   icons: {

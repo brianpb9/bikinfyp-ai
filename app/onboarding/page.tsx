@@ -64,6 +64,20 @@ function LazyClip({ src }: { src: string }) {
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
   const router = useRouter();
+  // HARGA DIBACA DARI SERVER, bukan diketik di layar promosi.
+  //
+  // Halaman ini dibuka orang yang belum punya akun, jadi ia dulu menuliskan
+  // angkanya sendiri — dan angka di layar promosi adalah angka yang paling
+  // lama tidak ada yang memperbaiki. "Rp12.000 per video" masih terpampang
+  // setelah harganya berubah. null = belum terjawab; kalimat harganya
+  // disembunyikan sampai angkanya benar-benar diketahui.
+  const [mulaiIdr, setMulaiIdr] = useState<number | null>(null);
+  useEffect(() => {
+    fetch("/api/harga-publik")
+      .then((r) => r.json())
+      .then((d: { mulai_idr: number | null }) => setMulaiIdr(d.mulai_idr ?? null))
+      .catch(() => setMulaiIdr(null));
+  }, []);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   // KESIAPAN dibaca SEKALI untuk seluruh halaman — lihat useKesiapan().
   // Versi sebelumnya cuma menjaga hero atas dengan boolean yang gagal-terbuka;
@@ -189,12 +203,11 @@ export default function OnboardingPage() {
                 jalan TIAP HARI dan mereka tidak sanggup mengejarnya. Judulnya
                 menyebut beban itu, bukan fitur kita.
 
-                ANGKANYA NYATA, bukan bumbu: Rp12.000 = config.tiers AI Bersuara,
-                Rp125.000 = titik tengah riset Fastwork yang sama dipakai
-                kalkulator di bawah, dan "video pertama gratis" persis benar
-                karena signupBonusIdr (12000) = harga satu video bersuara.
-                Kalau salah satu angka ini berubah di lib/config.ts, kalimat di
-                sini ikut berubah. */}
+                ANGKANYA NYATA, bukan bumbu — dan sejak harga bisa diubah admin
+                tanpa deploy, ia DIBACA dari /api/harga-publik alih-alih diketik
+                di sini. Rp125.000 = titik tengah riset Fastwork yang sama
+                dipakai kalkulator di bawah. "Video pertama gratis" tetap persis
+                benar karena paket gratis pendaftar berupa satu video. */}
             <div className="space-y-3">
               <h1 className="text-center font-display text-[2.3rem] font-extrabold leading-[1.08] tracking-tight text-zinc-900">
                 Konten jualan tiap hari
@@ -204,7 +217,13 @@ export default function OnboardingPage() {
               <p className="text-center text-lg leading-snug text-zinc-600">
                 Upload foto produk, biasanya {JANJI_WAKTU.kisaran} kemudian videonya siap ditinjau.
                 <br />
-                <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
+                {mulaiIdr ? (
+                  <>
+                    Mulai <b className="text-zinc-900">Rp{mulaiIdr.toLocaleString("id-ID")}</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
+                  </>
+                ) : (
+                  <>Bayar per video — jasa UGC biasanya sekitar Rp100–150 ribu.</>
+                )}
               </p>
               <a
                 href={cta.href}
@@ -274,12 +293,13 @@ export default function OnboardingPage() {
                 // Angka-angka ini dihitung ulang dari kode 2026-08-12, bukan
                 // disalin: "11 kreator" = CREATORS di app/bikin/gaya yang
                 // active:true (yang ke-12, "daerah", masih dimatikan), dan
-                // Rp12.000 = tier AI Bersuara di lib/config.ts. Sebelumnya
-                // tertulis "5 gaya" — MENGECILKAN produk sendiri.
+                // Harga TIDAK lagi diketik di sini: ia dibaca dari
+                // /api/harga-publik. Sebelumnya tertulis "5 gaya" —
+                // MENGECILKAN produk sendiri.
                 { value: "15–30 detik", label: "video siap ditinjau" },
                 { value: JANJI_WAKTU.singkat, label: "rata-rata selesai render" },
                 { value: "11 kreator", label: "wajah AI siap pakai" },
-                { value: "Rp12.000", label: "harga per video bersuara" },
+                { value: mulaiIdr ? `Rp${mulaiIdr.toLocaleString("id-ID")}` : "—", label: "mulai per video" },
               ].map((f) => (
                 <div
                   key={f.label}
@@ -359,9 +379,10 @@ export default function OnboardingPage() {
                 tanpa login), sekaligus jalan masuk ke /harga dan /kontak. */}
             <SiteFooter />
           </div>
-          {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Bonus daftar
-              Rp12.000 kebetulan persis satu video bersuara, jadi janjinya bisa
-              dibuat spesifik tanpa melebih-lebihkan. */}
+          {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Paket gratis
+              pendaftar memang berupa SATU VIDEO, jadi janjinya bisa dibuat
+              spesifik tanpa melebih-lebihkan — dan tetap benar walau harganya
+              diubah admin. */}
           {cta.mulaiDaftar ? (
             <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
               {cta.label}
@@ -374,7 +395,7 @@ export default function OnboardingPage() {
           )}
           <p className="mt-2 text-center text-xs text-zinc-500">
             {cta.mulaiDaftar
-              ? "Daftar dapat Rp12.000 — cukup untuk 1 video bersuara. Tanpa kartu kredit."
+              ? "Daftar dapat 1 video gratis. Tanpa kartu kredit."
               : cta.catatan}
           </p>
           <button type="button" onClick={() => setStep(2)} className="mt-3 min-h-[44px] w-full text-center text-sm text-zinc-500">
@@ -388,7 +409,7 @@ export default function OnboardingPage() {
           <div className="flex-1 space-y-6 pt-8">
             <h1 className="text-2xl font-bold text-zinc-900">Masuk pakai email</h1>
             <p className="text-zinc-600">
-              Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat bonus Rp12.000 (1 video gratis).
+              Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat 1 video gratis.
             </p>
             {/* PERSETUJUAN DI TITIK DAFTAR, bukan cuma tautan di kaki halaman.
                 Audit kedalaman: tombol daftar (email maupun Google) tidak
