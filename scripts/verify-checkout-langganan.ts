@@ -113,6 +113,49 @@ try {
     hasil.topup_order = { order_id: jawab2.order_id, total: jawab2.amount_idr, item: item[0] };
   }
 
+  // 5. PESANAN CAMPURAN — paket + satuan dalam satu invoice.
+  const jenis2 = await pool.query<{ jenis: string; harga_idr: number }>(
+    "SELECT jenis, harga_idr FROM harga_kredit_video WHERE aktif = TRUE ORDER BY harga_idr ASC LIMIT 1",
+  );
+  if (jenis2.rows[0]) {
+    const j = jenis2.rows[0];
+    const res3 = await fetch(`${basis}/api/kredit-video/checkout`, {
+      method: "POST",
+      headers: kepala,
+      body: JSON.stringify({ paket_id: paket[0].id, items: [{ jenis: j.jenis, qty: 1 }], payment_method: "I1" }),
+    });
+    const teks3 = await res3.text();
+    hasil.campuran_status = res3.status;
+    if (res3.status !== 201) throw new Error(`checkout campuran gagal: ${res3.status} ${teks3.slice(0, 300)}`);
+    const jawab3 = JSON.parse(teks3) as { order_id: string; amount_idr: number };
+    const seharusnya = Number(paket[0].harga_idr) + Number(j.harga_idr);
+    if (jawab3.amount_idr !== seharusnya) {
+      throw new Error(`tagihan campuran ${jawab3.amount_idr}, seharusnya ${seharusnya}`);
+    }
+    const { rows: pay } = await pool.query<{ jenis_pesanan: string; paket_id: string }>(
+      "SELECT jenis_pesanan, paket_id FROM payments WHERE gateway_ref = $1", [jawab3.order_id],
+    );
+    if (pay[0]?.jenis_pesanan !== "campuran") throw new Error(`jenis_pesanan campuran salah: ${pay[0]?.jenis_pesanan}`);
+    if (pay[0]?.paket_id !== paket[0].id) throw new Error("paket_id hilang dari pesanan campuran");
+    const { rows: it } = await pool.query("SELECT jenis, qty FROM pesanan_item WHERE payment_id = $1", [jawab3.order_id]);
+    if (!it.length) throw new Error("isi satuan hilang dari pesanan campuran");
+    hasil.campuran = { order_id: jawab3.order_id, total: jawab3.amount_idr, paket: pay[0].paket_id, item: it[0] };
+
+    // 6. DIULANG dengan isi yang SAMA PERSIS — harus DILANJUTKAN, bukan
+    //    menerbitkan invoice kedua yang sama-sama hidup.
+    const res4 = await fetch(`${basis}/api/kredit-video/checkout`, {
+      method: "POST",
+      headers: kepala,
+      body: JSON.stringify({ paket_id: paket[0].id, items: [{ jenis: j.jenis, qty: 1 }], payment_method: "I1" }),
+    });
+    const jawab4 = JSON.parse(await res4.text()) as { order_id: string; dilanjutkan?: boolean };
+    hasil.ulang_status = res4.status;
+    hasil.ulang_dilanjutkan = jawab4.dilanjutkan ?? false;
+    if (jawab4.order_id !== jawab3.order_id) {
+      throw new Error(`pesanan kedua menerbitkan invoice baru (${jawab4.order_id}) — pembeli bisa membayar dua kali`);
+    }
+  }
+
   hasil.status = "PASS";
   hasil.order_id = jawab.order_id;
   hasil.va_number = jawab.va_number ?? null;
