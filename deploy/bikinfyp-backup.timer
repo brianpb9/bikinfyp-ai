@@ -1,0 +1,15 @@
+[Unit]
+Description=Jalankan cadangan BikinFYP tiap malam
+
+[Timer]
+# 19:00 UTC = 02:00 WIB. Dipilih karena itu jam paling sepi di Indonesia,
+# dan pg_dump menahan kunci baca sebentar — lebih baik saat tidak ada yang
+# sedang merender.
+OnCalendar=*-*-* 19:00:00
+# Kalau server mati saat jadwalnya tiba, jalankan begitu ia hidup lagi.
+# Tanpa ini, satu kali reboot berarti satu malam tanpa cadangan, diam-diam.
+Persistent=true
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,12 @@
+[Unit]
+Description=Cadangan malam BikinFYP (database, media, kode sumber)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=-/etc/default/bikinfyp-backup
+ExecStart=/usr/local/bin/bikinfyp-backup.sh
+# Keluaran masuk journal; dibaca dengan: journalctl -u bikinfyp-backup
+StandardOutput=journal
+StandardError=journal
