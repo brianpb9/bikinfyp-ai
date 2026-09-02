@@ -151,3 +151,65 @@ test("route event menulis di KEDUA runtime, bukan cuma SQLite", () => {
   assert.match(s, /catch \(err\) \{[\s\S]*jalur produk tidak boleh terganggu/,
     "kegagalan telemetri tidak boleh menggagalkan permintaan");
 });
+
+// SQLite MATI DI PRODUCTION, dan audit adalah cara paling mudah lupa.
+//
+// `audit()` di lib/db.ts menulis ke SQLite. Di production ia melempar
+// DatabaseConfigurationError — dan karena audit hampir selalu dipanggil di
+// UJUNG operasi yang sudah berhasil, kegagalannya muncul sebagai HTTP 500
+// pada permintaan yang sebenarnya sudah selesai. Itu yang terjadi pada
+// /api/kredit-video/checkout 2 Sep 2026: pesanan tersimpan, invoice Duitku
+// terbentuk, lalu satu baris audit menjatuhkan seluruh permintaan.
+test("audit() sendiri yang sadar runtime — bukan tiap pemanggilnya", () => {
+  // Sampai 2 Sep 2026 tiap pemanggil wajib membungkus audit() dengan
+  // if (postgresRuntimeEnabled()). Cabang yang harus diulang di 16 berkas
+  // adalah cabang yang cepat atau lambat lupa ditulis di salah satunya — dan
+  // lupanya TIDAK ketahuan di dev, karena di dev SQLite justru hidup.
+  // /api/kredit-video/checkout 500 di production karena persis itu.
+  const src = fs.readFileSync(path.join(process.cwd(), "lib", "db.ts"), "utf8");
+  const fungsi = src.slice(src.indexOf("export function audit("));
+  const badan = fungsi.slice(0, fungsi.indexOf("\n}\n") + 2);
+  assert.match(badan, /RACUN_DB_RUNTIME/, "audit() masih menulis ke SQLite tanpa memeriksa runtime");
+  assert.match(badan, /pgAudit\(/, "audit() tidak punya jalur PostgreSQL");
+  // ESM, bukan require(): percobaan pertama memakai require dan diam-diam
+  // mematikan SELURUH penulisan audit — lemparannya tertangkap catch dan
+  // fungsinya keluar tanpa menulis apa pun.
+  const kode = badan
+    .split("\n")
+    .filter((b) => !b.trim().startsWith("//") && !b.trim().startsWith("*") && !b.trim().startsWith("/*"))
+    .join("\n");
+  assert.ok(!/require\(/.test(kode), "audit() memakai require() — tidak ada di modul ESM");
+
+  // Nama env-nya harus sama persis dengan postgresRuntimeEnabled(); keduanya
+  // ditulis terpisah supaya lib/db.ts tidak perlu mengimpor lapisan Postgres.
+  const smoke = fs.readFileSync(path.join(process.cwd(), "lib", "postgres", "smoke-runtime.ts"), "utf8");
+  for (const env of ["RACUN_POSTGRES_SMOKE", "RACUN_DB_RUNTIME"]) {
+    assert.ok(badan.includes(env), `audit() tidak memeriksa ${env}`);
+    assert.ok(smoke.includes(env), `${env} tidak lagi dipakai postgresRuntimeEnabled — penanda runtime hanyut`);
+  }
+  // Dan kegagalannya tidak boleh menjatuhkan pemanggil: audit adalah catatan
+  // tentang sesuatu yang SUDAH terjadi.
+  assert.match(badan, /\.catch\(/, "kegagalan audit bisa menjatuhkan permintaan yang sudah berhasil");
+});
+
+test("rute yang menulis audit tetap bisa dipakai di kedua runtime", () => {
+  // Penjaga lama memeriksa posisi baris dan terbukti tidak bisa membedakan
+  // panggilan yang aman dari yang tidak. Yang diperiksa sekarang: tidak ada
+  // rute yang mengimpor `audit` dari tempat SELAIN lib/db — mis. seseorang
+  // membuat salinan lokal yang melewati perbaikan di atas.
+  const dir = path.join(process.cwd(), "app", "api");
+  const bocor: string[] = [];
+  const telusuri = (d: string) => {
+    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+      const f = path.join(d, entry.name);
+      if (entry.isDirectory()) { telusuri(f); continue; }
+      if (!entry.name.endsWith(".ts")) continue;
+      const src = fs.readFileSync(f, "utf8");
+      if (/function\s+audit\s*\(|const\s+audit\s*=/.test(src)) {
+        bocor.push(path.relative(process.cwd(), f));
+      }
+    }
+  };
+  telusuri(dir);
+  assert.deepEqual(bocor, [], "rute ini punya audit() sendiri yang melewati penjaga runtime");
+});

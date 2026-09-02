@@ -89,11 +89,18 @@ function biayaDariKredit(kredit: number): number {
 /**
  * Perkiraan sebelum render, dipakai registry untuk mengurutkan provider.
  *
- * Diturunkan dari pengukuran nyata: 14,4 kredit untuk 6 detik = 2,4 kredit per
- * detik pada 480p. Ini PERKIRAAN; biaya yang dicatat ke job memakai angka yang
+ * Diturunkan dari dua render berbayar 2 Sep 2026, keduanya 6 detik:
+ *   480p ..... 14,4 kredit = 2,4 kredit/detik   (keluaran 400x752)
+ *   720p ..... 27,0 kredit = 4,5 kredit/detik   (keluaran 688x1312)
+ *
+ * Resolusi hampir MELIPATGANDAKAN biayanya. Memakai satu angka untuk keduanya
+ * — seperti sebelum ini — membuat perkiraan meleset 1,9x tepat pada resolusi
+ * yang jadi bawaan produksi.
+ *
+ * Ini tetap PERKIRAAN; biaya yang dicatat ke job memakai creditsConsumed yang
  * dilaporkan kie.ai untuk task itu sendiri.
  */
-const KREDIT_PER_DETIK_480P = 2.4;
+const KREDIT_PER_DETIK: Record<string, number> = { "480p": 2.4, "720p": 4.5 };
 
 /** Rasio yang dipakai kie.ai berbentuk "lebar:tinggi". */
 function rasioDari(spec: VisualSpec): string {
@@ -232,7 +239,12 @@ export const kieGrokVideo: VideoProvider = {
 
   estimateCost(spec: VisualSpec): number {
     const detik = spec.shots.reduce((n, s) => n + s.durationSec, 0);
-    return biayaDariKredit(detik * KREDIT_PER_DETIK_480P);
+    const resolusi = config.tiers[spec.qualityTier]?.resolution ?? "720p";
+    // Bawaan ke tarif TERMAHAL yang diketahui bila resolusinya tidak dikenal.
+    // Perkiraan yang terlalu murah membuat provider ini menyalip yang lain
+    // dalam pengurutan biaya karena alasan yang tidak benar.
+    const perDetik = KREDIT_PER_DETIK[resolusi] ?? Math.max(...Object.values(KREDIT_PER_DETIK));
+    return biayaDariKredit(detik * perDetik);
   },
 
   async healthCheck(): Promise<boolean> {

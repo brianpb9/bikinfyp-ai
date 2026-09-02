@@ -136,7 +136,55 @@ export function getDb(): Database.Database {
 export const now = () => new Date().toISOString();
 export const uuid = () => crypto.randomUUID();
 
+/**
+ * Tulis satu baris audit ke runtime yang sedang aktif.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA FUNGSI INI SENDIRI YANG SADAR RUNTIME
+ * ────────────────────────────────────────────────────────────────────────────
+ * Sampai 2 Sep 2026 fungsi ini menulis LANGSUNG ke SQLite, dan tiap pemanggil
+ * wajib membungkusnya sendiri:
+ *
+ *     if (postgresRuntimeEnabled()) await pgAudit(...); else audit(...);
+ *
+ * SQLite dimatikan di production dengan sengaja, jadi pemanggil yang lupa
+ * membungkus akan melempar DatabaseConfigurationError — dan karena audit
+ * hampir selalu dipanggil di UJUNG operasi yang sudah berhasil, kegagalannya
+ * muncul sebagai HTTP 500 pada permintaan yang sebenarnya sudah selesai.
+ * Itu yang terjadi pada /api/kredit-video/checkout: pesanan tersimpan,
+ * invoice Duitku terbentuk, lalu satu baris audit menjatuhkan semuanya.
+ *
+ * Cabang yang harus diulang di 16 berkas adalah cabang yang cepat atau lambat
+ * lupa ditulis di salah satunya — dan lupanya TIDAK ketahuan di dev, karena
+ * di dev SQLite justru hidup. Jadi cabangnya pindah ke sini, sekali.
+ *
+ * Ia tetap SINKRON supaya seluruh pemanggil lama tidak perlu diubah; tulisan
+ * PostgreSQL-nya dilepas tanpa ditunggu. Audit adalah catatan tentang sesuatu
+ * yang SUDAH terjadi — menahan jawaban demi mencatatnya, atau membatalkan
+ * operasi yang sudah berhasil karena catatannya gagal, adalah menukar
+ * kerugian besar dengan kerugian kecil.
+ */
 export function audit(actor: string, action: string, entity: string, entityId: string | null, meta?: unknown) {
+  // Penanda runtime dibaca LANGSUNG dari env, bukan lewat impor.
+  //
+  // Percobaan pertama memakai require() dan diam-diam MEMATIKAN SELURUH audit:
+  // require tidak ada di modul ESM, lemparannya tertangkap blok catch, dan
+  // fungsi ini keluar tanpa menulis apa pun. Tesnya yang menemukannya, bukan
+  // pemakaian — persis kenapa penulisan audit perlu diuji.
+  //
+  // Nama env-nya sama persis dengan postgresRuntimeEnabled() di
+  // lib/postgres/smoke-runtime.ts; ada tes yang menjaga keduanya tidak hanyut.
+  const pakaiPostgres =
+    process.env.RACUN_POSTGRES_SMOKE === "1" || process.env.RACUN_DB_RUNTIME === "postgres";
+  if (pakaiPostgres) {
+    // Impor DINAMIS, dan sengaja tidak ditunggu: lib/db.ts dimuat hampir semua
+    // jalur, dan impor statis ke lapisan Postgres akan menyeret `pg` ke bundel
+    // yang tidak memerlukannya.
+    void import("./postgres/smoke-runtime")
+      .then((m) => m.pgAudit(actor, action, entity, entityId, meta))
+      .catch((err) => console.error(`[audit] gagal mencatat ${action} untuk ${entity}/${entityId}:`, err));
+    return;
+  }
   getDb()
     .prepare(
       "INSERT INTO audit_log (id, actor, action, entity, entity_id, meta, created_at) VALUES (?,?,?,?,?,?,?)"

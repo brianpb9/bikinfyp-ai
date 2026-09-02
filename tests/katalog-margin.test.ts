@@ -12,8 +12,8 @@ process.env.DB_PATH = `/tmp/racun-test-katalog-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-katalog-storage-${process.pid}`;
 
 const {
-  PAKET_REKOMENDASI, HARGA_SATUAN, MARGIN_MINIMUM,
-  hitungPaket, marginSatuan, modalPerVideo,
+  PAKET_REKOMENDASI, HARGA_SATUAN, MARGIN_MINIMUM, MARGIN_TARGET, MARGIN_SATUAN,
+  hitungPaket, marginSatuan, modalPerVideo, targetMarginPaket,
   BEBAN_GAGAL, BEBAN_TETAP_PER_VIDEO_IDR, BIAYA_GATEWAY_IDR,
 } = await import("../lib/katalog-rekomendasi");
 const { config } = await import("../lib/config");
@@ -25,6 +25,36 @@ test("tidak ada paket yang dijual di bawah margin minimum", () => {
     assert.ok(
       h.marginPersen >= MARGIN_MINIMUM,
       `paket ${p.nama}: margin ${(h.marginPersen * 100).toFixed(1)}% — jual ${p.hargaIdr}, modal ${h.modalIdr}`,
+    );
+  }
+});
+
+test("paket MENCAPAI target margin per jenis, bukan sekadar lewat batas bawah", () => {
+  // 20% untuk Standard dan Premium, 30% untuk Ultra (keputusan Brian
+  // 2 Sep 2026). Paket campuran memakai target tertimbang menurut porsi modal.
+  // Arahnya penting: harga dibulatkan ke ATAS ke kelipatan Rp5.000, jadi
+  // margin tidak pernah jatuh di bawah target — hanya sedikit melewatinya.
+  // Batas atas 2,5% menjaga pembulatan tidak berubah jadi kenaikan harga
+  // diam-diam.
+  for (const p of PAKET_REKOMENDASI) {
+    const target = targetMarginPaket(p.kuota);
+    const nyata = hitungPaket(p).marginPersen;
+    assert.ok(nyata >= target - 0.001, `paket ${p.nama}: margin ${(nyata * 100).toFixed(1)}% DI BAWAH target ${(target * 100).toFixed(1)}%`);
+    assert.ok(nyata <= target + 0.025, `paket ${p.nama}: margin ${(nyata * 100).toFixed(1)}% jauh di atas target ${(target * 100).toFixed(1)}% — pembulatan jadi kenaikan harga`);
+  }
+});
+
+test("target margin Ultra memang lebih tinggi daripada Standard dan Premium", () => {
+  assert.equal(MARGIN_TARGET.standard, 0.20);
+  assert.equal(MARGIN_TARGET.premium, 0.20);
+  assert.equal(MARGIN_TARGET.ultra, 0.30);
+});
+
+test("margin satuan SELALU di atas target paket — kalau tidak, paket bukan diskon", () => {
+  for (const j of Object.keys(MARGIN_TARGET) as (keyof typeof MARGIN_TARGET)[]) {
+    assert.ok(
+      MARGIN_SATUAN[j] > MARGIN_TARGET[j],
+      `${j}: margin satuan ${MARGIN_SATUAN[j]} tidak di atas target paket ${MARGIN_TARGET[j]}`,
     );
   }
 });
@@ -80,19 +110,38 @@ test("COGS Premium dan Ultra SAMA — selisih harganya keputusan posisi, bukan b
 });
 
 test("Standard jauh lebih murah daripada Premium — itu keunggulan yang nyata", () => {
-  // Mesin lain di pasar yang memakai Seedance berbiaya sekelas Premium kita.
-  // Kalau selisih ini menyempit, keunggulan harga Standard hilang dan strategi
-  // paket masuk Rp50.000 ikut runtuh.
+  // Mesin lain di pasar yang memakai Seedance berbiaya sekelas Premium kita;
+  // Standard-lah yang membuat titik masuk kita mungkin. Rasionya MENYEMPIT
+  // dari 6,5x ke 3,5x saat 720p jadi bawaan (Grok 480p Rp3.600 -> 720p
+  // Rp6.750), dan itu memang harga dari keputusan kualitas. Kalau ia menyempit
+  // lagi di bawah 3x, paket masuk berhenti masuk akal dan strateginya harus
+  // ditinjau, bukan dibiarkan.
   const rasio = config.tiers.premium.cogsIdr / config.tiers.standard.cogsIdr;
-  assert.ok(rasio >= 4, `Standard cuma ${rasio.toFixed(1)}x lebih murah daripada Premium`);
+  assert.ok(rasio >= 3, `Standard cuma ${rasio.toFixed(1)}x lebih murah daripada Premium`);
 });
 
-test("paket masuk tetap Rp50.000 dan berisi minimal 5 video", () => {
-  // Titik masuk yang diminta Brian. Paket masuk yang isinya dua-tiga video
-  // terasa seperti sampel, bukan paket.
+test("paket masuk berisi minimal 5 video dan hematnya terasa", () => {
+  // Titik masuknya TIDAK lagi dipaku Rp50.000: sejak 720p jadi bawaan, modal
+  // Standard naik dari Rp3.600 ke Rp6.750, dan Rp50.000 hanya cukup untuk 4
+  // video pada margin 20% — paket sebesar itu nyaris tidak lebih murah
+  // daripada membeli satuan. Yang dijaga sekarang adalah SIFATNYA: cukup isi
+  // untuk terasa seperti paket, dan cukup hemat untuk layak dipilih.
   const masuk = PAKET_REKOMENDASI.reduce((a, b) => (a.hargaIdr <= b.hargaIdr ? a : b));
-  assert.equal(masuk.hargaIdr, 50_000);
-  assert.ok(hitungPaket(masuk).totalVideo >= 5, "paket masuk terlalu tipis");
+  const h = hitungPaket(masuk);
+  assert.ok(h.totalVideo >= 5, `paket masuk cuma ${h.totalVideo} video — terasa seperti sampel`);
+  assert.ok(h.hematPersen >= 0.15, `paket masuk cuma hemat ${(h.hematPersen * 100).toFixed(0)}%`);
+});
+
+test("semua video 15 detik 720p — yang membedakan paket adalah MODEL", async () => {
+  const { config } = await import("../lib/config");
+  const { KUALITAS } = await import("../lib/kualitas-video");
+  for (const j of JENIS_VIDEO) {
+    assert.equal(config.tiers[j].resolution, "720p", `${j} bukan 720p — modalnya sudah dihitung untuk 720p`);
+    assert.equal(KUALITAS[j].resolusi, "720p", `${j} dipajang bukan 720p — layar dan biaya jadi bercerita beda`);
+  }
+  // Dan modelnya memang berbeda — kalau sama, tiga paket menjual barang yang sama.
+  const model = JENIS_VIDEO.map((j) => KUALITAS[j].model);
+  assert.equal(new Set(model).size, model.length, "ada dua jenis video yang memakai model yang sama");
 });
 
 test("harga naik seiring isinya, tanpa pembalikan", () => {
@@ -103,6 +152,23 @@ test("harga naik seiring isinya, tanpa pembalikan", () => {
     assert.ok(
       besar.totalVideo > kecil.totalVideo,
       `${urut[i].nama} lebih mahal daripada ${urut[i - 1].nama} tapi tidak memberi lebih banyak video`,
+    );
+  }
+});
+
+test("harga acuan di config sama dengan katalog yang dihitung", () => {
+  // config.tiers.priceIdr dipakai laporan dan riwayat, sementara harga yang
+  // DITAGIH datang dari harga_kredit_video yang diisi dari katalog ini. Kalau
+  // keduanya berbeda, laporan margin akan menghitung untung dari angka yang
+  // tidak pernah dibayar siapa pun.
+  //
+  // config tidak bisa mengimpor katalog (katalog yang mengimpor config), jadi
+  // angkanya memang harus ditulis dua kali — dan tes inilah yang menjaganya.
+  for (const j of JENIS_VIDEO) {
+    assert.equal(
+      config.tiers[j].priceIdr,
+      HARGA_SATUAN[j],
+      `${j}: config menulis ${config.tiers[j].priceIdr}, katalog menghitung ${HARGA_SATUAN[j]}`,
     );
   }
 });

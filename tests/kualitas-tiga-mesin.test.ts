@@ -235,9 +235,14 @@ test("biaya dihitung dari kredit yang DILAPORKAN kie.ai, dan 0 tidak pernah diam
   assert.equal(nol, 0);
   assert.ok(pesan.some((p) => p.includes("KIE_IDR_PER_CREDIT")), "biaya 0 dilaporkan diam-diam");
 
-  // 2,4 kredit/detik terukur; 8 detik = 19,2 kredit. Dengan Rp100/kredit:
+  // 4,5 kredit/detik terukur di 720p (27 kredit untuk 6 detik); 8 detik =
+  // 36 kredit. Dengan Rp100/kredit = Rp3.600.
+  //
+  // Angka 480p (2,4/detik) sengaja TIDAK dipakai di sini: sejak 720p jadi
+  // bawaan, memakai tarif 480p akan membuat perkiraan meleset 1,9x tepat pada
+  // resolusi yang benar-benar dirender.
   process.env.KIE_IDR_PER_CREDIT = "100";
-  assert.equal(kieGrokVideo.estimateCost(spec("standard")), 1920);
+  assert.equal(kieGrokVideo.estimateCost(spec("standard")), 3600);
   if (asal === undefined) delete process.env.KIE_IDR_PER_CREDIT;
   else process.env.KIE_IDR_PER_CREDIT = asal;
 });

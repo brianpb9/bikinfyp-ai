@@ -7,10 +7,12 @@
  * Semua angka di bawah berasal dari render berbayar sungguhan pada 2 Sep 2026,
  * bukan dari brosur maupun dari estimasi BRD lama:
  *
- *   Standard — Grok Imagine (kie.ai), 480p
- *     14,4 kredit untuk 6 detik = 2,4 kredit/detik.
+ *   Standard — Grok Imagine (kie.ai), 720p
+ *     27 kredit untuk 6 detik = 4,5 kredit/detik. Di 480p ia cuma 2,4 —
+ *     resolusi hampir melipatgandakan biayanya, jadi angka 480p tidak lagi
+ *     berlaku sejak 720p jadi bawaan.
  *     Kredit kie.ai = Rp100 (Rp1.000.000 / 10.000 kredit).
- *     15 dtk x 2,4 x Rp100 ................................ Rp 3.600
+ *     15 dtk x 4,5 x Rp100 ................................ Rp 6.750
  *
  *   Premium — Seedance 2.0 mini (BytePlus), 720p
  *     87.300 token untuk 4 detik = 21.825 token/detik.
@@ -20,6 +22,9 @@
  *   Ultra — Seedance 2.5 (BytePlus), 720p
  *     87.300 token untuk 4 detik — ANGKA YANG SAMA PERSIS.
  *     Konsumsi token tidak bergantung versi model .......... Rp 23.533
+ *
+ * Ketiganya 720p, 15 detik. Yang membedakan paket adalah MODEL, bukan
+ * resolusi maupun durasi (keputusan Brian 2 Sep 2026).
  *
  * ────────────────────────────────────────────────────────────────────────────
  * KENAPA MODALNYA DIBEBANI LAGI SEBELUM DIPAKAI MENGHITUNG MARGIN
@@ -40,10 +45,15 @@
  * ────────────────────────────────────────────────────────────────────────────
  * ATURAN YANG MENGIKAT KATALOG INI
  * ────────────────────────────────────────────────────────────────────────────
- * 1. Setiap paket DAN setiap harga satuan wajib bermargin >= 20%.
- * 2. Paket harus lebih murah per video daripada membeli satuan — kalau tidak,
+ * 1. Paket wajib mencapai margin TARGET per jenis: 20% untuk Standard dan
+ *    Premium, 30% untuk Ultra (keputusan Brian 2 Sep 2026). Paket campuran
+ *    memakai target tertimbang menurut porsi modal tiap jenis.
+ * 2. Harga satuan bermargin LEBIH TINGGI daripada paket. Bukan keserakahan:
+ *    kalau satuan dan paket sama-sama 20%, paket tidak lagi lebih murah per
+ *    video, dan "paket" cuma jadi nama lain untuk membeli borongan.
+ * 3. Paket harus lebih murah per video daripada membeli satuan — kalau tidak,
  *    paket adalah hukuman bagi yang membeli banyak.
- * Keduanya ditegakkan tes, bukan diperiksa dengan mata.
+ * Ketiganya ditegakkan tes, bukan diperiksa dengan mata.
  */
 
 import { config } from "./config";
@@ -55,8 +65,29 @@ export const BEBAN_TETAP_PER_VIDEO_IDR = 400;
 /** Cadangan biaya gateway per transaksi (VA). Ganti dengan angka kontrak. */
 export const BIAYA_GATEWAY_IDR = 4_000;
 
-/** Margin minimum yang boleh dijual. Keputusan Brian 2 Sep 2026. */
+/**
+ * Margin TARGET per jenis video — keputusan Brian 2 Sep 2026.
+ *
+ * Ultra lebih tinggi bukan karena modalnya lebih mahal (modalnya sama persis
+ * dengan Premium), melainkan karena posisinya: ia dibeli orang yang memang
+ * mencari kualitas tertinggi, dan permintaan di titik itu tidak setipis di
+ * titik masuk.
+ */
+export const MARGIN_TARGET: Record<JenisVideo, number> = {
+  standard: 0.20,
+  premium: 0.20,
+  ultra: 0.30,
+};
+
+/** Batas bawah yang tidak boleh dilanggar paket mana pun. */
 export const MARGIN_MINIMUM = 0.20;
+
+/** Margin satuan sengaja di atas target paket — lihat aturan 2 di atas. */
+export const MARGIN_SATUAN: Record<JenisVideo, number> = {
+  standard: 0.40,
+  premium: 0.40,
+  ultra: 0.50,
+};
 
 /** Modal satu video, sudah termasuk beban gagal dan biaya tetap. */
 export function modalPerVideo(jenis: JenisVideo): number {
@@ -64,20 +95,22 @@ export function modalPerVideo(jenis: JenisVideo): number {
   return Math.round(dasar * (1 + BEBAN_GAGAL)) + BEBAN_TETAP_PER_VIDEO_IDR;
 }
 
+/** Dibulatkan ke atas ke kelipatan Rp1.000 — harga jual jangan berekor. */
+function bulatkanKeAtas(n: number, kelipatan = 1_000): number {
+  return Math.ceil(n / kelipatan) * kelipatan;
+}
+
 /**
- * Harga satuan yang direkomendasikan.
+ * Harga satuan yang direkomendasikan — DITURUNKAN dari modal, bukan diketik.
  *
- * Marginnya sengaja LEBIH TINGGI daripada paket: yang membeli satuan membayar
- * kenyamanan tidak berkomitmen, dan selisih itulah yang membuat paket terasa
- * hemat tanpa harus menekan margin paket di bawah batas.
+ * Marginnya sengaja lebih tinggi daripada paket: yang membeli satuan membayar
+ * kenyamanan tidak berkomitmen, dan selisih itulah yang membuat paket
+ * benar-benar hemat tanpa menekan margin paket di bawah targetnya.
  */
 export const HARGA_SATUAN: Record<JenisVideo, number> = {
-  standard: 8_000,
-  premium: 40_000,
-  // Modalnya SAMA dengan premium. Selisih Rp10.000 ini murni posisi, bukan
-  // biaya — dan harus disebut apa adanya, bukan dibungkus sebagai "lebih
-  // mahal karena modelnya lebih baru".
-  ultra: 50_000,
+  standard: bulatkanKeAtas(modalPerVideo("standard") / (1 - MARGIN_SATUAN.standard)),
+  premium: bulatkanKeAtas(modalPerVideo("premium") / (1 - MARGIN_SATUAN.premium)),
+  ultra: bulatkanKeAtas(modalPerVideo("ultra") / (1 - MARGIN_SATUAN.ultra)),
 };
 
 export interface PaketRekomendasi {
@@ -102,44 +135,90 @@ export interface PaketRekomendasi {
  * memakai Seedance berbiaya sekelas Premium kita, sementara Standard berbiaya
  * seperenamnya dengan audio bawaan.
  */
-export const PAKET_REKOMENDASI: PaketRekomendasi[] = [
+/**
+ * Harga paket yang MENCAPAI target margin tiap jenis di dalamnya.
+ *
+ * Paket campuran memakai target tertimbang: porsi modal Standard dan Premium
+ * dihargai pada 20%, porsi Ultra pada 30%. Biaya gateway ikut dihargai pada
+ * target terendah supaya ia tidak diam-diam memakan margin.
+ */
+function hargaUntuk(kuota: Record<JenisVideo, number>): number {
+  let harga = 0;
+  for (const j of Object.keys(kuota) as JenisVideo[]) {
+    if (!kuota[j]) continue;
+    harga += (kuota[j] * modalPerVideo(j)) / (1 - MARGIN_TARGET[j]);
+  }
+  harga += BIAYA_GATEWAY_IDR / (1 - MARGIN_MINIMUM);
+  // Dibulatkan ke atas ke kelipatan Rp5.000: harga jual yang berekor
+  // ("Rp168.528") terbaca seperti hasil hitungan, bukan seperti penawaran —
+  // dan membulatkan ke ATAS berarti margin tidak pernah turun di bawah target
+  // karena pembulatan.
+  return bulatkanKeAtas(harga, 5_000);
+}
+
+/**
+ * Empat paket, naik bertahap. ISINYA yang ditetapkan di sini; HARGANYA
+ * dihitung dari modal supaya tidak mungkin meleset dari target margin.
+ *
+ * Titik masuknya naik dari Rp50.000 ke Rp65.000 sejak 720p jadi bawaan:
+ * modal Standard naik dari Rp3.600 ke Rp6.750 per video, jadi Rp50.000 hanya
+ * cukup untuk 4 video pada margin 20% — dan paket 4 video nyaris tidak lebih
+ * murah daripada membeli satuan. Enam video pada Rp65.000 memberi penghematan
+ * yang benar-benar terasa.
+ */
+const ISI_PAKET: { id: string; nama: string; keterangan: string; kuota: Record<JenisVideo, number>; urutan: number }[] = [
   {
     id: "mulai",
     nama: "Mulai",
     keterangan: "Buat yang baru mencoba konten harian",
-    hargaIdr: 50_000,
-    kuota: { standard: 8, premium: 0, ultra: 0 },
-    masaHari: 30,
+    kuota: { standard: 6, premium: 0, ultra: 0 },
     urutan: 1,
   },
   {
     id: "kreator",
     nama: "Kreator",
     keterangan: "Posting tiap hari, sesekali butuh kualitas tinggi",
-    hargaIdr: 150_000,
-    kuota: { standard: 14, premium: 2, ultra: 0 },
-    masaHari: 30,
+    kuota: { standard: 10, premium: 2, ultra: 0 },
     urutan: 2,
   },
   {
     id: "bisnis",
     nama: "Bisnis",
     keterangan: "Banyak produk, butuh variasi dan kualitas iklan",
-    hargaIdr: 350_000,
-    kuota: { standard: 30, premium: 4, ultra: 1 },
-    masaHari: 30,
+    kuota: { standard: 20, premium: 5, ultra: 1 },
     urutan: 3,
   },
   {
     id: "studio",
     nama: "Studio",
     keterangan: "Produksi konten skala agensi",
-    hargaIdr: 750_000,
-    kuota: { standard: 60, premium: 10, ultra: 2 },
-    masaHari: 30,
+    kuota: { standard: 40, premium: 12, ultra: 3 },
     urutan: 4,
   },
 ];
+
+export const PAKET_REKOMENDASI: PaketRekomendasi[] = ISI_PAKET.map((p) => ({
+  ...p,
+  hargaIdr: hargaUntuk(p.kuota),
+  masaHari: 30,
+}));
+
+/**
+ * Target margin tertimbang sebuah paket — porsi modal tiap jenis dihargai
+ * pada targetnya sendiri. Dipakai tes untuk memeriksa bahwa harga benar-benar
+ * MENCAPAI target, bukan sekadar melewati batas bawah.
+ */
+export function targetMarginPaket(kuota: Record<JenisVideo, number>): number {
+  let modal = BIAYA_GATEWAY_IDR;
+  let hargaTarget = BIAYA_GATEWAY_IDR / (1 - MARGIN_MINIMUM);
+  for (const j of Object.keys(kuota) as JenisVideo[]) {
+    if (!kuota[j]) continue;
+    const m = kuota[j] * modalPerVideo(j);
+    modal += m;
+    hargaTarget += m / (1 - MARGIN_TARGET[j]);
+  }
+  return (hargaTarget - modal) / hargaTarget;
+}
 
 export interface HitunganPaket {
   modalIdr: number;

@@ -125,20 +125,20 @@ export const TIER_HARGA: TierHarga[] = [
   {
     id: "standard",
     nama: "Video Standard",
-    hargaIdr: 8_000,
-    dapat: "Video iklan produk 480p bersuara — cepat dan hemat, untuk konten harian.",
+    hargaIdr: 14_000,
+    dapat: "Video iklan produk 720p bersuara, 15 detik — cepat dan hemat untuk konten harian.",
   },
   {
     id: "premium",
     nama: "Video Premium",
-    hargaIdr: 40_000,
-    dapat: "Video iklan produk 720p dengan narasi bahasa Indonesia yang menjelaskan produkmu.",
+    hargaIdr: 44_000,
+    dapat: "Video iklan produk 720p 15 detik dengan narasi bahasa Indonesia yang menjelaskan produkmu.",
   },
   {
     id: "ultra",
     nama: "Video Ultra",
-    hargaIdr: 50_000,
-    dapat: "Video iklan produk 720p kualitas tertinggi, presenter AI bicara dengan gerak bibir sinkron.",
+    hargaIdr: 53_000,
+    dapat: "Video iklan produk 720p 15 detik kualitas tertinggi, presenter AI bicara dengan gerak bibir sinkron.",
   },
 ];
 

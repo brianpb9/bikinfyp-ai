@@ -58,10 +58,12 @@ export const KUALITAS: Record<Kualitas, ProfilKualitas> = {
   standard: {
     id: "standard",
     label: "Standard",
-    jelas: "Cepat dan murah — cocok untuk uji ide dan konten harian.",
+    jelas: "Cepat dan hemat — cocok untuk uji ide dan konten harian.",
     mesin: "kie-grok",
     model: "grok-imagine/image-to-video",
-    resolusi: "480p",
+    // 720p, sama dengan Premium dan Ultra: yang membedakan ketiganya MODEL,
+    // bukan resolusi (keputusan Brian 2 Sep 2026).
+    resolusi: "720p",
     // Grok Imagine SELALU menghasilkan audio dan tidak punya tombol untuk
     // mematikannya. Menyatakannya di sini mencegah kualitas ini dipasangkan
     // ke jalur bisu, yang akan menjanjikan sesuatu yang tidak bisa ditepati.

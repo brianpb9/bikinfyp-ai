@@ -143,24 +143,56 @@ async function ambilKeuangan() {
 
 async function ambilPengguna() {
   const pool = getPool(config.databaseUrl);
-  // Saldo retail = SUM(delta) WHERE org_id IS NULL — aturan yang SAMA PERSIS
-  // dengan getBalance() di lib/credits.ts. Menghitungnya beda di sini berarti
-  // admin menampilkan saldo yang tidak pernah dilihat penggunanya.
+  // SISA JATAH VIDEO, bukan saldo rupiah.
+  //
+  // Rupiah berhenti membeli apa pun sejak 2 Sep 2026; kolom saldo rupiah di
+  // sini akan menunjukkan angka yang tidak berarti bagi pengguna maupun bagi
+  // yang membacanya. Aturannya SAMA PERSIS dengan yang dipakai saat job
+  // memotong jatah: ember topup dijumlah apa adanya, ember langganan hanya
+  // dari periode yang MASIH berlaku (perbandingan string atas ISO UTC —
+  // kolomnya bertipe TEXT).
+  const sekarang = new Date().toISOString();
   const { rows } = await pool.query<{
     id: string;
     email: string | null;
     name: string | null;
     created_at: string;
-    saldo: string;
+    standard: string;
+    premium: string;
+    ultra: string;
     jobs: string;
     job_terakhir: string | null;
   }>(
-    `SELECT u.id, u.email, u.name, u.created_at,
-            COALESCE((SELECT SUM(delta) FROM credit_ledger c
-                       WHERE c.user_id = u.id AND c.org_id IS NULL),0)::text AS saldo,
+    `WITH topup AS (
+       SELECT user_id, jenis, SUM(delta) AS n FROM kredit_video
+        WHERE ember = 'topup' GROUP BY user_id, jenis
+     ), langganan_sisa AS (
+       SELECT l.user_id,
+              SUM(l.kuota_standard + COALESCE(k.d_standard,0)) AS standard,
+              SUM(l.kuota_premium  + COALESCE(k.d_premium,0))  AS premium,
+              SUM(l.kuota_ultra    + COALESCE(k.d_ultra,0))    AS ultra
+         FROM langganan l
+         LEFT JOIN (
+           SELECT langganan_id,
+                  SUM(CASE WHEN jenis='standard' THEN delta ELSE 0 END) AS d_standard,
+                  SUM(CASE WHEN jenis='premium'  THEN delta ELSE 0 END) AS d_premium,
+                  SUM(CASE WHEN jenis='ultra'    THEN delta ELSE 0 END) AS d_ultra
+             FROM kredit_video WHERE ember='langganan' GROUP BY langganan_id
+         ) k ON k.langganan_id = l.id
+        WHERE l.status='aktif' AND l.berakhir_pada > $1
+        GROUP BY l.user_id
+     )
+     SELECT u.id, u.email, u.name, u.created_at,
+            (COALESCE((SELECT n FROM topup t WHERE t.user_id=u.id AND t.jenis='standard'),0)
+             + COALESCE((SELECT standard FROM langganan_sisa s WHERE s.user_id=u.id),0))::text AS standard,
+            (COALESCE((SELECT n FROM topup t WHERE t.user_id=u.id AND t.jenis='premium'),0)
+             + COALESCE((SELECT premium FROM langganan_sisa s WHERE s.user_id=u.id),0))::text AS premium,
+            (COALESCE((SELECT n FROM topup t WHERE t.user_id=u.id AND t.jenis='ultra'),0)
+             + COALESCE((SELECT ultra FROM langganan_sisa s WHERE s.user_id=u.id),0))::text AS ultra,
             (SELECT COUNT(*) FROM jobs j WHERE j.user_id = u.id)::text AS jobs,
             (SELECT MAX(j.created_at) FROM jobs j WHERE j.user_id = u.id) AS job_terakhir
        FROM users u ORDER BY u.created_at DESC LIMIT 200`,
+    [sekarang],
   );
   return rows;
 }
@@ -228,12 +260,24 @@ async function ambilJob() {
 
 /* ── potongan tampilan ────────────────────────────────────────────────── */
 
+/**
+ * Kartu angka.
+ *
+ * `min-w-0` dan `break-words` ADA ALASANNYA: sel grid punya lebar minimum
+ * bawaan seukuran isinya, jadi satu angka panjang ("Rp1.234.567.890") membuat
+ * kolomnya melebar melewati kartu dan tulisannya tampak keluar dari kotak.
+ * Itu yang terlihat berantakan di layar sempit.
+ *
+ * Ukuran hurufnya ikut mengecil di layar sempit, bukan dipaksa satu ukuran.
+ */
 function Kartu({ label, nilai, catatan }: { label: string; nilai: string; catatan?: string }) {
   return (
-    <div className="rounded-xl border border-zinc-200 bg-white p-3">
-      <p className="text-[11px] uppercase tracking-wide text-zinc-500">{label}</p>
-      <p className="font-display text-lg font-bold tabular-nums text-zinc-900">{nilai}</p>
-      {catatan && <p className="text-[11px] text-zinc-500">{catatan}</p>}
+    <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white p-3">
+      <p className="truncate text-[11px] uppercase tracking-wide text-zinc-500" title={label}>{label}</p>
+      <p className="font-display text-base font-bold tabular-nums leading-tight break-words text-zinc-900 sm:text-lg">
+        {nilai}
+      </p>
+      {catatan && <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{catatan}</p>}
     </div>
   );
 }
@@ -252,6 +296,15 @@ function Tabel({ kepala, children }: { kepala: string[]; children: React.ReactNo
         <tbody className="divide-y divide-zinc-100">{children}</tbody>
       </table>
     </div>
+  );
+}
+
+/** Sel jatah video: nol diredupkan supaya baris yang butuh perhatian menonjol. */
+function Jatah({ n }: { n: number }) {
+  return (
+    <td className={`p-2 text-right tabular-nums font-semibold ${n > 0 ? "text-emerald-700" : "text-zinc-300"}`}>
+      {angka(n)}
+    </td>
   );
 }
 
@@ -331,7 +384,11 @@ async function Ringkasan() {
 
   return (
     <div className="space-y-4">
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      {/* Lima kartu di grid 4 kolom menyisakan SATU kartu yatim di baris
+          kedua — itu yang terbaca sebagai "berantakan". Lima kolom di layar
+          lebar membuatnya satu baris utuh; di layar sedang tiga kolom lebih
+          rapi daripada empat karena sisanya jadi dua, bukan satu. */}
+      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
         <Kartu
           label="Pendapatan"
           nilai={rupiah(pendapatan)}
@@ -455,18 +512,14 @@ async function Pengguna() {
       {rows.length === 0 ? (
         <Kosong pesan="Belum ada pengguna terdaftar." />
       ) : (
-        <Tabel kepala={["Email", "Nama", "Saldo", "Job", "Job terakhir", "Daftar"]}>
+        <Tabel kepala={["Email", "Nama", "Standard", "Premium", "Ultra", "Job", "Job terakhir", "Daftar"]}>
           {rows.map((u) => (
             <tr key={u.id}>
-              <td className="p-2 font-medium">{u.email ?? "—"}</td>
-              <td className="p-2 text-zinc-500">{u.name ?? "—"}</td>
-              <td
-                className={`p-2 tabular-nums font-semibold ${
-                  Number(u.saldo) > 0 ? "text-emerald-700" : "text-zinc-400"
-                }`}
-              >
-                {rupiah(Number(u.saldo))}
-              </td>
+              <td className="max-w-[16rem] truncate p-2 font-medium" title={u.email ?? ""}>{u.email ?? "—"}</td>
+              <td className="max-w-[10rem] truncate p-2 text-zinc-500" title={u.name ?? ""}>{u.name ?? "—"}</td>
+              <Jatah n={Number(u.standard)} />
+              <Jatah n={Number(u.premium)} />
+              <Jatah n={Number(u.ultra)} />
               <td className="p-2 tabular-nums">{angka(Number(u.jobs))}</td>
               <td className="whitespace-nowrap p-2 text-zinc-500">{tanggal(u.job_terakhir)}</td>
               <td className="whitespace-nowrap p-2 text-zinc-500">{tanggal(u.created_at)}</td>
@@ -475,8 +528,8 @@ async function Pengguna() {
         </Tabel>
       )}
       <p className="text-[11px] leading-5 text-zinc-500">
-        Saldo dihitung dengan aturan yang sama persis dengan yang dilihat pengguna —
-        jumlah delta buku kredit, tanpa saldo organisasi.
+        Sisa jatah dihitung dengan aturan yang sama persis dengan yang dipakai saat job memotongnya:
+        jatah satuan dijumlah apa adanya, jatah paket hanya dari periode yang masih berlaku.
       </p>
     </section>
   );
@@ -494,7 +547,7 @@ async function Pesanan() {
           {rows.map((p) => (
             <tr key={p.gateway_ref}>
               <td className="whitespace-nowrap p-2 text-zinc-500">{tanggal(p.created_at)}</td>
-              <td className="p-2">{p.email ?? "—"}</td>
+              <td className="max-w-[16rem] truncate p-2" title={p.email ?? ""}>{p.email ?? "—"}</td>
               <td className="p-2">{p.gateway}</td>
               <td className="p-2 font-mono text-[11px] text-zinc-500">{p.gateway_ref}</td>
               <td className="p-2 tabular-nums font-semibold">{rupiah(p.amount_idr)}</td>
@@ -518,7 +571,7 @@ async function Pemakaian() {
         <Tabel kepala={["Email", "Job", "Selesai", "Gagal", "Tier utama", "COGS terpakai"]}>
           {rows.map((r, i) => (
             <tr key={`${r.email ?? "anon"}-${i}`}>
-              <td className="p-2 font-medium">{r.email ?? "—"}</td>
+              <td className="max-w-[16rem] truncate p-2 font-medium" title={r.email ?? ""}>{r.email ?? "—"}</td>
               <td className="p-2 tabular-nums">{angka(Number(r.n))}</td>
               <td className="p-2 tabular-nums text-emerald-700">{angka(Number(r.selesai))}</td>
               <td className={`p-2 tabular-nums ${Number(r.gagal) > 0 ? "text-red-600" : "text-zinc-400"}`}>
@@ -550,9 +603,13 @@ async function Job() {
             {gagal.map((j) => (
               <tr key={j.id}>
                 <td className="whitespace-nowrap p-2 text-zinc-500">{tanggal(j.created_at)}</td>
-                <td className="p-2">{j.email ?? "—"}</td>
-                <td className="p-2">{j.quality_tier}</td>
-                <td className="p-2 text-red-700">{alasanGagal(j.qc_result) || "tanpa qc_result"}</td>
+                <td className="max-w-[14rem] truncate p-2" title={j.email ?? ""}>{j.email ?? "—"}</td>
+                <td className="whitespace-nowrap p-2">{j.quality_tier}</td>
+                {/* Alasan gagal bisa panjang. Dibatasi lebarnya dan dibungkus,
+                    bukan dibiarkan memaksa seluruh tabel melebar — teks
+                    panjang di satu sel adalah cara paling umum tabel tampak
+                    "keluar dari kotaknya". */}
+                <td className="max-w-[26rem] break-words p-2 text-red-700">{alasanGagal(j.qc_result) || "tanpa qc_result"}</td>
               </tr>
             ))}
           </Tabel>

@@ -1,6 +1,9 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { getDb, now, uuid, audit } from "@/lib/db";
+// `now` dan `uuid` murni penghasil nilai — aman di kedua runtime.
+// `audit` TIDAK: ia menulis ke SQLite, yang dimatikan di production.
+import { getDb, now, uuid } from "@/lib/db";
+import { catatAudit } from "@/lib/audit-runtime";
 import { config, paymentsEnv } from "@/lib/config";
 import { getPool } from "@/lib/postgres/pool";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
@@ -61,7 +64,7 @@ async function simpanPesanan(input: {
   // sementara invoice ini belum dibayar, yang berlaku tetap harga saat pembeli
   // menekan tombol.
   if (input.items.length) await catatPesananTopup(input.orderId, input.items, input.harga);
-  audit(input.userId, "payment.checkout", "payments", input.orderId, {
+  await catatAudit(input.userId, "payment.checkout", "payments", input.orderId, {
     jenis_pesanan: input.jenisPesanan, amount_idr: input.amountIdr, paket_id: input.paketId,
   });
 }

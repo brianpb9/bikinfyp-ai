@@ -80,14 +80,23 @@ test("setiap tab admin punya query dan tampilan, tidak ada yang kosong", () => {
   }
 });
 
-test("saldo di admin memakai aturan yang SAMA dengan yang dilihat pengguna", () => {
-  // getBalance() menyaring org_id IS NULL. Kalau admin menghitungnya beda, ia
-  // menampilkan saldo yang penggunanya sendiri tidak pernah lihat — dan
-  // selisih itu baru ketahuan saat ada yang komplain.
+test("sisa jatah di admin memakai aturan yang SAMA dengan yang dipakai menagih", () => {
+  // Kolom saldo RUPIAH sudah tidak ada di admin sejak 2 Sep 2026 — rupiah
+  // berhenti membeli apa pun, jadi menampilkannya berarti memajang angka yang
+  // tidak berarti bagi pengguna maupun bagi yang membacanya.
+  //
+  // Yang dijaga sekarang: sisa jatah dihitung dengan aturan yang sama persis
+  // dengan yang dipakai saat job memotongnya. Kalau admin menghitungnya beda,
+  // ia menampilkan jatah yang penggunanya sendiri tidak pernah lihat — dan
+  // selisihnya baru ketahuan saat ada yang komplain.
   const src = baca("app/admin/page.tsx");
-  assert.match(src, /c\.user_id = u\.id AND c\.org_id IS NULL/, "saldo admin tidak menyaring org_id");
-  const credits = baca("lib/credits.ts");
-  assert.match(credits, /user_id = \? AND org_id IS NULL/, "aturan getBalance berubah — samakan admin");
+  assert.match(src, /ember = 'topup'/, "admin tidak menjumlahkan jatah satuan");
+  assert.match(src, /l\.status='aktif' AND l\.berakhir_pada > \$1/, "admin menghitung jatah paket yang sudah kedaluwarsa");
+  assert.match(src, /ember='langganan'/, "admin tidak mengurangi pemakaian jatah paket");
+
+  // Dan aturan yang sama masih berlaku di sisi yang menagih.
+  const mesin = baca("lib/postgres/kredit-video.ts");
+  assert.match(mesin, /l\.status = 'aktif' AND l\.berakhir_pada >/, "aturan masa berlaku berubah di mesin — samakan admin");
 });
 
 test("COGS admin dari cost_actual_idr, bukan ditaksir dari daftar harga", () => {
