@@ -8,8 +8,9 @@ import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
-import { tierMasihDijual } from "@/lib/paket-kredit";
+import { TIER_DITERIMA, tierMasihDiterima } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
+import type { QualityTier } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,8 +69,10 @@ export async function POST(req: Request) {
     // silent_caption dengan alasan "ia tier produksi yang dipakai retail", dan
     // alasan itu sudah tidak benar sejak retail memensiunkannya: Enterprise
     // menjual Standard Rp5.000 sementara retail menyatakannya tidak tersedia.
-    const TIERS = ["silent_caption", "high_quality", "super_hq"].filter(tierMasihDijual);
-    const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
+    // Daftar tier dibaca dari TIER_DIJUAL, bukan diketik ulang: daftar yang
+    // diketik ulang berarti tier baru diterima retail tapi ditolak Enterprise.
+    const TIERS = TIER_DITERIMA.filter(tierMasihDiterima);
+    const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as QualityTier) : null;
     if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal. Pilih Standard, Quality, atau High Quality.", "Unknown quality tier.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");

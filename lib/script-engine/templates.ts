@@ -7,6 +7,7 @@
 // - tanpa angka selain harga (L-14), tanpa overclaim/medis/formal/urgensi palsu (L-10..L-13).
 
 import type { HookCode } from "../config/hooks";
+import type { QualityTier } from "../providers/types";
 import type { RegisterSpec } from "./registers";
 
 export interface TemplateCtx {
@@ -378,7 +379,10 @@ function wordCount(text: string): number {
 export function renderSegmentsForTier(
   family: HookCode,
   c: TemplateCtx,
-  tier: "silent_caption" | "high_quality" | "super_hq",
+  // Semua tier diterima. Yang dibedakan di bawah cuma SATU hal: senyap atau
+  // bersuara — tier baru standard/premium/ultra semuanya bersuara, jadi
+  // salinan yang dipakai persis sama dengan high_quality hari ini.
+  tier: QualityTier,
   durationSec = 15,
   cartLabel: "keranjang kuning" | "keranjang" = "keranjang kuning",
   beats?: { hookEnd: number; demoEnd: number },

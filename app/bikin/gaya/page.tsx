@@ -9,6 +9,8 @@ import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from ".
 import { track } from "../../_components/track";
 import templateTerbukti from "../../../lib/config/template-terbukti.json";
 import { HOOK_LEVELS, type HookLevel } from "@/lib/config/hooks";
+import type { QualityTier } from "@/lib/providers/types";
+import { setaraBaru } from "@/lib/kualitas-video";
 
 // Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
 // kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
@@ -32,7 +34,7 @@ const REGISTERS = [
   { id: "netral", label: "Netral", hint: "sapaan: kak — ramah, aman" },
 ];
 
-type Tier = "silent_caption" | "high_quality" | "super_hq";
+type Tier = QualityTier;
 
 // Level hook sebagai SLIDER 0-100% (permintaan Brian 2026-08-06, gaya
 // "Weirdness"-slider).
@@ -74,7 +76,9 @@ interface TierMeta {
 // S3 — PILIH GAYA (Langkah 2/5) — tier harga AKTIF (keputusan final 3-tier)
 export default function GayaPage() {
   const router = useRouter();
-  const [tier, setTier] = useState<Tier>("high_quality");
+  // Bawaan Premium: susunan yang sekarang ditawarkan /api/meta. Tier lama
+  // tetap sah kalau datang dari alur tersimpan, tapi bukan lagi titik awal.
+  const [tier, setTier] = useState<Tier>("premium");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("talking_head");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
@@ -92,7 +96,10 @@ export default function GayaPage() {
     if (!t) return;
     setTemplateId(id);
     setFormat(t.preset.format as VideoFormat);
-    setTier(t.preset.qualityTier as Tier);
+    // Preset ditulis dengan nama tier lama. Dipetakan ke padanannya supaya
+    // kartu yang tersorot benar-benar ada di daftar yang sedang ditawarkan —
+    // kalau tidak, memilih template membuat SEMUA kartu tampak tidak terpilih.
+    setTier(setaraBaru(t.preset.qualityTier as Tier));
     setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
   }
   const restoredFlow = loadFlow();
@@ -294,7 +301,7 @@ export default function GayaPage() {
 
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih paket</p><h2 className="font-display text-xl font-bold">Kualitas video</h2></div>
-          {(tiers.length ? tiers : [{ id: "high_quality", name: "AI Bersuara", note: "AI-nya ngomong pakai suara natural", tag: null, price_idr: 12000 }])
+          {(tiers.length ? tiers : [{ id: "premium", name: "Premium", note: "Gambar rapi, wajah stabil, suara AI", tag: null, price_idr: 12000 }])
             .map((t) => (
             <button
               key={t.id}

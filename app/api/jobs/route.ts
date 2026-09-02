@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, type PersonaRow } from "@/lib/db";
 import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
+import { TIER_DIJUAL, tierMasihDiterima } from "@/lib/paket-kredit";
 import { enqueueJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
 import { bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
@@ -12,6 +13,7 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { createFypSnapshot } from "@/lib/fyp-snapshot";
 import type { FypQualityTier, FypVideoFormat } from "@/lib/fyp-score";
+import type { QualityTier } from "@/lib/providers/types";
 import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
@@ -152,11 +154,19 @@ export async function POST(req: Request) {
       ? body.avatar_custom_desc.trim().slice(0, 600)
       : null;
 
-    const tier = String(body.quality_tier ?? "high_quality") as "silent_caption" | "high_quality" | "super_hq";
+    const tier = String(body.quality_tier ?? "high_quality") as QualityTier;
     if (tier === "silent_caption")
       throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — bikin skrip baru dengan AI Bersuara ya.", "silent_caption tier retired.");
-    if (!["high_quality", "super_hq"].includes(tier))
-      throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih: high_quality atau super_hq.", "Unknown quality tier.");
+    // Daftar tier yang boleh ditagih dibaca dari SATU sumber (lib/paket-kredit).
+    // Sebelumnya daftarnya diketik ulang di sini, jadi menambah tier baru
+    // berarti route ini menolaknya dengan pesan "tidak dikenal" sementara
+    // halaman harga sudah memajangnya.
+    // DITERIMA, bukan DIJUAL: naskah yang dibuat sebelum penamaan baru
+    // menyimpan tier lamanya, dan job harus memakai tier yang sama dengan
+    // naskahnya. Memakai daftar 'dijual' di sini akan menabrak orang yang
+    // sudah bikin naskah tapi belum menekan Bikin.
+    if (!tierMasihDiterima(tier))
+      throw ERR.BAD_REQUEST(`Tier tidak dikenal. Pilih: ${TIER_DIJUAL.join(", ")}.`, "Unknown quality tier.");
     if (script.quality_tier !== tier)
       throw ERR.BAD_REQUEST(
         `Skrip ini dibuat untuk tier ${script.quality_tier}. Bikin skrip baru untuk tier ${tier} ya.`,

@@ -35,9 +35,11 @@ interface Katalog {
 }
 interface HasilSel { status: "queued" | "failed"; script_id: string; job_id?: string; reason?: string; avatar_id: string; template_id: string }
 
+// Yang DITAWARKAN (TIER_DIJUAL di lib/paket-kredit). Nama lama masih DITERIMA
+// server untuk naskah yang sudah terlanjur dibuat, tapi tidak ditawarkan lagi.
 const TIERS = [
-  { id: "high_quality", label: "Quality", note: "720p, suara AI" },
-  { id: "super_hq", label: "High Quality", note: "1080p, suara + gerak bibir" },
+  { id: "premium", label: "Premium", note: "720p, Seedance 2 mini" },
+  { id: "ultra", label: "Ultra", note: "720p, Seedance 2.5" },
 ] as const;
 
 // Sisi terpanjang disamakan (22px) supaya yang membedakan bentuknya, bukan

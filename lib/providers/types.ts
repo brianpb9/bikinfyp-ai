@@ -17,7 +17,24 @@ export class ProviderNotConfigured extends Error {
   }
 }
 
-export type QualityTier = "silent_caption" | "high_quality" | "super_hq";
+/**
+ * Tier kualitas video.
+ *
+ * Tiga nilai pertama adalah nama LAMA — masih tersimpan di 31 baris `jobs`
+ * dan dirujuk 222 kali di kode. Ketiganya sengaja DIPERTAHANKAN, bukan
+ * diganti nama: mengganti berarti riwayat job lama menunjuk nilai yang tidak
+ * lagi dikenal, dan menyentuh jalur uang di puluhan tempat sekaligus.
+ *
+ * Tiga terakhir adalah susunan baru yang terikat mesin masing-masing —
+ * lihat lib/kualitas-video.ts.
+ */
+export type QualityTier =
+  | "silent_caption"
+  | "high_quality"
+  | "super_hq"
+  | "standard"
+  | "premium"
+  | "ultra";
 
 export interface ShotSpec {
   /** true bila shot ini memang TANPA ORANG (packshot produk).

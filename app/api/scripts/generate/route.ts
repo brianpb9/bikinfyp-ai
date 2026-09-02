@@ -6,7 +6,8 @@ import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
-import { tierMasihDijual } from "@/lib/paket-kredit";
+import { tierMasihDiterima } from "@/lib/paket-kredit";
+import type { QualityTier } from "@/lib/providers/types";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
@@ -47,11 +48,16 @@ export async function POST(req: Request) {
     // Daftar pensiunnya dari lib/paket-kredit (SATU sumber dengan halaman harga),
     // bukan string hardcode di sini — dulu terpisah, dan /harga sempat menjual
     // tier ini seharga Rp5.000 sementara route ini menolaknya.
-    if (typeof body.quality_tier === "string" && !tierMasihDijual(body.quality_tier))
-      throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — pilih AI Bersuara ya.", "retired tier requested.");
-    const tier = (["high_quality", "super_hq"].includes(body.quality_tier)
+    if (typeof body.quality_tier === "string" && !tierMasihDiterima(body.quality_tier))
+      throw ERR.BAD_REQUEST("Tier itu sudah tidak tersedia — pilih Premium atau Ultra ya.", "retired tier requested.");
+    // Daftar yang diterima dibaca dari sumber yang sama dengan pemeriksaan di
+    // atas. Sebelumnya baris ini mengetik ulang dua id, jadi tier baru yang
+    // LOLOS tierMasihDiterima() tetap diam-diam diturunkan ke high_quality —
+    // pembeli memilih Ultra, naskahnya dibuat untuk tier lain, dan /api/jobs
+    // menolaknya dengan "skrip ini dibuat untuk tier lain".
+    const tier = (typeof body.quality_tier === "string" && tierMasihDiterima(body.quality_tier)
       ? body.quality_tier
-      : "high_quality") as "silent_caption" | "high_quality" | "super_hq";
+      : "high_quality") as QualityTier;
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
     const hookLevel = normalizeHookLevel(body.hook_level);
     // Template Terbukti: keluarga hook pilihan pola pemenang (opsional, tervalidasi).

@@ -7,6 +7,7 @@ import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import type { PersonaRow, ProductRow, ScriptRow } from "../db";
 import { getPool } from "./pool";
+import type { QualityTier } from "../providers/types";
 
 export interface PgProductInput {
   sourceUrl?: string | null;
@@ -34,7 +35,7 @@ export interface PgScriptInput {
   caption: string;
   hashtags: unknown;
   validationResult: unknown;
-  qualityTier: "silent_caption" | "high_quality" | "super_hq";
+  qualityTier: QualityTier;
   hookLevel?: import("../config/hooks").HookLevel;
 }
 

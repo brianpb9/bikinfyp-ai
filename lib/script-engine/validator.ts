@@ -11,6 +11,7 @@ import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
+import type { QualityTier } from "../providers/types";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -37,7 +38,7 @@ export interface ScriptToValidate {
    * yang sah untuk L-14 ("dari 120 ribu jadi 85 ribu"). */
   promoPriceBeforeIdr?: number | null;
   /** Tier kualitas — memengaruhi L-05 (batas kata) & L-17 (kurung instruksi). Default silent_caption. */
-  qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  qualityTier?: QualityTier;
   /** Durasi video — L-05 (batas kata) skala proporsional dari basis 15 dtk. Default 15. */
   durationSec?: number;
   /** Genre naskah. "tvc" mengaktifkan aturan T-01..T-03 dan MEMATIKAN L-01/L-03/L-04.

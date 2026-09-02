@@ -30,6 +30,7 @@ import { cartLabelForUrl } from "./cart-label";
 import { isTvcTemplate, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
 import { getTemplate } from "../templates";
 import type { SegmentDraft } from "./templates";
+import type { QualityTier } from "../providers/types";
 
 /**
  * SNAPSHOT ADMISI — bentuk naskah seperti yang DITETAPKAN saat ditulis.
@@ -211,7 +212,7 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
     productName: sumber.productName,
     priceIdr: sumber.productPriceIdr,
     promoPriceBeforeIdr: sumber.promoPriceBeforeIdr ?? null,
-    qualityTier: (sumber.qualityTier ?? "silent_caption") as "silent_caption" | "high_quality" | "super_hq",
+    qualityTier: (sumber.qualityTier ?? "silent_caption") as QualityTier,
     durationSec,
     // Label keranjang mengikuti platform — "keranjang kuning" itu branding
     // TikTok, dan menyuruh pembeli Shopee mencarinya adalah menyuruhnya

@@ -63,7 +63,7 @@ test("halaman matriks tidak menyalin tarif — diambil dari server", () => {
   assert.ok(!/80_000|12_000|80000|12000/.test(halaman),
     "angka tarif tidak boleh ditulis di komponen klien");
   assert.match(halaman, /katalog\.prices\[`\$\{tier\}:/, "tarif harus dibaca dari katalog kiriman server");
-  assert.match(route, /tierPriceIdr\(t, d\)/, "server harus memakai rumus harga yang sama dengan penahanan kredit");
+  assert.match(route, /tierPriceIdr\(t[^,)]*, d\)/, "server harus memakai rumus harga yang sama dengan penahanan kredit");
 });
 
 test("satu skenario menghasilkan satu baris skrip PER AVATAR", () => {

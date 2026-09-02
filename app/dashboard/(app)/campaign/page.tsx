@@ -19,11 +19,12 @@ import { runSequentially } from "@/lib/sequential-queue";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
-type Tier = "silent_caption" | "high_quality" | "super_hq";
+type Tier = QualityTier;
 import type { HookLevel } from "@/lib/config/hooks";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
+import type { QualityTier } from "@/lib/providers/types";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
@@ -123,7 +124,14 @@ const MAX_PHOTOS = 8;
 // Harga dasar per tier — HARUS cocok dengan config.tiers di server, karena
 // angka di layar ini yang dibaca brand sebelum menekan Bikin. Server tetap
 // menghitung ulang saat render; ini estimasi, bukan otoritas.
-const TIER_BASE_IDR: Record<Tier, number> = { silent_caption: 5_000, high_quality: 12_000, super_hq: 80_000 };
+const TIER_BASE_IDR: Record<Tier, number> = {
+  silent_caption: 5_000,
+  high_quality: 12_000,
+  super_hq: 80_000,
+  standard: 12_000,
+  premium: 12_000,
+  ultra: 80_000,
+};
 // Kategori produk. Tiga terakhir TIDAK punya barang fisik dan itulah yang
 // mematikan pemeriksaan identitas produk (isServiceLike di lib/config/hooks.ts)
 // — tanpa opsi ini di layar, iklan jasa tidak akan pernah bisa dipilih dan
@@ -140,15 +148,29 @@ const TIER_BASE_IDR: Record<Tier, number> = { silent_caption: 5_000, high_qualit
 // terlanjur memakai tier ini tetap perlu label dan harganya untuk ditampilkan
 // di riwayat.
 const SEMUA_TIER = [
-  { id: "silent_caption" as const, label: "Standard" },
+  // Label "Standard" dulu menempel di silent_caption. Namanya dipindahkan ke
+  // tier baru yang memang bernama Standard, dan yang pensiun diberi label yang
+  // menyebut dirinya pensiun — dua baris bernama "Standard" di layar yang sama
+  // adalah cara tercepat membuat orang memilih yang salah di riwayat.
+  { id: "silent_caption" as const, label: "Teks + Musik (pensiun)" },
   { id: "high_quality" as const, label: "Quality" },
   { id: "super_hq" as const, label: "High Quality" },
+  { id: "standard" as const, label: "Standard" },
+  { id: "premium" as const, label: "Premium" },
+  { id: "ultra" as const, label: "Ultra" },
 ];
 const TIER_OPTIONS = SEMUA_TIER.filter((t) => tierMasihDijual(t.id));
 const TIER_META: Record<string, { resolution: string; note: string }> = {
   silent_caption: { resolution: "480p", note: "teks di layar, tanpa suara" },
   high_quality: { resolution: "720p", note: "suara AI" },
-  super_hq: { resolution: "1080p", note: "suara AI + gerak bibir" },
+  // 720p, BUKAN 1080p. config.tiers.super_hq merender 720p dan tidak ada
+  // langkah upscale di pipeline — layar ini mengiklankan 1080p pada tier
+  // Rp80.000 selama berbulan-bulan. Angkanya disamakan dengan yang benar-
+  // benar dirender.
+  super_hq: { resolution: "720p", note: "suara AI + gerak bibir" },
+  standard: { resolution: "480p", note: "Grok Imagine — cepat, untuk uji ide" },
+  premium: { resolution: "720p", note: "Seedance 2 mini — suara AI" },
+  ultra: { resolution: "720p", note: "Seedance 2.5 — kualitas tertinggi" },
 };
 // Tiap rasio membawa BENTUK kotaknya sendiri. Angka "9:16" tidak berarti apa-apa
 // buat kebanyakan penjual; bentuknya langsung terbaca tanpa perlu dipikir.

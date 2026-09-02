@@ -240,6 +240,19 @@ export const config = {
   // sisa yang terlupa — lihat docs/adr/0001-gateway-duitku-midtrans-rollback.md
   // sebelum menghapus MIDTRANS_* atau lib/midtrans.ts.
   // Duitku POP — kosong = checkout 503 jelas (sama seperti jalur Midtrans)
+  // kie.ai — jalur Grok Imagine untuk kualitas "standard".
+  //
+  // Dipakai lewat kie.ai, BUKAN API xAI langsung: id modelnya
+  // "grok-imagine/image-to-video" adalah penamaan kie.ai.
+  kieApiKey: env("KIE_API_KEY", ""),
+  kieBaseUrl: env("KIE_BASE_URL", "https://api.kie.ai"),
+  kieGrokModel: env("KIE_GROK_MODEL", "grok-imagine/image-to-video"),
+  // Alamat endpoint BELUM PERNAH DIVERIFIKASI terhadap server kie.ai:
+  // yang kami terima adalah bentuk input/output modelnya, bukan path-nya.
+  // Karena itu keduanya bisa diganti lewat env tanpa deploy ulang kode —
+  // kalau tebakan ini meleset, yang perlu diubah cuma dua baris env.
+  kiePathCreate: env("KIE_PATH_CREATE", "/api/v1/jobs/createTask"),
+  kiePathRecord: env("KIE_PATH_RECORD", "/api/v1/jobs/recordInfo"),
   duitkuMerchantCode: env("DUITKU_MERCHANT_CODE", ""),
   duitkuApiKey: env("DUITKU_API_KEY", ""),
   duitkuIsProduction: env("DUITKU_IS_PRODUCTION", "false") === "true",
@@ -313,6 +326,45 @@ export const config = {
       cogsIdr: 37164,
       byteplusModel: env("BYTEPLUS_MODEL_SUPER", "dreamina-seedance-2-0-260128"),
       resolution: "720p",
+      generateAudio: true,
+    },
+    // ── SUSUNAN BARU: standard · premium · ultra ────────────────────────
+    //
+    // Ditambahkan 2 Sep 2026. Tiga tier lama di atas TIDAK dihapus — job lama
+    // masih memakainya, dan riwayat tidak boleh menunjuk nilai yang hilang.
+    //
+    // COGS premium dan ultra SENGAJA SAMA, dan itu bukan kelalaian: diukur
+    // dari 704 task nyata, konsumsi token BytePlus tidak bergantung versi
+    // model — ia fungsi resolusi x durasi x mode. 2.0-mini dan 2.5 menghabiskan
+    // token yang sama pada durasi dan mode yang sama. Selisih keduanya adalah
+    // kualitas keluaran, bukan biaya.
+    //
+    // HARGA JUAL BELUM DITETAPKAN untuk ketiganya. Angka di bawah menyalin
+    // tier lama yang sepadan supaya sistem bisa berjalan dan diuji; menulis
+    // harga baru di sini berarti mengunci tebakan ke dalam kode sebelum Brian
+    // memutuskannya.
+    standard: {
+      priceIdr: 12000,
+      // COGS BELUM DIKETAHUI: tarif kie.ai belum pernah kami lihat dari
+      // tagihan. Diisi sama dengan premium sebagai penahan sementara, dan
+      // ditandai di sini supaya tidak dikutip sebagai fakta.
+      cogsIdr: 12456,
+      byteplusModel: "",
+      resolution: "480p",
+      generateAudio: true,
+    },
+    premium: {
+      priceIdr: 12000,
+      cogsIdr: 12456,
+      byteplusModel: env("BYTEPLUS_MODEL_PREMIUM", "dreamina-seedance-2-0-mini-260615"),
+      resolution: env("BYTEPLUS_RES_PREMIUM", "720p"),
+      generateAudio: true,
+    },
+    ultra: {
+      priceIdr: 80000,
+      cogsIdr: 12456,
+      byteplusModel: env("BYTEPLUS_MODEL_ULTRA", "dreamina-seedance-2-5-260628"),
+      resolution: env("BYTEPLUS_RES_ULTRA", "720p"),
       generateAudio: true,
     },
   } as Record<

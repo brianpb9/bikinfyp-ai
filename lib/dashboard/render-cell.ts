@@ -22,6 +22,7 @@ import type { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
+import type { QualityTier } from "@/lib/providers/types";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -108,7 +109,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   const segments = JSON.parse(script.segments) as SegmentDraft[];
   // Tier & durasi diturunkan dari skrip tersimpan (otoritatif) — tidak pernah
   // dipercaya dari body request, sama seperti /api/jobs retail.
-  const tier = script.quality_tier as "silent_caption" | "high_quality" | "super_hq";
+  const tier = script.quality_tier as QualityTier;
   const durationS = Math.max(...segments.map((s) => s.end));
   if (sel.format === "talking_head" && durationS !== 15) return gagal("Wajah AI cuma tersedia untuk video 15 detik.");
   if (sel.format === "ads" && durationS !== 15 && durationS !== 30) return gagal("Iklan jasa tersedia untuk 15 atau 30 detik.");

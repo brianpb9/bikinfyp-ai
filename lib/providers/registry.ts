@@ -16,6 +16,8 @@ import { mockVoiceA } from "./mock/voice-a";
 import { mockVoiceB } from "./mock/voice-b";
 import { byteplusVideo } from "./stubs/byteplus";
 import { dashscopeVideo } from "./stubs/dashscope";
+import { kieGrokVideo } from "./stubs/kie-grok";
+import { mesinUntuk } from "../kualitas-video";
 // google-tts.ts & azure-tts.ts sengaja TIDAK diimpor: TTS terpisah tidak dipakai di
 // jalur produksi (keputusan final 31 Jul) — file dipertahankan sebagai referensi.
 
@@ -29,12 +31,41 @@ function reportResult(name: string, ok: boolean) {
   historyScore.set(name, ok ? Math.min(1, cur + 0.02) : Math.max(0, cur - 0.2));
 }
 
-function videoOrder(): VideoProvider[] {
+/**
+ * Urutan provider video untuk sebuah permintaan.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * PEMILIHAN SEKARANG BERGANTUNG TIER, BUKAN CUMA KONFIGURASI GLOBAL
+ * ────────────────────────────────────────────────────────────────────────────
+ * Dulu `config.providerVideo` memilih satu provider untuk seluruh sistem.
+ * Susunan standard/premium/ultra menuntut dua mesin hidup bersamaan, jadi
+ * tier "standard" dirender kie.ai (Grok Imagine) sementara sisanya BytePlus.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * ARAH FAILOVER SENGAJA TIDAK SIMETRIS
+ * ────────────────────────────────────────────────────────────────────────────
+ * standard boleh jatuh ke BytePlus: pembeli tetap menerima video, dan itu
+ * mesin yang lebih mahal — kerugiannya di pihak kita, bukan di pihaknya.
+ *
+ * premium dan ultra TIDAK PERNAH jatuh ke kie.ai. Grok berjalan di 480p;
+ * menjatuhkan tier 720p ke sana berarti mengirim barang yang lebih rendah
+ * daripada yang dibayar, dan menyebutnya sukses. Lebih baik job-nya gagal dan
+ * dikembalikan daripada diam-diam diturunkan kelasnya.
+ */
+export function videoOrder(spec?: VisualSpec): VideoProvider[] {
   const active = config.providerVideo; // "mock" | "byteplus" | "dashscope"
   const list: VideoProvider[] = [];
-  if (active === "byteplus") list.push(byteplusVideo, dashscopeVideo);
-  else if (active === "dashscope") list.push(dashscopeVideo, byteplusVideo);
-  else list.push(mockVideoA, mockVideoB);
+
+  if (active === "mock") {
+    list.push(mockVideoA, mockVideoB);
+  } else if (spec && mesinUntuk(spec.qualityTier) === "kie-grok") {
+    list.push(kieGrokVideo, byteplusVideo, dashscopeVideo);
+  } else if (active === "dashscope") {
+    list.push(dashscopeVideo, byteplusVideo);
+  } else {
+    list.push(byteplusVideo, dashscopeVideo);
+  }
+
   // Mock is a local-test aid only. A production provider outage must fail the
   // job and refund it; silently substituting generated mock media would be a
   // deceptive successful response and invalidates a production smoke.
@@ -67,7 +98,7 @@ export interface VideoGenResult {
 
 export async function generateVideoWithFailover(spec: VisualSpec, outDir: string): Promise<VideoGenResult> {
   assertVisualSpec(spec); // aturan keras #1 & #3 — ditegakkan di runtime
-  const providers = videoOrder();
+  const providers = videoOrder(spec);
   if (providers.length < 2) throw new Error("SR-ABS-01: minimal 2 provider video wajib terdaftar");
 
   // Ketersediaan dulu, lalu biaya, lalu skor historis.

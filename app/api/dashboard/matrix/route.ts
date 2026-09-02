@@ -10,7 +10,7 @@ import { generateScripts } from "@/lib/script-engine";
 import type { HookCode } from "@/lib/config/hooks";
 import { getCreatorCategory } from "@/lib/personas";
 import { tierPriceIdr } from "@/lib/credits";
-import { tierMasihDijual } from "@/lib/paket-kredit";
+import { TIER_DITERIMA, tierMasihDiterima } from "@/lib/paket-kredit";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
@@ -20,6 +20,7 @@ import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import type { QualityTier } from "@/lib/providers/types";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -183,8 +184,10 @@ export async function POST(req: Request) {
     }
 
     // ---- pengaturan render bersama ----
-    const TIERS = ["silent_caption", "high_quality", "super_hq"].filter(tierMasihDijual);
-    const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
+    // Daftar tier dibaca dari TIER_DIJUAL, bukan diketik ulang: daftar yang
+    // diketik ulang berarti tier baru diterima retail tapi ditolak Enterprise.
+    const TIERS = TIER_DITERIMA.filter(tierMasihDiterima);
+    const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as QualityTier) : null;
     if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal.", "Unknown quality tier.");
     // Yang tersisa sebagai pilihan pengguna cuma DUA, dan dua-duanya memang
     // bukan bagian dari skenario: rasio (tempat tayang) dan tier (mutu/harga).
@@ -424,10 +427,13 @@ export async function GET(req: Request) {
       // yang sudah dibayar sekali di sidebar dashboard: tarif yang disalin
       // pasti hanyut, dan yang menemukan selisihnya pengguna — setelah mereka
       // menekan tombol yang menjanjikan angka lain.
+      // Tarif dikirim untuk semua tier yang DITERIMA, bukan cuma yang
+      // ditawarkan: sel yang dibuat sebelum penamaan baru masih membawa tier
+      // lamanya, dan tanpa tarifnya harganya tampil kosong di layar.
       prices: Object.fromEntries(
-        (["high_quality", "super_hq"] as const)
-          .filter(tierMasihDijual)
-          .flatMap((t) => [15, 30, 45].map((d) => [`${t}:${d}`, tierPriceIdr(t, d)]))
+        TIER_DITERIMA.filter(tierMasihDiterima).flatMap((t) =>
+          [15, 30, 45].map((d) => [`${t}:${d}`, tierPriceIdr(t as QualityTier, d)])
+        )
       ),
     });
   } catch (err) {

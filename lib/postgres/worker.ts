@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { config } from "../config";
+import { hapusGambarProvider } from "../gambar-provider";
 import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
@@ -797,10 +798,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (!qc?.passed) throw new Error("QC tidak menghasilkan output lulus.");
   if (!(await jobs.transition(row.id, "LABELING", { watermark: renderParams.watermarkText }))) return;
   const relVideo = path.relative(config.storageDir, outputPath).split(path.sep).join("/");
-  await persistReadyOutput(row, jobs, pool, relVideo, outputPath, qc);
+  await persistReadyOutput(row, jobs, pool, relVideo, outputPath, qc, specSiap.shots.length);
 }
 
-async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: Pool, relVideo: string, local: string, qc: unknown) {
+async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: Pool, relVideo: string, local: string, qc: unknown, jumlahShot = 0) {
   await mediaStorage().put(relVideo, fs.readFileSync(local), "video/mp4");
   if (config.storageMode !== "filesystem") fs.rmSync(local, { force: true });
   const extras = outputExtras(row.product_category);
@@ -814,6 +815,13 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
   // job yang sudah sukses; barisnya kedaluwarsa sendiri lewat batas umur.
   await pgTaskMemo.clear(row.id).catch((err) =>
     console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
+  );
+  // Salinan foto yang sempat diterbitkan agar bisa DIUNDUH kie.ai ikut dibuang
+  // di sini. Tautannya memang kedaluwarsa sendiri, tapi berkasnya tidak —
+  // membiarkannya berarti setiap job standard meninggalkan satu foto produk di
+  // kotak yang bisa dibaca tanpa sesi.
+  await hapusGambarProvider(row.id, jumlahShot).catch((err) =>
+    console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan gambar provider: ${(err as Error).message}`)
   );
 }
 

@@ -22,7 +22,18 @@ import { formatHargaOverlay } from "../script-engine/templates";
 import { buildCaptionCards } from "../media/captions";
 import type { FeatureValues } from "./model";
 
-export type FypQualityTier = "silent_caption" | "high_quality" | "super_hq";
+// Tier baru (standard/premium/ultra) ikut diterima. Yang diturunkan dari tier
+// di sini HANYA satu hal: bersuara atau tidak (lihat `voiced` di bawah) — dan
+// ketiganya bersuara, sama seperti high_quality dan super_hq. Jadi menambah
+// nilai di sini TIDAK mengubah satu pun fitur yang dipelajari model, dan
+// modelVersion tidak perlu naik.
+export type FypQualityTier =
+  | "silent_caption"
+  | "high_quality"
+  | "super_hq"
+  | "standard"
+  | "premium"
+  | "ultra";
 export type FypVideoFormat = "hands_only" | "vo_broll" | "talking_head";
 
 export interface ScriptPlanInput {

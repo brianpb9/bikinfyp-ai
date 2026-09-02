@@ -48,6 +48,7 @@ export interface ProductInput {
 }
 
 import { cartLabelForUrl } from "./cart-label";
+import type { QualityTier } from "../providers/types";
 export { cartLabelForUrl };
 
 /** Ganti "keranjang kuning" -> "keranjang" di teks bila platform bukan TikTok.
@@ -98,7 +99,7 @@ export interface GeneratedScript {
   hook_family: HookCode;
   emotion: string;
   register: Register;
-  quality_tier: "silent_caption" | "high_quality" | "super_hq";
+  quality_tier: QualityTier;
   segments: SegmentDraft[];
   caption: string;
   hashtags: string[];
@@ -312,7 +313,7 @@ async function generateOne(
   register: Register,
   emotion: string,
   family: HookCode,
-  tier: "silent_caption" | "high_quality" | "super_hq",
+  tier: QualityTier,
   durationSec: number,
   beats?: { hookEnd: number; demoEnd: number },
   wordBudget?: number,
@@ -580,7 +581,7 @@ export async function generateScripts(opts: {
   product: ProductInput;
   register: Register;
   emotion?: string;
-  qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  qualityTier?: QualityTier;
   durationSec?: number;
   hookLevel?: HookLevel;
   /** Template Terbukti: keluarga hook pilihan pola pemenang (prioritas utama). */

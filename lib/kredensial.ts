@@ -59,6 +59,7 @@ export type Kredensial = {
 
 export const KREDENSIAL: readonly Kredensial[] = [
   { nama: "BYTEPLUS_ARK_API_KEY", label: "BytePlus ARK (mesin video)", properti: "byteplusApiKey", rahasia: true, kelompok: "Video & AI" },
+  { nama: "KIE_API_KEY", label: "kie.ai (Grok Imagine — kualitas Standard)", properti: "kieApiKey", rahasia: true, kelompok: "Video & AI" },
   { nama: "ANTHROPIC_API_KEY", label: "Anthropic (mesin skrip)", properti: "anthropicApiKey", rahasia: true, kelompok: "Video & AI" },
   { nama: "GEMINI_API_KEY", label: "Gemini (analisa bisnis)", properti: "geminiApiKey", rahasia: true, kelompok: "Video & AI" },
   { nama: "GOOGLE_TTS_API_KEY", label: "Google TTS", properti: "googleTtsApiKey", rahasia: true, kelompok: "Video & AI" },

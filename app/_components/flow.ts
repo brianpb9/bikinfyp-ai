@@ -2,6 +2,7 @@
 
 import type { HookLevel } from "@/lib/config/hooks";
 import type { SnapshotAdmisi } from "@/lib/script-engine/admisi";
+import type { QualityTier } from "@/lib/providers/types";
 
 // Konteks alur "bikin video" — disimpan di sessionStorage agar tahan tutup halaman.
 
@@ -64,7 +65,7 @@ export interface FlowState {
   product?: FlowProduct;
   register?: string;
   emotion?: string;
-  qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  qualityTier?: QualityTier;
   format?: VideoFormat;
   durationSec?: 15 | 30 | 45;
   // Tipe kanonik dari lib/config/hooks.ts, bukan salinan. Versi salinan di

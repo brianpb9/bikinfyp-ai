@@ -56,8 +56,44 @@ export interface TierHarga {
  * dan tidak dipajang. */
 export const TIER_PENSIUN: readonly string[] = ["silent_caption"];
 
-/** Tier yang BOLEH dijual. Daftar putih, bukan daftar hitam. */
-export const TIER_DIJUAL: readonly string[] = ["high_quality", "super_hq"];
+/**
+ * Tier yang DITAWARKAN hari ini. Daftar putih, bukan daftar hitam.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * "DITAWARKAN" DAN "DITERIMA" ADALAH DUA PERTANYAAN BERBEDA
+ * ────────────────────────────────────────────────────────────────────────────
+ * Susunan baru (standard/premium/ultra) menggantikan penamaan lama di semua
+ * permukaan jual: /harga, pemilih kualitas, dan wizard Enterprise. premium
+ * berjalan di model dan harga yang persis sama dengan high_quality, dan ultra
+ * sama dengan super_hq pada versi model yang lebih baru — jadi memajang
+ * keduanya berdampingan berarti menawarkan dua kartu dengan harga, mesin, dan
+ * hasil yang sama.
+ *
+ * Tapi nama lama TIDAK boleh langsung ditolak: naskah yang dibuat sebelum
+ * perubahan ini menyimpan quality_tier lamanya, dan /api/jobs menuntut tier
+ * job sama dengan tier naskahnya. Menolak nama lama berarti setiap orang yang
+ * sedang di tengah alur — sudah bikin naskah, belum menekan Bikin — menabrak
+ * "tier tidak dikenal" tepat pada langkah terakhir.
+ *
+ * Karena itu dua daftar, bukan satu.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA "standard" BELUM DI SINI
+ * ────────────────────────────────────────────────────────────────────────────
+ * premium dan ultra berjalan di BytePlus, dengan konsumsi token yang sudah
+ * diukur dari 704 task nyata. standard berjalan di kie.ai, dan tarif kie.ai
+ * BELUM PERNAH kami lihat dari tagihan. Menjual sesuatu yang biayanya tidak
+ * diketahui adalah persis cara tier Rp12.000 sempat dijual di bawah biaya
+ * berbulan-bulan. Ia masuk setelah dua hal ada: KIE_API_KEY yang bekerja, dan
+ * tarif dari tagihan — bukan dari brosur.
+ */
+export const TIER_DIJUAL: readonly string[] = ["premium", "ultra"];
+
+/**
+ * Tier yang masih DITERIMA untuk job dan naskah baru — superset dari yang
+ * ditawarkan. Nama lama ada di sini supaya alur yang sedang berjalan selesai.
+ */
+export const TIER_DITERIMA: readonly string[] = [...TIER_DIJUAL, "high_quality", "super_hq"];
 
 /**
  * Daftar PUTIH, dan bedanya bukan gaya penulisan.
@@ -72,16 +108,21 @@ export function tierMasihDijual(id: string): boolean {
   return TIER_DIJUAL.includes(id) && !TIER_PENSIUN.includes(id);
 }
 
+/** Boleh dipakai job/naskah baru — termasuk nama lama yang masih beredar. */
+export function tierMasihDiterima(id: string): boolean {
+  return TIER_DITERIMA.includes(id) && !TIER_PENSIUN.includes(id);
+}
+
 export const TIER_HARGA: TierHarga[] = [
   {
-    id: "high_quality",
-    nama: "Video AI Bersuara",
+    id: "premium",
+    nama: "Video Premium",
     hargaIdr: 12_000,
     dapat: "Video iklan produk 720p dengan narasi bahasa Indonesia yang menjelaskan produkmu.",
   },
   {
-    id: "super_hq",
-    nama: "Video AI Bersuara Pro",
+    id: "ultra",
+    nama: "Video Ultra",
     hargaIdr: 80_000,
     dapat: "Video iklan produk 720p, presenter AI bicara langsung ke kamera dengan gerak bibir sinkron.",
   },

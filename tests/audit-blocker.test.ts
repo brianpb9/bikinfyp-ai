@@ -21,7 +21,10 @@ test("tier pensiun tidak dijual di mana pun", () => {
 
 test("API generate memakai daftar pensiun bersama, bukan string hardcode", () => {
   const s = baca("app/api/scripts/generate/route.ts");
-  assert.match(s, /tierMasihDijual/, "route harus memakai sumber bersama");
+  // Dua fungsi sekarang: tierMasihDijual (ditawarkan) dan tierMasihDiterima
+  // (diterima, superset). Yang dijaga tes ini tetap sama — daftarnya datang
+  // dari lib/paket-kredit, bukan diketik ulang di dalam route.
+  assert.match(s, /tierMasihDi(jual|terima)/, "route harus memakai sumber bersama");
   assert.ok(!/=== "silent_caption"/.test(s), "jangan kembali ke perbandingan string hardcode");
 });
 
@@ -76,7 +79,7 @@ test("Enterprise tidak menjual tier yang sudah pensiun", () => {
   const wizard = baca("app/dashboard/(app)/campaign/page.tsx");
   assert.match(wizard, /TIER_OPTIONS = SEMUA_TIER\.filter\(\(t\) => tierMasihDijual\(t\.id\)\)/, "wizard harus menyaring tier pensiun");
   const gen = baca("app/api/dashboard/campaign/generate/route.ts");
-  assert.match(gen, /\.filter\(tierMasihDijual\)/, "route generate Enterprise harus menolak tier pensiun");
+  assert.match(gen, /\.filter\(tierMasihDi(jual|terima)\)/, "route generate Enterprise harus menolak tier pensiun");
 });
 
 // Anggota organisasi yang ditangguhkan sempat tetap bisa masuk dashboard,
