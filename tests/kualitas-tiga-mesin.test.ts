@@ -69,8 +69,21 @@ test("padanan nama lama menunjuk tier yang HARGANYA sama, bukan yang lebih murah
 
 // ── Yang dijual vs yang diterima ─────────────────────────────────────────────
 
-test("standard TIDAK dijual selama tarif kie.ai belum pernah dilihat dari tagihan", () => {
-  assert.equal(tierMasihDijual("standard"), false, "standard dijual padahal biayanya belum diketahui");
+test("ketiga jenis video benar-benar bisa dijual dan dipakai", () => {
+  for (const j of URUTAN_KUALITAS) {
+    assert.equal(tierMasihDijual(j), true, `${j} tidak ada di daftar jual — jatahnya tidak bisa dibelanjakan`);
+    assert.equal(tierMasihDiterima(j), true, `${j} ditolak saat job dibuat — pembeli punya jatah yang tidak bisa dipakai`);
+  }
+});
+
+test("biaya Standard ditandai BELUM SAH selama tarif kredit kie.ai belum diisi", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const src = fs.readFileSync(path.join(process.cwd(), "lib/providers/stubs/kie-grok.ts"), "utf8");
+  // Bukan soal gaya penulisan: mesin yang biayanya dilaporkan 0 tanpa suara
+  // akan terlihat paling untung di laporan mana pun yang memakainya.
+  assert.match(src, /KIE_IDR_PER_CREDIT/, "tarif kredit kie.ai tidak bisa diisi dari mana pun");
+  assert.match(src, /console\.warn/, "biaya 0 dilaporkan diam-diam");
 });
 
 test("nama tier lama masih DITERIMA — naskah yang sedang berjalan tidak boleh terjebak", () => {
@@ -159,23 +172,6 @@ test("tanpa KIE_API_KEY provider menolak jalan, bukan gagal separuh jalan", asyn
   }
 });
 
-test("biaya kie.ai dilaporkan 0 DENGAN peringatan selama tarifnya belum diisi", () => {
-  const asal = process.env.KIE_COST_PER_VIDEO_IDR;
-  delete process.env.KIE_COST_PER_VIDEO_IDR;
-  const pesan: string[] = [];
-  const asliWarn = console.warn;
-  console.warn = (m: unknown) => { pesan.push(String(m)); };
-  const nol = kieGrokVideo.estimateCost(spec("standard"));
-  console.warn = asliWarn;
-  assert.equal(nol, 0);
-  assert.ok(pesan.some((p) => p.includes("KIE_COST_PER_VIDEO_IDR")), "biaya 0 dilaporkan diam-diam — margin palsu tidak akan ketahuan");
-
-  process.env.KIE_COST_PER_VIDEO_IDR = "3500";
-  assert.equal(kieGrokVideo.estimateCost(spec("standard")), 3500);
-  if (asal === undefined) delete process.env.KIE_COST_PER_VIDEO_IDR;
-  else process.env.KIE_COST_PER_VIDEO_IDR = asal;
-});
-
 // ── Permukaan jual ───────────────────────────────────────────────────────────
 
 test("setiap tier yang ditawarkan punya harga dan resolusi di config", () => {
@@ -199,4 +195,45 @@ test("harga yang dikirim ke layar diambil dari config, bukan diketik di route", 
   const s = fs.readFileSync(new URL("../app/api/meta/route.ts", import.meta.url), "utf8");
   assert.match(s, /config\.tiers\[t\.id\]\?\.resolution/, "resolusi diketik terpisah dari yang dirender — persis cara klaim 1080p bertahan berbulan-bulan");
   assert.ok(!/12_?000|80_?000/.test(s), "angka harga diketik ulang di route meta");
+});
+
+// ── Bentuk jawaban kie.ai yang SUNGGUHAN ────────────────────────────────────
+//
+// Diambil dari render berbayar 2 Sep 2026, bukan dari dokumentasi. Yang
+// menjebak: resultJson datang sebagai STRING JSON, bukan objek. Kalau
+// diperlakukan sebagai objek, polling berputar sampai batas waktu untuk task
+// yang sebenarnya sudah SUKSES — dan rendernya sudah telanjur dibayar.
+
+test("URL hasil terbaca dari resultJson yang berupa STRING, bukan objek", async () => {
+  const { ambilResultUrls } = await import("../lib/providers/stubs/kie-grok");
+  const nyata = {
+    state: "success",
+    creditsConsumed: 14.4,
+    resultJson: '{"resultUrls":["https://tempfile.aiquickdraw.com/x/generated_video.mp4"]}',
+  };
+  assert.deepEqual(ambilResultUrls(nyata), ["https://tempfile.aiquickdraw.com/x/generated_video.mp4"]);
+  // Bentuk lain tetap diterima; yang tidak ada tetap undefined.
+  assert.deepEqual(ambilResultUrls({ resultUrls: ["a.mp4"] }), ["a.mp4"]);
+  assert.deepEqual(ambilResultUrls({ resultJson: { resultUrls: ["b.mp4"] } }), ["b.mp4"]);
+  assert.equal(ambilResultUrls({ state: "waiting" }), undefined);
+  assert.equal(ambilResultUrls({ resultJson: "bukan json" }), undefined);
+  assert.equal(ambilResultUrls({ resultJson: '{"resultUrls":[]}' }), undefined);
+});
+
+test("biaya dihitung dari kredit yang DILAPORKAN kie.ai, dan 0 tidak pernah diam", () => {
+  const asal = process.env.KIE_IDR_PER_CREDIT;
+  delete process.env.KIE_IDR_PER_CREDIT;
+  const pesan: string[] = [];
+  const asliWarn = console.warn;
+  console.warn = (m: unknown) => { pesan.push(String(m)); };
+  const nol = kieGrokVideo.estimateCost(spec("standard"));
+  console.warn = asliWarn;
+  assert.equal(nol, 0);
+  assert.ok(pesan.some((p) => p.includes("KIE_IDR_PER_CREDIT")), "biaya 0 dilaporkan diam-diam");
+
+  // 2,4 kredit/detik terukur; 8 detik = 19,2 kredit. Dengan Rp100/kredit:
+  process.env.KIE_IDR_PER_CREDIT = "100";
+  assert.equal(kieGrokVideo.estimateCost(spec("standard")), 1920);
+  if (asal === undefined) delete process.env.KIE_IDR_PER_CREDIT;
+  else process.env.KIE_IDR_PER_CREDIT = asal;
 });

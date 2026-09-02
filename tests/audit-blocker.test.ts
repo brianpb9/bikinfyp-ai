@@ -45,9 +45,18 @@ test("tombol top-up mati sampai server menyatakan pembayaran aktif", () => {
   // melonggarkan: tombol kini juga tertutup selama pembeli belum memilih
   // cara bayar. Asersi memeriksa awalan ekspresinya, supaya syarat baru
   // yang menambah ketat tidak dianggap regresi.
-  assert.match(s, /disabled=\{busy !== null \|\| bisaBayar !== true/, "default harus tertutup sampai server bilang boleh");
+  // Sejak 2 Sep syaratnya tidak lagi diketik ulang di tiap tombol melainkan
+  // dihitung sekali sebagai `tombolMati` — halaman ini punya tombol paket DAN
+  // tombol top-up satuan, dan syarat yang disalin per tombol adalah syarat
+  // yang cepat atau lambat lupa disalin ke tombol berikutnya. Yang dijaga
+  // tetap sama: defaultnya TERTUTUP sampai server bilang boleh.
+  assert.match(s, /const tombolMati = busy !== null \|\| bisaBayar !== true/, "default harus tertutup sampai server bilang boleh");
   assert.ok(!/bisaBayar === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
-  assert.match(s, /pembayaran belum aktif/, "label tombol harus menjelaskan kenapa mati");
+  // Dan syarat itu benar-benar DIPAKAI oleh setiap tombol yang mengeluarkan
+  // uang, bukan cuma dihitung lalu dibiarkan.
+  const pemakaian = (s.match(/disabled=\{tombolMati/g) ?? []).length;
+  assert.ok(pemakaian >= 2, `hanya ${pemakaian} tombol memakai penjaga — ada tombol beli yang lolos`);
+  assert.match(s, /Pembayaran online belum aktif/, "halaman harus menjelaskan kenapa pembelian mati");
 });
 
 // Putaran kedua audit menemukan lima cacat DI DALAM perbaikan putaran pertama.

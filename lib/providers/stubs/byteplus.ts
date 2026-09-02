@@ -15,6 +15,7 @@ import {
   type VideoProvider, type VideoAsset, type VisualSpec, type ShotSpec,
 } from "../types";
 import { taskMemo } from "../task-memo";
+import { teksPromptShot } from "../teks-prompt";
 
 // Tarif referensi (USD). Sumber:
 // - seedance-1-0-pro: $2,5/1M output tokens — https://docs.byteplus.com/docs/ModelArk/1587798
@@ -155,8 +156,10 @@ export function modeReferensi(
 export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string): unknown[] {
   const textItem = {
     type: "text",
-    // Negative instruction wajib ikut di prompt (aturan keras #3)
-    text: `${shot.prompt}. Negative: ${spec.negativePrompt}`,
+    // Negative instruction wajib ikut di prompt (aturan keras #3). Susunannya
+    // dibagi dengan provider lain lewat teksPromptShot() — prompt ketiga
+    // paket WAJIB identik, yang berbeda cuma modelnya.
+    text: teksPromptShot(spec, shot),
   };
   // r13 (Brian 2026-08-07): 4->7 extra (+1 primer = 8 total) — dites langsung
   // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg

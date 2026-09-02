@@ -1,4 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
+import { bonusKredit } from "./kredit-video-sqlite";
+import type { JenisVideo } from "./kredit-video";
 import { config } from "./config";
 import { getDb, now, uuid, audit, type UserRow } from "./db";
 import { postgresRuntimeEnabled, smokeFindOrCreateUser, smokeGetUser } from "./postgres/smoke-runtime";
@@ -52,11 +54,11 @@ export function findOrCreateUserByPhone(phone: string): UserRow {
   db.prepare("INSERT INTO users (id, phone, tier, locale, created_at) VALUES (?,?,?,?,?)").run(
     id, phone, "free", "id-ID", now()
   );
-  // Bonus onboarding: Rp5.000 untuk pengguna baru — cukup 1 video Senyap+Teks (F-12)
-  db.prepare(
-    "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
-  ).run(uuid(), id, config.signupBonusIdr, "bonus", now());
-  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: config.signupBonusIdr });
+  // PAKET GRATIS pendaftar baru: satu JATAH VIDEO, bukan rupiah. Rupiah tidak
+  // lagi membeli apa pun, jadi bonus rupiah hanya akan jadi angka yang tidak
+  // bisa dibelanjakan — pendaftar melihat "punya saldo" lalu ditolak saat
+  // menekan Bikin.
+  beriBonusPendaftaran(id);
   audit(id, "user.created", "users", id, { phone });
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
 }
@@ -70,13 +72,32 @@ export function findOrCreateUserByEmail(email: string): UserRow {
   db.prepare("INSERT INTO users (id, phone, email, tier, locale, created_at) VALUES (?,NULL,?,?,?,?)").run(
     id, key, "free", "id-ID", now()
   );
-  // Bonus onboarding: Rp5.000 untuk pengguna baru — cukup 1 video Senyap+Teks (F-12)
-  db.prepare(
-    "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
-  ).run(uuid(), id, config.signupBonusIdr, "bonus", now());
-  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: config.signupBonusIdr });
+  // PAKET GRATIS pendaftar baru: satu JATAH VIDEO, bukan rupiah. Rupiah tidak
+  // lagi membeli apa pun, jadi bonus rupiah hanya akan jadi angka yang tidak
+  // bisa dibelanjakan — pendaftar melihat "punya saldo" lalu ditolak saat
+  // menekan Bikin.
+  beriBonusPendaftaran(id);
   audit(id, "user.created", "users", id, { email: key });
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
+}
+
+/**
+ * Bonus pendaftaran — satu kali per akun, dan hanya di sini.
+ *
+ * Kegagalannya TIDAK menggagalkan pendaftaran: akun yang gagal dibuat karena
+ * bonus tidak bisa ditulis adalah pertukaran yang buruk. Ia dicatat supaya
+ * ketahuan, bukan ditelan diam-diam.
+ */
+function beriBonusPendaftaran(userId: string): void {
+  if (config.signupBonusQty <= 0) return;
+  try {
+    bonusKredit(userId, config.signupBonusJenis as JenisVideo, config.signupBonusQty, "paket gratis pendaftar baru");
+    audit(userId, "user.signup_bonus", "kredit_video", userId, {
+      jenis: config.signupBonusJenis, qty: config.signupBonusQty,
+    });
+  } catch (err) {
+    console.error(`[auth] bonus pendaftaran gagal untuk ${userId}:`, err);
+  }
 }
 
 /** Ambil user dari cookie request; null bila tidak valid. */

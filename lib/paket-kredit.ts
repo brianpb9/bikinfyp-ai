@@ -78,16 +78,21 @@ export const TIER_PENSIUN: readonly string[] = ["silent_caption"];
  * Karena itu dua daftar, bukan satu.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * KENAPA "standard" BELUM DI SINI
+ * STANDARD MASUK SETELAH MESINNYA DIBUKTIKAN, BUKAN SEBELUMNYA
  * ────────────────────────────────────────────────────────────────────────────
- * premium dan ultra berjalan di BytePlus, dengan konsumsi token yang sudah
- * diukur dari 704 task nyata. standard berjalan di kie.ai, dan tarif kie.ai
- * BELUM PERNAH kami lihat dari tagihan. Menjual sesuatu yang biayanya tidak
- * diketahui adalah persis cara tier Rp12.000 sempat dijual di bawah biaya
- * berbulan-bulan. Ia masuk setelah dua hal ada: KIE_API_KEY yang bekerja, dan
- * tarif dari tagihan — bukan dari brosur.
+ * Standard sempat ditahan di luar daftar ini karena kie.ai belum pernah kami
+ * panggil. Itu berubah 2 Sep 2026: kuncinya dipasang dan satu render berbayar
+ * sungguhan berhasil — 6 detik, 480p, 14,4 kredit kie.ai, keluar h264 + audio
+ * dalam 20 detik.
+ *
+ * SATU ANGKA MASIH KOSONG: nilai rupiah per kredit kie.ai. Ia ada di tagihan
+ * pembelian kredit, bukan di API, jadi tidak bisa diambil dari mana pun di
+ * sini. Selama KIE_IDR_PER_CREDIT belum diisi, biaya render Standard
+ * dilaporkan 0 DENGAN peringatan (lihat lib/providers/stubs/kie-grok.ts):
+ * harga jualnya aman diatur admin, tapi angka MARGIN untuk Standard belum
+ * boleh dipercaya.
  */
-export const TIER_DIJUAL: readonly string[] = ["premium", "ultra"];
+export const TIER_DIJUAL: readonly string[] = ["standard", "premium", "ultra"];
 
 /**
  * Tier yang masih DITERIMA untuk job dan naskah baru — superset dari yang

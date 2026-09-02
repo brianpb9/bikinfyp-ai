@@ -4,67 +4,69 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { ErrorText } from "../_components/ui";
-import { loadFlow, rupiah, relTime } from "../_components/flow";
-import { PAKET_KREDIT } from "../../lib/paket-kredit";
+import { loadFlow, rupiah } from "../_components/flow";
 
-interface LedgerItem {
-  id: string;
-  delta: number;
-  type: string;
-  created_at: string;
+/**
+ * KREDIT — dihitung per JENIS VIDEO, bukan rupiah.
+ *
+ * Yang berubah dari versi sebelumnya bukan tampilannya, melainkan apa yang
+ * dihitung. Saldo rupiah dipakai menjawab tiga pertanyaan sekaligus: berapa
+ * uang tersisa, berapa video yang bisa dibuat, dan video jenis apa. Sekarang
+ * layar ini menjawab pertanyaan yang benar-benar dipunyai pembeli — "berapa
+ * video Premium yang masih bisa saya bikin" — dengan angka, bukan pembagian.
+ *
+ * Dua ember dibedakan di layar, bukan cuma di database: kredit paket punya
+ * tanggal habis, kredit satuan tidak. Menjumlahkannya jadi satu angka akan
+ * menyembunyikan tanggal itu sampai hari jatahnya hilang.
+ */
+
+interface SisaJenis { langganan: number; topup: number; total: number }
+interface Jenis {
+  id: "standard" | "premium" | "ultra";
+  label: string;
+  jelas: string;
+  resolusi: string;
+  harga_idr: number | null;
+  bisa_ditopup: boolean;
+}
+interface Paket {
+  id: string; nama: string; keterangan: string; harga_idr: number; masa_hari: number;
+  kuota: { standard: number; premium: number; ultra: number }; total_video: number;
+}
+interface Langganan { id: string; paket_nama: string; berakhir_pada: string; sisa: Record<string, number> }
+interface Katalog {
+  sisa: Record<string, SisaJenis>;
+  jenis: Jenis[];
+  paket: Paket[];
+  langganan: Langganan[];
 }
 
-// Nama paket berbasis manfaat + contoh visual per tier (2026-08-06: tester
-// bingung "Senyap"; target user emak-emak — tunjukkan, jangan jelaskan).
-// 2026-08-06: tier Teks+Musik pensiun — fokus persona bersuara.
-//
-// Daftarnya pindah ke lib/paket-kredit.ts (2026-08-14) supaya halaman harga
-// PUBLIK dan halaman checkout ini membaca angka yang sama. Dua daftar harga
-// yang harus dijaga sama selamanya cepat atau lambat berbeda — dan yang
-// membaca halaman publik justru reviewer gateway pembayaran.
-const PACKAGES = PAKET_KREDIT;
-
-const LEDGER_LABEL: Record<string, string> = {
-  topup: "Top-up",
-  hold: "Bikin video (ditahan)",
-  capture: "Bikin video (selesai)",
-  release: "Refund (video gagal)",
-  bonus: "Bonus",
+const tanggal = (iso: string) => {
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? iso.slice(0, 10) : d.toLocaleDateString("id-ID", { day: "numeric", month: "long", year: "numeric" });
 };
 
-// S9 — KREDIT & TOP-UP (denominasi rupiah, 3-tier final)
 function KreditInner() {
   const router = useRouter();
   const params = useSearchParams();
-  const [balance, setBalance] = useState<number | null>(null);
-  const [ledger, setLedger] = useState<LedgerItem[]>([]);
+  const [katalog, setKatalog] = useState<Katalog | null>(null);
+  const [jumlah, setJumlah] = useState<Record<string, number>>({});
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingOrder, setPendingOrder] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
-  // Riwayat: 5 teratas saja, sisanya di balik "Lihat selengkapnya" (Brian 2026-08-07).
-  const [showAllLedger, setShowAllLedger] = useState(false);
-  // r13 (review produk 2026-08-07): jangan lagi menebak status pembayaran dari
-  // kegagalan fallback dev — tanya server langsung (null = belum tahu).
-  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
-  // DUA PERTANYAAN BERBEDA, dan menyatukannya yang membuat pendaftaran
-  // merchant Duitku ditolak.
-  //
-  //   paymentsLive  -> "ini uang sungguhan?"  (production + izin Brian)
-  //   bisaBayar     -> "gateway-nya bisa dipakai sekarang?" (kunci terpasang)
-  //
-  // Sebelum 26 Agu halaman ini cuma punya yang pertama, jadi selama Duitku
-  // masih sandbox tombol belinya mati total. Duitku justru meminta melihat
-  // checkout sampai pembayaran DI SANDBOX MEREKA — persis alur yang kita
-  // tutup sendiri. Jadi tombolnya kini terbuka begitu kuncinya terpasang,
-  // dan status "uang mainan" dinyatakan terang-terangan alih-alih
-  // disembunyikan dengan mematikan tombolnya.
+  // DUA PERTANYAAN BERBEDA, dan menyatukannya yang dulu membuat pendaftaran
+  // merchant Duitku ditolak:
+  //   bisaBayar    -> "gateway-nya bisa dipakai sekarang?" (kunci terpasang)
+  //   paymentsLive -> "ini uang sungguhan?"                (production + izin)
+  // Tombol mengikuti yang pertama; klaim uang sungguhan mengikuti yang kedua.
   const [bisaBayar, setBisaBayar] = useState<boolean | null>(null);
+  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
   const [modeSandbox, setModeSandbox] = useState<boolean | null>(null);
-  // Kanal DATANG DARI SERVER, tidak diketik di klien. Daftar yang diketik di
-  // sini bisa memuat kanal yang server tolak — pembeli baru tahu setelah
-  // menekan, dan itu kegagalan yang bisa diramalkan.
+  // Kanal DATANG DARI SERVER, tidak diketik di klien: daftar yang diketik di
+  // sini bisa memuat kanal yang server tolak, dan pembeli baru tahu setelah
+  // menekan.
   const [kanal, setKanal] = useState<{ code: string; name: string; type: string }[]>([]);
   const [kanalDipilih, setKanalDipilih] = useState<string | null>(null);
   const [instruksi, setInstruksi] = useState<{ va?: string; url?: string; nama?: string } | null>(null);
@@ -72,109 +74,66 @@ function KreditInner() {
 
   async function refresh() {
     try {
-      const d = await apiFetch<{ balance: number; ledger: LedgerItem[] }>("/api/credits");
-      setBalance(d.balance);
-      setLedger(d.ledger);
+      setKatalog(await apiFetch<Katalog>("/api/kredit-video"));
     } catch {
-      /* biarkan tampilan lama */
+      /* biarkan tampilan lama — layar kosong lebih buruk daripada layar basi */
     }
   }
+
   useEffect(() => {
     refresh();
-    apiFetch<{
-      payments_live: boolean;
-      payments_env: string;
-      payments_configured: boolean;
-      payment_channels?: { code: string; name: string; type: string }[];
-    }>("/api/meta")
+    apiFetch<{ payments_env: string; payments_live: boolean; payments_configured: boolean; payment_channels?: { code: string; name: string; type: string }[] }>("/api/meta")
       .then((m) => {
-        setPaymentsLive(m.payments_live);
         setBisaBayar(m.payments_configured);
+        setPaymentsLive(m.payments_live);
         setModeSandbox(m.payments_env === "sandbox");
         setKanal(Array.isArray(m.payment_channels) ? m.payment_channels : []);
       })
-      .catch(() => { setPaymentsLive(false); setBisaBayar(false); setModeSandbox(null); });
+      .catch(() => { setBisaBayar(false); setPaymentsLive(false); setModeSandbox(null); });
   }, []);
 
-  // Kembali dari halaman pembayaran: returnUrl Duitku membawa ?merchantOrderId=...
-  // (jalur Midtrans lama memakai ?order=...). Tab hasil redirect tidak mewarisi state
-  // tab asal, jadi order-nya dilanjutkan dari query — status langsung dicek
-  // tanpa menunggu user menekan apa pun.
+  // Kembali dari halaman pembayaran: returnUrl Duitku membawa ?merchantOrderId.
+  // Tab hasil redirect tidak mewarisi state tab asal, jadi ordernya dilanjutkan
+  // dari query — statusnya langsung dicek tanpa menunggu user menekan apa pun.
   useEffect(() => {
     const ord = params.get("merchantOrderId") ?? params.get("order");
     if (!ord) return;
     setPendingOrder(ord);
     setOrderStatus("pending");
     apiFetch<{ status: string; message: string }>(`/api/orders/${ord}`)
-      .then((res) => {
-        setOrderStatus(res.status);
-        setMsg(res.message);
-        if (res.status === "paid") refresh();
-      })
-      .catch(() => { /* biarkan tombol "Cek status" sebagai jalan manual */ });
+      .then((res) => { setOrderStatus(res.status); setMsg(res.message); if (res.status === "paid") refresh(); })
+      .catch(() => { /* tombol "Cek status" tetap jadi jalan manualnya */ });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params]);
 
-  async function topup(packageId: string) {
-    // State disabled baru terlihat setelah render berikutnya; ref menutup celah
-    // dua tap dalam frame yang sama agar tidak membuat dua invoice Duitku.
+  async function checkout(badan: Record<string, unknown>, kunci: string) {
+    // State disabled baru terlihat pada render berikutnya; ref menutup celah
+    // dua tap dalam frame yang sama agar tidak lahir dua invoice.
     if (checkoutLock.current) return;
     checkoutLock.current = true;
-    setBusy(packageId);
-    setMsg(null);
-    setError(null);
-    setInstruksi(null);
+    setBusy(kunci); setMsg(null); setError(null); setInstruksi(null);
     try {
-      // Jalur utama: checkout gateway aktif (Duitku POP; Midtrans Snap tetap
-      // ada sebagai rollback — sama-sama redirect URL). Bila gateway belum
-      // dipasang kuncinya (mode demo tanpa key), jatuh ke topup instan dev.
-      const res = await apiFetch<{
-        order_id: string;
-        redirect_url: string;
-        va_number?: string;
-        qr_string?: string;
-      }>("/api/credits/checkout", {
-        json: { package_id: packageId, ...(kanalDipilih ? { payment_method: kanalDipilih } : {}) },
-      });
+      const res = await apiFetch<{ order_id: string; amount_idr: number; redirect_url: string; va_number?: string }>(
+        "/api/kredit-video/checkout",
+        { json: { ...badan, ...(kanalDipilih ? { payment_method: kanalDipilih } : {}) } },
+      );
       setPendingOrder(res.order_id);
       setOrderStatus("pending");
       const nama = kanal.find((k) => k.code === kanalDipilih)?.name;
-
       if (res.va_number) {
-        // NOMOR VA DITAMPILKAN DI TEMPAT, tidak dilempar ke tab lain.
-        // Pembeli harus menyalinnya ke aplikasi banknya; membuka tab baru
-        // justru memindahkan nomor itu menjauh dari jempolnya.
+        // Nomor VA ditampilkan DI TEMPAT: pembeli harus menyalinnya ke aplikasi
+        // banknya, dan membuka tab baru justru memindahkannya menjauh.
         setInstruksi({ va: res.va_number, nama });
-        setMsg(null);
       } else {
-        // QRIS: halaman Duitku yang menggambar kodenya. Kita belum memuat
-        // pustaka QR sendiri, dan menambah satu hanya untuk ini tidak sepadan.
         setInstruksi({ url: res.redirect_url, nama });
         window.open(res.redirect_url, "_blank");
         setMsg("Scan QRIS di halaman yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
       }
     } catch (err) {
-      // r13 (review produk 2026-08-07): jalur demo HANYA boleh dicoba kalau
-      // server sudah bilang pembayaran belum aktif; sebelumnya err2 (fallback
-      // dev diblokir di production) diganti pesan generik "Top-up gagal" yang
-      // MEMBUANG pesan jujur server ("Pembayaran online belum aktif — hubungi
-      // tim kami") — user production tidak pernah tahu alasan sebenarnya.
-      if (err instanceof ApiFail && err.code === "PAYMENT_NOT_CONFIGURED") {
-        try {
-          await apiFetch("/api/credits/topup", { json: { package_id: packageId } });
-          setMsg("Pembayaran berhasil (mode demo — gateway online belum dipasang)");
-          await refresh();
-          // Balik otomatis ke titik alur terakhir (draft aman di sessionStorage)
-          const target = params.get("return_to") ?? loadFlow().returnTo ?? "/";
-          setTimeout(() => router.push(target), 900);
-        } catch {
-          // Jalur dev diblokir (production) -> tampilkan pesan JUJUR asli dari
-          // server, bukan pesan generik yang menyembunyikan alasan sebenarnya.
-          setError(err.message);
-        }
-      } else {
-        setError(err instanceof ApiFail ? err.message : "Top-up gagal. Coba lagi ya.");
-      }
+      // Pesan server disampaikan apa adanya. Menggantinya dengan "gagal, coba
+      // lagi" pernah membuang alasan sebenarnya ("pembayaran belum aktif") dan
+      // orang mencoba berulang kali tanpa pernah tahu kenapa.
+      setError(err instanceof ApiFail ? err.message : "Checkout gagal. Coba lagi ya.");
     } finally {
       setBusy(null);
       checkoutLock.current = false;
@@ -200,244 +159,224 @@ function KreditInner() {
     }
   }
 
-  const nSuper = balance === null ? null : Math.floor(balance / 80000);
-  const nHq = balance === null ? null : Math.floor(balance / 12000);
+  const bisaTopup = katalog?.jenis.filter((j) => j.bisa_ditopup) ?? [];
+  const totalTopup = bisaTopup.reduce((n, j) => n + (jumlah[j.id] ?? 0) * (j.harga_idr ?? 0), 0);
+  const adaPilihan = bisaTopup.some((j) => (jumlah[j.id] ?? 0) > 0);
+  const tombolMati = busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih);
 
   return (
     <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
-      <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dompet kreator</p><h1 className="font-display text-2xl font-bold">Kredit Saya</h1></div>
-
-      {/* Kartu saldo ala rekening bank (permintaan Brian 2026-08-06): label kecil,
-          nominal dominan, rincian "bisa buat apa" sebagai baris terpisah. */}
-      <div className="overflow-hidden rounded-3xl bg-zinc-900 p-5 text-white shadow-xl shadow-zinc-900/25 ring-1 ring-white/10">
-        <div className="flex items-center justify-between">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-400">Saldo kredit</p>
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/ui/nav-kredit.png" alt="" className="h-5 w-5 opacity-80" />
-        </div>
-        <p className="mt-2 font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
-          {balance === null ? "…" : rupiah(balance)}
-        </p>
-        <p className="mt-1 text-xs text-zinc-400">BikinFYP AI · dompet kreator</p>
-        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-center">
-          <div className="rounded-xl bg-white/5 px-2 py-2">
-            <p className="font-display text-lg font-extrabold text-amber-300">{nHq ?? "…"}</p>
-            <p className="text-[10px] leading-tight text-zinc-400">video AI Bersuara</p>
-          </div>
-          <div className="rounded-xl bg-white/5 px-2 py-2">
-            <p className="font-display text-lg font-extrabold text-amber-300">{nSuper ?? "…"}</p>
-            <p className="text-[10px] leading-tight text-zinc-400">video Bersuara Pro</p>
-          </div>
-        </div>
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dompet kreator</p>
+        <h1 className="font-display text-2xl font-bold">Kredit Video Saya</h1>
       </div>
 
-      <section className="space-y-3">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih sesuai kebutuhan</p><h2 className="font-display text-xl font-bold">Isi ulang</h2></div>
-        {/* Pemberitahuan pembayaran mati harus muncul SEBELUM tombolnya, bukan di
-            bawah. Sebelumnya tombol tetap aktif dan pengguna baru tahu setelah
-            menekan "beli" lalu menerima error — kegagalan yang bisa diramalkan
-            tapi tetap dibiarkan terjadi. */}
-        {bisaBayar === false && (
-          <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
-            Pembayaran online belum aktif, jadi top-up dimatikan dulu. Kreditmu yang
-            sekarang tetap bisa dipakai. Kami kabari begitu sudah bisa.
+      {/* Saldo per JENIS. Tiga angka, bukan satu — karena tiga jenis itu tidak
+          bisa saling menggantikan, dan satu angka gabungan akan menjanjikan
+          video yang jatahnya sebenarnya sudah habis. */}
+      <div className="overflow-hidden rounded-3xl bg-zinc-900 p-5 text-white shadow-xl shadow-zinc-900/25 ring-1 ring-white/10">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-400">Sisa jatah video</p>
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+          {(katalog?.jenis ?? []).map((j) => {
+            const s = katalog?.sisa[j.id];
+            return (
+              <div key={j.id} className="rounded-xl bg-white/5 px-2 py-3">
+                <p className="font-display text-3xl font-extrabold leading-none text-amber-300">
+                  {s ? s.total : "…"}
+                </p>
+                <p className="mt-1 text-[11px] font-semibold text-zinc-300">{j.label}</p>
+                {s && s.langganan > 0 && (
+                  <p className="text-[10px] leading-tight text-zinc-500">{s.langganan} dari paket</p>
+                )}
+              </div>
+            );
+          })}
+        </div>
+        {(katalog?.langganan ?? []).map((l) => (
+          <p key={l.id} className="mt-3 border-t border-white/10 pt-3 text-xs text-zinc-400">
+            Paket <b className="text-zinc-200">{l.paket_nama}</b> — jatah paket habis {tanggal(l.berakhir_pada)}.
+            Kredit satuan tidak ikut hangus.
           </p>
-        )}
-        {/* MODE UJI HARUS DIKATAKAN, BUKAN DISEMBUNYIKAN.
-            Checkout sandbox jalan penuh — tapi tidak memotong uang, dan
-            webhook sandbox hanya mengkredit akun penguji terdaftar
-            (app/api/webhooks/duitku). Membiarkan orang menyelesaikan
-            pembayaran lalu heran kreditnya tidak bertambah adalah kegagalan
-            yang bisa diramalkan; kalimat ini yang mencegahnya. */}
-        {bisaBayar === true && modeSandbox === true && (
-          <p className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
-            <b>Mode uji coba.</b> Pembayaran memakai sandbox Duitku, jadi{" "}
-            <b>tidak ada uang sungguhan yang dipotong</b> dan kredit belum bertambah
-            di luar akun penguji. Alur checkout sampai halaman pembayaran sudah jalan
-            penuh — ini yang sedang diverifikasi penyedia pembayaran kami.
-          </p>
-        )}
-        {/* PILIH KANAL SEBELUM PAKET, bukan sesudah.
-            Urutannya disengaja: harga VA dan QRIS sama, tapi cara bayarnya
-            berbeda jauh — menekan paket lalu baru ditanya "bayar pakai apa"
-            membuat orang merasa sudah terlanjur. */}
-        {bisaBayar === true && kanal.length > 0 && (
-          <div className="rounded-2xl border-2 border-zinc-200 bg-white p-3">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">Bayar pakai</p>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              {kanal.map((k) => (
-                <button
-                  key={k.code}
-                  type="button"
-                  onClick={() => setKanalDipilih(k.code)}
-                  aria-pressed={kanalDipilih === k.code}
-                  className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                    kanalDipilih === k.code
-                      ? "border-amber-500 bg-amber-50 text-zinc-900"
-                      : "border-zinc-200 text-zinc-600 active:bg-zinc-50"
-                  }`}
-                >
-                  {k.name}
-                  {k.type === "qris" && <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">Scan dari aplikasi apa pun</span>}
-                </button>
-              ))}
-            </div>
-            {!kanalDipilih && <p className="mt-2 text-xs text-zinc-500">Pilih dulu cara bayarnya, baru pilih paket.</p>}
-          </div>
-        )}
-
-        {PACKAGES.map((p) => (
-          <button
-            key={p.id}
-            type="button"
-            onClick={() => topup(p.id)}
-            // "!== true", BUKAN "=== false".
-            //
-            // bisaBayar punya TIGA keadaan: true, false, dan null selagi
-            // /api/meta belum menjawab. Pemeriksaan "=== false" membiarkan
-            // tombolnya hidup selama keadaan null — jendela kecil di awal muat
-            // halaman, tapi persis jendela yang ditekan orang tidak sabar
-            // (temuan audit QA putaran kedua, 16 Agu 2026).
-            //
-            // Default aman: tertutup sampai server BILANG boleh. Yang berubah
-            // 26 Agu hanya PERTANYAANNYA — dari "sudah uang sungguhan?" jadi
-            // "kuncinya sudah terpasang?" — bukan longgarnya default.
-            disabled={busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih)}
-            aria-disabled={busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih)}
-            className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
-          >
-            {p.tag && (
-              <span className="absolute right-3 top-2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white shadow-sm">
-                {p.tag}
-              </span>
-            )}
-            <span className="flex items-center gap-3">
-              {/* Contoh nyata hasil tier — "tunjukkan, jangan jelaskan" */}
-              <video
-                src={p.voiced ? "/previews/format-wajah.mp4" : "/previews/format-tangan.mp4"}
-                autoPlay muted loop playsInline
-                className="h-24 w-14 shrink-0 rounded-xl object-cover ring-1 ring-black/5"
-              />
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center justify-between gap-2">
-                  <span className="font-bold">{p.name}</span>
-                  <span className="shrink-0 font-bold">{rupiah(p.price)}</span>
-                </span>
-                <span className="mt-0.5 block text-xs font-semibold text-amber-700">{p.badge}</span>
-                <span className="block text-sm text-zinc-500">{p.perVideo} · {bisaBayar === null ? "mengecek pembayaran..." : bisaBayar === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : modeSandbox ? "tap untuk coba (mode uji)" : "tap untuk beli"}</span>
-              </span>
-            </span>
-          </button>
         ))}
-        <p className="text-xs leading-5 text-zinc-500">
-          Semua paket bersuara: AI memperagakan produkmu + suara natural yang menjelaskan produk.
-          <b> Pro</b> = kualitas gambar paling tajam.
+      </div>
+
+      {bisaBayar === false && (
+        <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+          Pembayaran online belum aktif, jadi pembelian dimatikan dulu. Jatah yang sekarang tetap bisa dipakai.
         </p>
-        {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}
-        <ErrorText message={error} />
-        {instruksi?.va && (
-          <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4">
-            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{instruksi.nama}</p>
-            <p className="mt-1 text-xs text-amber-900">Transfer ke nomor Virtual Account ini:</p>
-            <p className="mt-2 select-all font-display text-2xl font-extrabold tracking-wider text-zinc-900">
-              {instruksi.va}
-            </p>
+      )}
+      {bisaBayar === true && modeSandbox === true && (
+        <p className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+          <b>Mode uji coba.</b> Pembayaran memakai sandbox Duitku, jadi <b>tidak ada uang sungguhan yang dipotong</b>,
+          dan jatah hanya bertambah untuk akun penguji terdaftar.
+        </p>
+      )}
+
+      {/* Kanal dipilih SEBELUM paket. Harga VA dan QRIS sama, tapi cara
+          bayarnya berbeda jauh — ditanya sesudah menekan membuat orang merasa
+          sudah terlanjur. */}
+      {bisaBayar === true && kanal.length > 0 && (
+        <div className="rounded-2xl border-2 border-zinc-200 bg-white p-3">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">Bayar pakai</p>
+          <div className="mt-2 grid grid-cols-2 gap-2">
+            {kanal.map((k) => (
+              <button
+                key={k.code} type="button" onClick={() => setKanalDipilih(k.code)}
+                aria-pressed={kanalDipilih === k.code}
+                className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                  kanalDipilih === k.code ? "border-amber-500 bg-amber-50 text-zinc-900" : "border-zinc-200 text-zinc-600 active:bg-zinc-50"
+                }`}
+              >
+                {k.name}
+                {k.type === "qris" && <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">Scan dari aplikasi apa pun</span>}
+              </button>
+            ))}
+          </div>
+          {!kanalDipilih && <p className="mt-2 text-xs text-zinc-500">Pilih dulu cara bayarnya.</p>}
+        </div>
+      )}
+
+      {(katalog?.paket.length ?? 0) > 0 && (
+        <section className="space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Berlangganan</p>
+            <h2 className="font-display text-xl font-bold">Paket bulanan</h2>
+          </div>
+          {katalog?.paket.map((p) => (
+            <button
+              key={p.id} type="button" disabled={tombolMati}
+              onClick={() => checkout({ mode: "langganan", paket_id: p.id }, `paket-${p.id}`)}
+              className="w-full rounded-2xl border-2 border-zinc-200 bg-white p-4 text-left shadow-sm transition-transform active:scale-[0.99] disabled:opacity-60"
+            >
+              <span className="flex items-center justify-between gap-2">
+                <span className="font-bold">{p.nama}</span>
+                <span className="shrink-0 font-bold text-amber-700">{rupiah(p.harga_idr)}</span>
+              </span>
+              {p.keterangan && <span className="mt-0.5 block text-sm text-zinc-500">{p.keterangan}</span>}
+              <span className="mt-2 flex flex-wrap gap-2 text-xs">
+                {p.kuota.standard > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.standard}× Standard</span>}
+                {p.kuota.premium > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.premium}× Premium</span>}
+                {p.kuota.ultra > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.ultra}× Ultra</span>}
+              </span>
+              <span className="mt-2 block text-xs text-zinc-500">
+                Berlaku {p.masa_hari} hari. Jatah paket hangus saat masa berlakunya habis.
+                {busy === `paket-${p.id}` ? " · memproses..." : ""}
+              </span>
+            </button>
+          ))}
+        </section>
+      )}
+
+      {bisaTopup.length > 0 && (
+        <section className="space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Beli satuan</p>
+            <h2 className="font-display text-xl font-bold">Tambah kredit</h2>
+            <p className="mt-1 text-sm text-zinc-500">Kredit satuan <b>tidak pernah hangus</b>.</p>
+          </div>
+          {bisaTopup.map((j) => (
+            <div key={j.id} className="flex items-center gap-3 rounded-2xl border-2 border-zinc-200 bg-white p-3">
+              <div className="min-w-0 flex-1">
+                <p className="font-bold">{j.label}</p>
+                <p className="text-xs text-zinc-500">{j.resolusi} · {j.jelas}</p>
+                <p className="mt-0.5 text-sm font-semibold text-amber-700">{rupiah(j.harga_idr ?? 0)}/video</p>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button" aria-label={`Kurangi ${j.label}`}
+                  className="h-10 w-10 rounded-xl border-2 border-zinc-200 text-lg font-bold active:bg-zinc-50"
+                  onClick={() => setJumlah((s) => ({ ...s, [j.id]: Math.max(0, (s[j.id] ?? 0) - 1) }))}
+                >−</button>
+                <span className="w-8 text-center font-display text-lg font-bold tabular-nums">{jumlah[j.id] ?? 0}</span>
+                <button
+                  type="button" aria-label={`Tambah ${j.label}`}
+                  className="h-10 w-10 rounded-xl border-2 border-zinc-200 text-lg font-bold active:bg-zinc-50"
+                  onClick={() => setJumlah((s) => ({ ...s, [j.id]: Math.min(500, (s[j.id] ?? 0) + 1) }))}
+                >+</button>
+              </div>
+            </div>
+          ))}
+          <div className="rounded-2xl bg-zinc-900 p-4 text-white">
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-zinc-300">Total</span>
+              <span className="font-display text-2xl font-extrabold">{rupiah(totalTopup)}</span>
+            </div>
             <button
               type="button"
-              onClick={() => { try { navigator.clipboard.writeText(instruksi.va!); setMsg("Nomor VA disalin."); } catch { setMsg("Salin manual ya."); } }}
-              className="mt-3 min-h-[44px] w-full rounded-xl border-2 border-amber-500 font-bold text-amber-800 active:bg-amber-100"
+              disabled={tombolMati || !adaPilihan}
+              onClick={() => checkout(
+                { mode: "topup", items: bisaTopup.filter((j) => (jumlah[j.id] ?? 0) > 0).map((j) => ({ jenis: j.id, qty: jumlah[j.id] })) },
+                "topup",
+              )}
+              className="mt-3 min-h-[48px] w-full rounded-xl bg-amber-500 font-bold text-white disabled:opacity-40"
             >
-              Salin nomor
+              {busy === "topup" ? "Memproses..." : adaPilihan ? "Bayar sekarang" : "Pilih dulu jumlahnya"}
             </button>
-            <p className="mt-2 text-xs leading-5 text-amber-900">
-              Berlaku 60 menit. Setelah transfer, tap &quot;Sudah bayar? Cek status&quot; di bawah.
-            </p>
           </div>
-        )}
-        {instruksi?.url && !instruksi.va && (
-          <a
-            href={instruksi.url}
-            target="_blank"
-            rel="noreferrer"
-            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50"
-          >
-            Buka lagi halaman {instruksi.nama ?? "pembayaran"}
-          </a>
-        )}
-        {pendingOrder && orderStatus !== "paid" && (
+        </section>
+      )}
+
+      {katalog && bisaTopup.length === 0 && (
+        <p className="rounded-2xl border border-zinc-200 bg-white p-3 text-sm text-zinc-500">
+          Pembelian satuan belum dibuka. Harga per jenis video diatur admin.
+        </p>
+      )}
+
+      {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}
+      <ErrorText message={error} />
+
+      {instruksi?.va && (
+        <div className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">{instruksi.nama}</p>
+          <p className="mt-1 text-xs text-amber-900">Transfer ke nomor Virtual Account ini:</p>
+          <p className="mt-2 select-all font-display text-2xl font-extrabold tracking-wider text-zinc-900">{instruksi.va}</p>
           <button
             type="button"
-            onClick={checkOrder}
-            disabled={busy !== null}
-            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50 disabled:opacity-60"
+            onClick={() => { try { navigator.clipboard.writeText(instruksi.va!); setMsg("Nomor VA disalin."); } catch { setMsg("Salin manual ya."); } }}
+            className="mt-3 min-h-[44px] w-full rounded-xl border-2 border-amber-500 font-bold text-amber-800 active:bg-amber-100"
           >
-            {busy === "cek" ? "Mengecek..." : "Sudah bayar? Cek status"}
+            Salin nomor
           </button>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="font-display text-xl font-bold">Bayar pakai</h2>
-        {/* r13 (review produk 2026-08-07): dulu badge metode bayar + klaim "mode
-            demo" tampil TANPA SYARAT ke SEMUA user termasuk production — padahal
-            Duitku belum aktif, jadi klaimnya salah. Sekarang jujur sesuai
-            status server (/api/meta payments_live), bukan asumsi tetap. */}
-        {/* Metode bayar ditampilkan begitu gateway-nya bisa dipakai — pembeli
-            memang perlu tahu akan bertemu apa di halaman pembayaran. Yang
-            TIDAK boleh ikut adalah klaim uang sungguhan; itu tetap dikunci
-            paymentsLive. */}
-        {bisaBayar === true ? (
-          <>
-            <div className="flex gap-2">
-              {["QRIS", "GoPay", "OVO", "DANA"].map((m) => (
-                <span key={m} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
-                  {m}
-                </span>
-              ))}
-            </div>
-            {paymentsLive !== true && (
-              <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
-                Metode di atas dilayani lewat sandbox Duitku selama masa verifikasi —
-                belum memotong uang sungguhan.
-              </p>
-            )}
-          </>
-        ) : bisaBayar === false ? (
-          <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
-            Pembayaran online sedang kami siapkan — belum bisa top-up pakai uang sungguhan dulu ya. Coba lagi dalam beberapa hari.
+          <p className="mt-2 text-xs leading-5 text-amber-900">
+            Berlaku 60 menit. Setelah transfer, tap &quot;Sudah bayar? Cek status&quot; di bawah.
           </p>
-        ) : null}
-      </section>
-
-      <section className="space-y-2">
-        <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Transaksi terbaru</p><h2 className="font-display text-xl font-bold">Riwayat pemakaian</h2></div>
-        {ledger.length === 0 ? (
-          <p className="text-sm text-zinc-500">Belum ada riwayat.</p>
-        ) : (
-          <>
-            {(showAllLedger ? ledger : ledger.slice(0, 5)).map((l) => (
-              <div key={l.id} className="flex items-center justify-between border-b border-zinc-100 py-3 text-sm last:border-0">
-                <span>
-                  {LEDGER_LABEL[l.type] ?? l.type}
-                  <span className="block text-xs text-zinc-400">{relTime(l.created_at)}</span>
-                </span>
-                <span className={`font-bold ${l.delta > 0 ? "text-green-600" : l.delta < 0 ? "text-zinc-800" : "text-zinc-400"}`}>
-                  {l.delta > 0 ? `+${rupiah(l.delta)}` : l.delta === 0 ? "—" : `−${rupiah(Math.abs(l.delta))}`}
-                </span>
-              </div>
+        </div>
+      )}
+      {instruksi?.url && !instruksi.va && (
+        <a href={instruksi.url} target="_blank" rel="noreferrer"
+           className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50">
+          Buka lagi halaman {instruksi.nama ?? "pembayaran"}
+        </a>
+      )}
+      {bisaBayar === true && (
+        <section className="space-y-2">
+          <h2 className="font-display text-lg font-bold">Bayar pakai</h2>
+          <div className="flex flex-wrap gap-2">
+            {kanal.map((k) => (
+              <span key={k.code} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
+                {k.name}
+              </span>
             ))}
-            {!showAllLedger && ledger.length > 5 && (
-              <button
-                type="button"
-                onClick={() => setShowAllLedger(true)}
-                className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-600 active:bg-zinc-50"
-              >
-                Lihat selengkapnya ({ledger.length - 5} lagi)
-              </button>
-            )}
-          </>
-        )}
-      </section>
+          </div>
+          {/* Klaim UANG SUNGGUHAN tetap dikunci payments_live, terpisah dari
+              tombolnya. Tombol boleh hidup di sandbox — itu yang diminta Duitku
+              untuk diperlihatkan — tapi mengatakan "uangmu benar-benar
+              dipotong" di lingkungan uji adalah bohong. */}
+          {paymentsLive !== true && (
+            <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+              Metode di atas dilayani lewat sandbox Duitku selama masa verifikasi —
+              belum memotong uang sungguhan.
+            </p>
+          )}
+        </section>
+      )}
+
+      {pendingOrder && orderStatus !== "paid" && (
+        <button type="button" onClick={checkOrder} disabled={busy !== null}
+          className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50 disabled:opacity-60">
+          {busy === "cek" ? "Mengecek..." : "Sudah bayar? Cek status"}
+        </button>
+      )}
     </main>
   );
 }

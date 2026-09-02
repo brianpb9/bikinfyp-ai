@@ -95,7 +95,13 @@ CREATE TABLE IF NOT EXISTS payments (
   credits INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
   raw_payload TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Pesanan tahu dirinya pesanan apa. Tanpa ini, callback pembayaran harus
+  -- MENEBAK apakah yang dibeli paket atau kredit satuan — dan tebakan yang
+  -- salah berarti orang membayar paket lalu menerima kredit satuan.
+  jenis_pesanan TEXT NOT NULL DEFAULT 'saldo'
+    CHECK (jenis_pesanan IN ('saldo','topup_video','langganan')),
+  paket_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS products (
@@ -326,4 +332,92 @@ CREATE TABLE IF NOT EXISTS provider_tasks (
   task_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
   PRIMARY KEY (job_id, shot_index, provider)
+);
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- KREDIT PER JENIS VIDEO (cermin migrations/postgres/0035)
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Alasan lengkap tiap pagar ada di berkas migrasi itu. Ringkasnya: yang
+-- dihitung adalah JATAH VIDEO per jenis, dengan dua ember yang aturannya
+-- berbeda — 'langganan' habis saat masa berlakunya berakhir, 'topup' tidak
+-- pernah hangus — dan pemakaian selalu menghabiskan ember langganan lebih
+-- dulu supaya jatah yang akan hangus tidak mengendap.
+
+CREATE TABLE IF NOT EXISTS harga_kredit_video (
+  jenis TEXT PRIMARY KEY CHECK (jenis IN ('standard','premium','ultra')),
+  harga_idr INTEGER NOT NULL CHECK (harga_idr > 0),
+  aktif INTEGER NOT NULL DEFAULT 1,
+  diubah_oleh TEXT,
+  diubah_pada TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS paket_langganan (
+  id TEXT PRIMARY KEY,
+  nama TEXT NOT NULL,
+  keterangan TEXT NOT NULL DEFAULT '',
+  harga_idr INTEGER NOT NULL CHECK (harga_idr > 0),
+  kuota_standard INTEGER NOT NULL DEFAULT 0 CHECK (kuota_standard >= 0),
+  kuota_premium INTEGER NOT NULL DEFAULT 0 CHECK (kuota_premium >= 0),
+  kuota_ultra INTEGER NOT NULL DEFAULT 0 CHECK (kuota_ultra >= 0),
+  masa_hari INTEGER NOT NULL DEFAULT 30 CHECK (masa_hari > 0),
+  urutan INTEGER NOT NULL DEFAULT 0,
+  aktif INTEGER NOT NULL DEFAULT 1,
+  dibuat_pada TEXT NOT NULL,
+  diubah_pada TEXT NOT NULL,
+  CHECK (kuota_standard + kuota_premium + kuota_ultra > 0)
+);
+
+-- Kuota DISALIN saat membeli, tidak dibaca ulang dari paket_langganan: kalau
+-- admin mengubah isi paket bulan depan, yang sudah membeli tidak ikut berubah.
+CREATE TABLE IF NOT EXISTS langganan (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  paket_id TEXT NOT NULL,
+  paket_nama TEXT NOT NULL,
+  harga_idr INTEGER NOT NULL,
+  kuota_standard INTEGER NOT NULL DEFAULT 0,
+  kuota_premium INTEGER NOT NULL DEFAULT 0,
+  kuota_ultra INTEGER NOT NULL DEFAULT 0,
+  mulai_pada TEXT NOT NULL,
+  berakhir_pada TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'aktif' CHECK (status IN ('aktif','dibatalkan')),
+  payment_id TEXT,
+  dibuat_pada TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_langganan_user ON langganan(user_id, berakhir_pada DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_langganan_payment ON langganan(payment_id) WHERE payment_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS kredit_video (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  jenis TEXT NOT NULL CHECK (jenis IN ('standard','premium','ultra')),
+  ember TEXT NOT NULL CHECK (ember IN ('langganan','topup')),
+  delta INTEGER NOT NULL CHECK (delta <> 0),
+  tipe TEXT NOT NULL CHECK (tipe IN ('beli','bonus','pakai','kembali','koreksi')),
+  langganan_id TEXT REFERENCES langganan(id),
+  job_id TEXT,
+  payment_id TEXT,
+  catatan TEXT,
+  dibuat_pada TEXT NOT NULL,
+  CHECK (ember <> 'langganan' OR langganan_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS idx_kredit_video_user ON kredit_video(user_id, jenis, ember);
+CREATE INDEX IF NOT EXISTS idx_kredit_video_langganan ON kredit_video(langganan_id);
+CREATE INDEX IF NOT EXISTS idx_kredit_video_job ON kredit_video(job_id);
+-- Satu job = satu pemakaian dan satu pengembalian, ditegakkan database — pagar
+-- yang sama dengan uniq_ledger_terminal_per_job di dompet rupiah.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_kredit_pakai_per_job ON kredit_video(job_id) WHERE tipe = 'pakai';
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_kredit_kembali_per_job ON kredit_video(job_id) WHERE tipe = 'kembali';
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_kredit_beli_per_payment ON kredit_video(payment_id, jenis) WHERE tipe = 'beli';
+
+-- Harga satuan DISALIN saat pesanan dibuat: kalau admin menaikkan harga
+-- sementara ada invoice yang belum dibayar, yang berlaku tetap harga saat
+-- pembeli menekan tombol.
+CREATE TABLE IF NOT EXISTS pesanan_item (
+  payment_id TEXT NOT NULL,
+  jenis TEXT NOT NULL CHECK (jenis IN ('standard','premium','ultra')),
+  qty INTEGER NOT NULL CHECK (qty > 0),
+  harga_satuan_idr INTEGER NOT NULL CHECK (harga_satuan_idr > 0),
+  PRIMARY KEY (payment_id, jenis)
 );

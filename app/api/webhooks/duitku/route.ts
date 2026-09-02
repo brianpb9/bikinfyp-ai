@@ -5,6 +5,7 @@ import { getDb, audit } from "@/lib/db";
 import { verifyDuitkuCallbackSignature } from "@/lib/duitku";
 import { grossAmountMatchesStoredAmount } from "@/lib/payment-amount";
 import { creditTopup, TOPUP_PACKAGES } from "@/lib/credits";
+import { ambilPaket, kreditkanTopup, mulaiLangganan } from "@/lib/kredit-video-runtime";
 import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 
 import { pastikanSegar } from "@/lib/kredensial";
@@ -156,6 +157,54 @@ export async function POST(req: Request) {
       if (payment.status === "paid") {
         return Response.json({ ok: true, credited: false, duplicated: true });
       }
+
+      // ── Pesanan kredit video & langganan ─────────────────────────────────
+      //
+      // Jenis pesanan dibaca dari BARIS PESANAN, bukan ditebak dari isinya.
+      // Menebak berarti suatu hari orang membayar paket lalu menerima kredit
+      // satuan, atau sebaliknya.
+      //
+      // URUTANNYA DISENGAJA: kredit diberikan LEBIH DULU, status 'paid'
+      // ditulis sesudahnya. Kebalikannya punya lubang yang tidak bisa pulih —
+      // kalau proses mati setelah status jadi 'paid' tapi sebelum kredit
+      // masuk, callback berikutnya berhenti di jawaban idempoten di atas dan
+      // kreditnya TIDAK PERNAH diberikan. Dengan urutan ini, callback ulangan
+      // menjalankan pemberian kredit lagi (yang idempoten lewat indeks unik)
+      // lalu menuntaskan statusnya.
+      const jenisPesanan = String((payment as { jenis_pesanan?: string }).jenis_pesanan ?? "saldo");
+      if (jenisPesanan === "topup_video" || jenisPesanan === "langganan") {
+        let diberi = 0;
+        let namaPesanan = "Kredit video";
+        if (jenisPesanan === "topup_video") {
+          diberi = await kreditkanTopup(payment.user_id, orderId);
+        } else {
+          const paketId = String((payment as { paket_id?: string }).paket_id ?? "");
+          const paket = await ambilPaket(paketId);
+          if (!paket) {
+            // Paket hilang setelah pesanan dibuat TIDAK boleh menelan uang
+            // diam-diam. Dijawab 500 supaya Duitku mengulang dan kejadiannya
+            // terlihat, bukan 200 yang membuatnya lenyap dari pantauan.
+            console.error(`[duitku] paket ${paketId} tidak ditemukan untuk order ${orderId} yang sudah dibayar`);
+            return Response.json({ code: "PACKAGE_MISSING", message_id: "Paket pesanan tidak ditemukan." }, { status: 500 });
+          }
+          namaPesanan = `Paket ${paket.nama}`;
+          diberi = (await mulaiLangganan(payment.user_id, paket, orderId)) ? 1 : 0;
+        }
+        await tandaiStatus(payment.id, "paid", payload);
+        const meta = { merchant_order_id: orderId, jenis_pesanan: jenisPesanan, diberi };
+        if (postgresRuntimeEnabled()) await pgAudit("duitku", "webhook.settlement", "payments", orderId, meta);
+        else audit("duitku", "webhook.settlement", "payments", orderId, meta);
+
+        // Kabari HANYA kalau memang ada yang baru diberikan — callback ulangan
+        // menghasilkan diberi = 0, dan tiga kabar untuk satu pembayaran membuat
+        // orang berhenti mempercayai kabar berikutnya.
+        if (diberi > 0) {
+          const email = await emailPemilik(payment.user_id);
+          if (email) await emailPembayaranLunas({ ke: email, orderId, namaPaket: namaPesanan, jumlahIdr: payment.amount_idr });
+        }
+        return Response.json({ ok: true, credited: diberi > 0, jenis_pesanan: jenisPesanan });
+      }
+
       // Idempoten via gateway_ref = merchantOrderId (creditTopup menolak duplikat)
       const result = postgresRuntimeEnabled() ? await pgCreditTopup({
         userId: payment.user_id,

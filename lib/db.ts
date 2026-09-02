@@ -66,6 +66,14 @@ export function getDb(): Database.Database {
     if (!scriptCols.includes("hook_level")) {
       db.exec("ALTER TABLE scripts ADD COLUMN hook_level TEXT NOT NULL DEFAULT 'normal'");
     }
+    // Pesanan tahu dirinya pesanan apa (padanan migrations/postgres/0035).
+    // DB dev lama sudah punya tabel payments tanpa kolom ini, dan
+    // CREATE TABLE IF NOT EXISTS di schema.sql tidak akan menambahkannya.
+    const payCols = (db.prepare("PRAGMA table_info(payments)").all() as { name: string }[]).map((c) => c.name);
+    if (!payCols.includes("jenis_pesanan")) {
+      db.exec("ALTER TABLE payments ADD COLUMN jenis_pesanan TEXT NOT NULL DEFAULT 'saldo'");
+    }
+    if (!payCols.includes("paket_id")) db.exec("ALTER TABLE payments ADD COLUMN paket_id TEXT");
     const prodCols = (db.prepare("PRAGMA table_info(products)").all() as { name: string }[]).map((c) => c.name);
     if (!prodCols.includes("product_visual_desc")) {
       db.exec("ALTER TABLE products ADD COLUMN product_visual_desc TEXT");

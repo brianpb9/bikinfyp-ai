@@ -5,6 +5,9 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { config } from "@/lib/config";
 import { TOPUP_PACKAGES } from "@/lib/credits";
+import { sisaKredit, langgananAktif } from "@/lib/kredit-video-runtime";
+import { JENIS_VIDEO } from "@/lib/kredit-video";
+import { KUALITAS } from "@/lib/kualitas-video";
 
 // PROFIL — satu tempat untuk pertanyaan "punyaku sekarang apa?".
 //
@@ -41,12 +44,7 @@ const LABEL_JOB: Record<string, { teks: string; kelas: string }> = {
 
 async function ambil(userId: string) {
   const pool = getPool(config.databaseUrl);
-  const [saldo, jobs, bayar] = await Promise.all([
-    pool.query<{ saldo: string }>(
-      // Aturan yang SAMA dengan getBalance(): tanpa saldo organisasi.
-      "SELECT COALESCE(SUM(delta),0)::text AS saldo FROM credit_ledger WHERE user_id = $1 AND org_id IS NULL",
-      [userId],
-    ),
+  const [jobs, bayar] = await Promise.all([
     pool.query<{ id: string; state: string; format: string; quality_tier: string; created_at: string }>(
       `SELECT id, state, format, quality_tier, created_at FROM jobs
         WHERE user_id = $1 ORDER BY created_at DESC LIMIT 20`,
@@ -58,7 +56,7 @@ async function ambil(userId: string) {
       [userId],
     ),
   ]);
-  return { saldo: Number(saldo.rows[0]?.saldo ?? 0), jobs: jobs.rows, bayar: bayar.rows };
+  return { jobs: jobs.rows, bayar: bayar.rows };
 }
 
 function paketDari(raw: string | null): string | null {
@@ -84,7 +82,12 @@ export default async function HalamanProfil() {
     );
   }
 
-  const { saldo, jobs, bayar } = await ambil(user.id);
+  const { jobs, bayar } = await ambil(user.id);
+  // Sisa jatah dibaca lewat pintu runtime yang sama dengan yang dipakai saat
+  // job memotongnya — bukan query tersendiri di halaman ini. Query terpisah
+  // untuk angka yang sama adalah cara paling umum layar dan penagihan mulai
+  // berbeda pendapat.
+  const [sisa, langganan] = await Promise.all([sisaKredit(user.id), langgananAktif(user.id)]);
   const lunasTerakhir = bayar.find((b) => b.status === "paid");
   const paketAktif = lunasTerakhir ? paketDari(lunasTerakhir.raw_payload) : null;
 
@@ -95,13 +98,33 @@ export default async function HalamanProfil() {
         <p className="text-sm text-zinc-500">{user.email ?? user.phone ?? "Akun saya"}</p>
       </header>
 
-      {/* Saldo & paket */}
+      {/* Sisa jatah per JENIS VIDEO — bukan rupiah.
+          Tiga jenis tidak bisa saling menggantikan, jadi satu angka gabungan
+          akan menjanjikan video yang jatahnya sebenarnya sudah habis. */}
       <section className="rounded-2xl bg-zinc-900 p-4 text-white">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Sisa saldo</p>
-        <p className="font-display text-3xl font-extrabold tabular-nums">{rupiah(saldo)}</p>
-        <p className="mt-1 text-xs text-zinc-400">
-          {paketAktif ? `Pembelian terakhir: ${paketAktif}` : "Belum ada pembelian"}
-        </p>
+        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Sisa jatah video</p>
+        <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+          {JENIS_VIDEO.map((j) => (
+            <div key={j} className="rounded-xl bg-white/5 px-2 py-3">
+              <p className="font-display text-2xl font-extrabold leading-none text-amber-300 tabular-nums">{sisa[j].total}</p>
+              <p className="mt-1 text-[11px] font-semibold text-zinc-300">{KUALITAS[j].label}</p>
+              {sisa[j].langganan > 0 && (
+                <p className="text-[10px] leading-tight text-zinc-500">{sisa[j].langganan} dari paket</p>
+              )}
+            </div>
+          ))}
+        </div>
+        {langganan.map((l) => (
+          <p key={l.id} className="mt-3 text-xs text-zinc-400">
+            Paket <b className="text-zinc-200">{l.paketNama}</b> — jatah paket habis {tanggal(l.berakhirPada)}.
+            Kredit satuan tidak ikut hangus.
+          </p>
+        ))}
+        {langganan.length === 0 && (
+          <p className="mt-3 text-xs text-zinc-400">
+            {paketAktif ? `Pembelian terakhir: ${paketAktif}` : "Belum berlangganan"}
+          </p>
+        )}
         <Link
           href="/kredit"
           className="mt-3 flex min-h-[44px] w-full items-center justify-center rounded-xl bg-amber-500 font-bold text-zinc-950"

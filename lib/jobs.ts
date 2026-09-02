@@ -9,6 +9,7 @@
 
 import { getDb, now, uuid, audit, type JobRow } from "./db";
 import { releaseCredits } from "./credits";
+import { kembalikanKredit } from "./kredit-video-sqlite";
 import { config } from "./config";
 
 export const JOB_STATES = [
@@ -59,6 +60,10 @@ export function failJob(job: JobRow, reason: string): void {
   if (!changed) return;
   audit("worker", "job.transition", "jobs", job.id, { to: "FAILED", at: timestamp, reason });
   const refunded = releaseCredits(job.org_id ? { userId: job.user_id, orgId: job.org_id } : job.user_id, job.id);
+  // Jatah video dikembalikan juga. Dipanggil SESUDAH job menjadi FAILED: fungsi
+  // itu menolak mengembalikan jatah job yang sudah READY, dan urutan ini yang
+  // membuat pemeriksaannya melihat keadaan yang benar.
+  kembalikanKredit(job.user_id, job.id);
   transition(job.id, "REFUNDED", { refunded_credits: refunded });
 }
 

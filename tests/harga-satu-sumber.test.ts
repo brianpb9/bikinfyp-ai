@@ -11,20 +11,28 @@ import { config } from "../lib/config";
 // justru reviewer Midtrans — temuan onboarding 2026-08-13 berbunyi "tidak
 // menemukan harga untuk barang/jasa pada website" — dan pelanggan yang
 // melihat satu angka lalu ditagih angka lain punya alasan sah untuk komplain.
-test("harga per video di halaman = harga yang benar-benar ditagih", () => {
+test("daftar cadangan harga tidak boleh berbeda dari yang ditagih", () => {
+  // TIER_HARGA sekarang CADANGAN, bukan sumber utama: /harga membaca harga
+  // yang benar-benar berlaku dari database (harga_kredit_video), karena harga
+  // itu bisa diubah admin tanpa deploy dan daftar yang diketik di kode dijamin
+  // hanyut. Yang tetap dijaga: selama cadangan itu masih bisa tampil, angkanya
+  // harus sama dengan yang ditagih config.tiers.
   for (const tier of TIER_HARGA) {
     const asli = config.tiers[tier.id]?.priceIdr;
-    assert.equal(tier.hargaIdr, asli, `${tier.id}: halaman menulis ${tier.hargaIdr}, config menagih ${asli}`);
+    assert.equal(tier.hargaIdr, asli, `${tier.id}: cadangan menulis ${tier.hargaIdr}, config menagih ${asli}`);
   }
-  // Setiap tier AKTIF di config harus punya wajah publiknya. Tier yang dijual
-  // tapi tidak pernah dipajang adalah harga tersembunyi.
-  //
-  // Tier pensiun dikecualikan: config tetap memuat harganya supaya job lama
-  // bisa dihitung, tapi ia tidak boleh dipajang lagi.
-  for (const id of Object.keys(config.tiers)) {
-    if (!tierMasihDijual(id)) continue;
-    assert.ok(TIER_HARGA.some((t) => t.id === id), `tier ${id} dijual tapi tidak muncul di halaman harga`);
-  }
+});
+
+test("/harga membaca harga yang BERLAKU, bukan daftar yang diketik di kode", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const halaman = fs.readFileSync(path.join(process.cwd(), "app/harga/page.tsx"), "utf8");
+  // Yang dicegah: halaman publik memajang angka lama sementara pembeli ditagih
+  // angka baru — temuan onboarding gateway pembayaran 13 Agu 2026 dalam bentuk
+  // yang lebih halus.
+  assert.match(halaman, /hargaKredit\(\)/, "halaman harga tidak membaca harga yang berlaku");
+  assert.match(halaman, /daftarPaket\(true\)/, "paket langganan tidak dipajang dari sumbernya");
+  assert.match(halaman, /force-dynamic/, "halaman harga dibekukan saat build — perubahan admin tidak akan terlihat");
 });
 
 // Arah sebaliknya, dan ini yang bobol 16 Agu 2026: /harga memajang "Video Teks"

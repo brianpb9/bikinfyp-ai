@@ -172,8 +172,14 @@ test("tombol beli TIDAK lagi digantung pada payments_live", () => {
   // Awalan ekspresi, bukan seluruhnya. Sejak 2 Sep tombol juga menunggu
   // pembeli memilih kanal (QRIS/VA) — syarat yang MEMPERKETAT, jadi
   // memaksa kecocokan persis akan menandai pengetatan sebagai regresi.
-  assert.match(HALAMAN, /disabled=\{busy !== null \|\| bisaBayar !== true/);
-  assert.doesNotMatch(HALAMAN, /disabled=\{busy !== null \|\| paymentsLive !== true\}/);
+  // Syaratnya kini dihitung sekali sebagai `tombolMati` — lihat catatan di
+  // tests/audit-blocker.test.ts. Pertanyaannya tidak berubah.
+  assert.match(HALAMAN, /const tombolMati = busy !== null \|\| bisaBayar !== true/);
+  // Yang dilarang: tombol yang bergantung pada payments_live. Bukan
+  // keberadaan paymentsLive itu sendiri — ia masih dipakai, dan memang harus,
+  // untuk mengunci klaim uang sungguhan (lihat tes di bawah).
+  assert.doesNotMatch(HALAMAN, /disabled=\{[^}]*paymentsLive/);
+  assert.doesNotMatch(HALAMAN, /tombolMati[^;]*paymentsLive/);
 });
 
 test("default tetap TERTUTUP selagi server belum menjawab", () => {

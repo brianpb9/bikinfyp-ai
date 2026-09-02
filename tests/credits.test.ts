@@ -13,12 +13,35 @@ const { findOrCreateUserByPhone } = await import("../lib/auth");
 const { getBalance, holdCredits, captureCredits, releaseCredits, creditTopup, tierPriceIdr } = await import("../lib/credits");
 
 const db = getDb();
-const user = findOrCreateUserByPhone("089999000111"); // bonus onboarding: Rp12.000
+const user = findOrCreateUserByPhone("089999000111");
 
-test("user baru dapat bonus Rp12.000 (cukup 1 video AI Bersuara)", () => {
-  assert.equal(getBalance(user.id), 12000);
-  const row = db.prepare("SELECT * FROM credit_ledger WHERE user_id = ? AND type = 'bonus'").get(user.id) as { delta: number };
-  assert.equal(row.delta, 12000);
+// DOMPET RUPIAH SEKARANG WARISAN, bukan alat bayar render.
+//
+// Sejak 2 Sep 2026 render dibayar dengan JATAH VIDEO per jenis (lihat
+// tests/kredit-video.test.ts). Mekanik hold/capture/release di bawah masih
+// hidup dan masih dipakai jalur promo, jadi tesnya dipertahankan apa adanya —
+// yang berubah cuma dari mana saldo awalnya datang: dulu bonus pendaftaran,
+// sekarang diisi eksplisit di sini supaya tesnya menguji mekaniknya, bukan
+// menguji kebijakan bonus yang sudah pindah.
+db.prepare(
+  "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
+).run("seed-saldo-uji", user.id, 12000, "bonus", new Date().toISOString());
+
+test("pendaftar baru TIDAK lagi menerima saldo rupiah — ia menerima jatah video", () => {
+  // Bonus rupiah untuk pendaftar sudah dihapus: rupiah tidak membeli apa pun
+  // lagi, jadi memberikannya berarti menjanjikan saldo yang ditolak tepat saat
+  // orang menekan Bikin.
+  const bonusRupiah = db
+    .prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE user_id = ? AND type = 'bonus' AND id != 'seed-saldo-uji'")
+    .get(user.id) as { n: number };
+  assert.equal(bonusRupiah.n, 0, "pendaftaran masih menulis bonus rupiah");
+
+  const jatah = db
+    .prepare("SELECT jenis, delta FROM kredit_video WHERE user_id = ? AND tipe = 'bonus'")
+    .all(user.id) as { jenis: string; delta: number }[];
+  assert.equal(jatah.length, 1, "pendaftar baru tidak menerima paket gratis apa pun");
+  assert.equal(jatah[0].delta, 1);
+  assert.equal(jatah[0].jenis, "premium");
 });
 
 test("harga tier sesuai keputusan final: 5000 / 12000 / 80000", () => {
@@ -58,8 +81,13 @@ test("hold -> release mengembalikan rupiah persis sebesar hold", () => {
 });
 
 test("hold ditolak bila saldo kurang dari harga tier", () => {
-  const miskin = findOrCreateUserByPhone("089999000222"); // bonus Rp12.000
-  assert.equal(holdCredits(miskin.id, "job-x", 80000), false); // Super HQ > bonus
+  const miskin = findOrCreateUserByPhone("089999000222");
+  // Saldo diisi eksplisit, sama alasannya dengan seed di atas: pendaftaran
+  // tidak lagi memberi rupiah.
+  db.prepare(
+    "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
+  ).run("seed-saldo-miskin", miskin.id, 12000, "bonus", new Date().toISOString());
+  assert.equal(holdCredits(miskin.id, "job-x", 80000), false); // Super HQ > saldo
   assert.equal(getBalance(miskin.id), 12000);
   assert.equal(holdCredits(miskin.id, "job-y", 12000), true); // AI Bersuara pas
 });

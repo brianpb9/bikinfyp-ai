@@ -75,6 +75,12 @@ export function AccountMenu() {
                 <span aria-hidden="true">📊</span> Dashboard admin
               </a>
               <a
+                href="/admin/paket"
+                className="flex min-h-[48px] w-full items-center gap-2 border-b border-zinc-100 px-4 text-left text-sm font-semibold text-zinc-800 active:bg-zinc-50"
+              >
+                <span aria-hidden="true">🎟️</span> Paket &amp; harga
+              </a>
+              <a
                 href="/admin/kredensial"
                 className="flex min-h-[48px] w-full items-center gap-2 border-b border-zinc-100 px-4 text-left text-sm font-semibold text-zinc-800 active:bg-zinc-50"
               >

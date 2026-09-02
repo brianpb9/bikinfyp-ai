@@ -44,7 +44,7 @@ try {
   );
 
   const settled = await Promise.allSettled(scriptIds.map((scriptId) => smokeCreateJob(userId, {
-    productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, jenisVideo: "premium",
   })));
   const rejected = settled.filter((entry): entry is PromiseRejectedResult => entry.status === "rejected");
   assert.equal(rejected.length, 0, `admission paralel menolak ${rejected.length}: ${rejected.map((entry) => String(entry.reason)).join(" | ")}`);
@@ -63,7 +63,7 @@ try {
   assert.equal(holds.rowCount, count, "harus ada tepat 20 hold");
   assert.ok(holds.rows.every((row) => Number(row.n) === 1 && Number(row.delta) === -priceIdr), "setiap job harus memiliki satu hold sebesar harga");
   const first = accepted[0];
-  const duplicate = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const duplicate = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, jenisVideo: "premium" });
   assert.equal(duplicate.duplicate, true, "job aktif untuk script yang sama harus idempoten");
   assert.equal(duplicate.jobId, first.jobId, "duplikat aktif harus menunjuk job awal");
   const activeDuplicateHolds = await pool.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type='hold'", [first.jobId]);
@@ -72,7 +72,7 @@ try {
   // This matches the historic rule: a terminal job does not block a deliberate
   // re-admission of the same approved script, and the script pointer advances.
   await pool.query("UPDATE jobs SET state='FAILED' WHERE id=$1", [first.jobId]);
-  const reAdmitted = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const reAdmitted = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, jenisVideo: "premium" });
   assert.equal(reAdmitted.duplicate, false, "job terminal harus mengizinkan re-admission");
   assert.notEqual(reAdmitted.jobId, first.jobId, "re-admission harus membuat job baru");
   const pointer = await pool.query<{ job_id: string }>("SELECT job_id FROM scripts WHERE id=$1", [scriptIds[0]]);

@@ -377,7 +377,15 @@ export const config = {
   // staging testing (2026-08-02): ~Rp1,100-1,300/job. Brian's call (2026-08-03):
   // pick something profitable, not a launch blocker, revisit later.
   promoPriceIdr: parseInt(env("PROMO_PRICE_IDR", "9000"), 10),
-  signupBonusIdr: 12000, // bonus user baru: cukup 1 video AI Bersuara (keputusan 2026-08-06: tier senyap dihapus dari Affiliate)
+  signupBonusIdr: 12000, // dipertahankan untuk membaca riwayat lama; TIDAK dipakai lagi untuk pendaftar baru
+  // PAKET GRATIS PENDAFTAR BARU — sekarang berupa JATAH VIDEO, bukan rupiah.
+  //
+  // Rupiah tidak lagi membeli apa pun sejak kredit dihitung per jenis video,
+  // jadi bonus rupiah akan jadi angka yang tidak bisa dibelanjakan: pendaftar
+  // melihat "punya saldo" lalu ditolak saat menekan Bikin. Satu video Premium
+  // adalah padanan langsung dari bonus Rp12.000 yang lama.
+  signupBonusJenis: env("SIGNUP_BONUS_JENIS", "premium"),
+  signupBonusQty: Number(env("SIGNUP_BONUS_QTY", "1")),
   // Parameter bisnis
   signedUrlTtlSec: 3600, // SRS NF-SEC04: TTL <= 1 jam
   queuedTimeoutMin: 30, // BR-06.3: job QUEUED >30 menit -> FAILED + refund

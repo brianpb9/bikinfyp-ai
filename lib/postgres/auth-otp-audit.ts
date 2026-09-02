@@ -199,11 +199,23 @@ export class PgAuthOtpAuditRepository {
   }
 
   private async insertSignupSideEffects(client: PoolClient, userId: string, identity: { email?: string; phone?: string }, createdAt: string): Promise<void> {
-    await client.query(
-      "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES ($1,$2,$3,$4,NULL,NULL,$5)",
-      [this.uuid(), userId, config.signupBonusIdr, "bonus", createdAt]
-    );
-    await this.insertAudit(client, userId, "user.signup_bonus", "credit_ledger", userId, { delta_idr: config.signupBonusIdr }, createdAt);
+    // PAKET GRATIS pendaftar baru: satu JATAH VIDEO, bukan rupiah. Rupiah tidak
+    // lagi membeli apa pun sejak kredit dihitung per jenis video; bonus rupiah
+    // hanya akan jadi angka yang tidak bisa dibelanjakan — pendaftar melihat
+    // "punya saldo" lalu ditolak tepat saat menekan Bikin.
+    //
+    // Ditulis di transaksi pendaftaran yang SAMA: bonus yang diberikan lewat
+    // panggilan terpisah bisa gagal sesudah akun terbentuk, dan yang lahir
+    // adalah akun tanpa jatah yang tidak ada jejaknya.
+    if (config.signupBonusQty > 0) {
+      await client.query(
+        `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+         VALUES ($1,$2,$3,'topup',$4,'bonus',NULL,NULL,NULL,$5,$6)`,
+        [this.uuid(), userId, config.signupBonusJenis, config.signupBonusQty, "paket gratis pendaftar baru", createdAt],
+      );
+      await this.insertAudit(client, userId, "user.signup_bonus", "kredit_video", userId,
+        { jenis: config.signupBonusJenis, qty: config.signupBonusQty }, createdAt);
+    }
     await this.insertAudit(client, userId, "user.created", "users", userId, identity, createdAt);
   }
 

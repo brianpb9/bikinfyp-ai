@@ -1,8 +1,11 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, type PersonaRow } from "@/lib/db";
-import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
+import { tierPriceIdr } from "@/lib/credits";
+import { pakaiKredit as pakaiKreditSqlite } from "@/lib/kredit-video-sqlite";
 import { TIER_DIJUAL, tierMasihDiterima } from "@/lib/paket-kredit";
+import { jenisUntukTier } from "@/lib/kredit-video";
+import { pakaiKredit } from "@/lib/kredit-video-runtime";
 import { enqueueJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
 import { bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
@@ -173,12 +176,16 @@ export async function POST(req: Request) {
         "Script was generated for a different quality tier."
       );
     const priceIdr = tierPriceIdr(tier, durationS);
+    // Yang ditagih sekarang adalah SATU JATAH VIDEO dari jenis ini, bukan
+    // rupiah. priceIdr tetap dihitung karena masih dipakai laporan dan riwayat
+    // — ia jadi keterangan nilai, bukan alat bayar.
+    const jenis = jenisUntukTier(tier);
 
     // Checkpoint 1E only: compose the parity-tested PG repositories behind
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc });
+      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, jenisVideo: jenis, avatarCustomDesc });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {
@@ -202,7 +209,7 @@ export async function POST(req: Request) {
       // smoke.  A real PostgreSQL runtime is completed by the queue worker.
       if (!created.duplicate && postgresSmokeEnabled()) await smokeCompleteJob(created.jobId);
       if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId);
-      return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
+      return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, jenis_video: jenis, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
     }
 
     // Buat job + hold dalam satu transaksi. Submit ganda yang sangat cepat
@@ -212,13 +219,16 @@ export async function POST(req: Request) {
         .prepare("SELECT id FROM jobs WHERE script_id = ? AND state NOT IN ('FAILED','REFUNDED','READY')")
         .get(script.id) as { id: string } | undefined;
       if (active) return { jobId: active.id, duplicate: true };
-      if (getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
       const jobId = uuid();
       db!.prepare(
         `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, state, created_at, state_changed_at)
          VALUES (?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`
       ).run(jobId, user.id, product.id, personaId, script.id, format, tier, durationS, now(), now());
-      if (!holdCredits(user.id, jobId, priceIdr)) throw ERR.INSUFFICIENT_CREDITS();
+      // Jatah dipotong di transaksi yang SAMA dengan penulisan baris job —
+      // alasan lengkapnya di lib/postgres/smoke-runtime.ts. better-sqlite3
+      // menjalankan transaksi bersarang lewat savepoint, jadi ini tetap satu
+      // satuan yang batal utuh kalau ada yang gagal.
+      if (!pakaiKreditSqlite(user.id, jenis, jobId)) throw ERR.INSUFFICIENT_CREDITS();
       db!.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, script.id);
       return { jobId, duplicate: false };
     })();
@@ -249,8 +259,8 @@ export async function POST(req: Request) {
       throw queueError;
     }
     if (created.duplicate)
-      return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr, duplicate: true });
-    return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr }, { status: 201 });
+      return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, jenis_video: jenis, hold_idr: priceIdr, duplicate: true });
+    return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, jenis_video: jenis, hold_idr: priceIdr }, { status: 201 });
   } catch (err) {
     return errorResponse(err);
   }

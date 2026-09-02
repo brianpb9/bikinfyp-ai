@@ -122,6 +122,57 @@ export type TransaksiDuitku = {
  * Formula tanda tangan diverifikasi terhadap sandbox nyata, bukan disalin:
  *   md5(merchantCode + merchantOrderId + paymentAmount + apiKey)
  */
+
+/**
+ * Rincian tagihan yang DITENTUKAN PEMANGGIL.
+ *
+ * Sebelum ini nilai tagihan selalu diturunkan dari TOPUP_PACKAGES — daftar
+ * paket rupiah tetap. Kredit per jenis video tidak muat di sana: jumlahnya
+ * disusun pembeli (3 standard + 1 ultra, misalnya), jadi nilainya tidak bisa
+ * dicari di daftar mana pun.
+ *
+ * Nilainya tetap DIHITUNG DI SERVER dan hanya diserahkan ke sini; rute
+ * checkout tidak pernah menerima angka rupiah dari klien.
+ */
+export interface RincianTagihan {
+  amountIdr: number;
+  label: string;
+  items: { name: string; price: number; quantity: number }[];
+}
+
+/** Rincian dari paket rupiah lama — jalur yang sudah berjalan, tidak diubah. */
+function rincianPaket(packageId: string): RincianTagihan {
+  const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
+  if (!pkg) throw new Error(`Paket tidak dikenal: ${packageId}`);
+  return {
+    amountIdr: pkg.priceIdr,
+    label: `${pkg.name} BikinFYP AI`,
+    items: [{ name: `${pkg.name} BikinFYP AI`, price: pkg.priceIdr, quantity: 1 }],
+  };
+}
+
+/**
+ * Rincian yang dipakai — dari pemanggil kalau ada, kalau tidak dari paket.
+ *
+ * Dijaga di satu tempat supaya tagihan yang ditandatangani, yang dikirim ke
+ * Duitku, dan yang tampil di rincian item TIDAK MUNGKIN berbeda. Tanda tangan
+ * Duitku menutup nilai tagihan; nilai yang berbeda antara tanda tangan dan
+ * badan permintaan ditolak mereka — dan kalau lolos, yang tertagih bukan yang
+ * dijanjikan ke pembeli.
+ */
+function rincianDari(packageId: string, rincian?: RincianTagihan): RincianTagihan {
+  if (!rincian) return rincianPaket(packageId);
+  if (!Number.isInteger(rincian.amountIdr) || rincian.amountIdr <= 0) {
+    throw new Error(`Nilai tagihan tidak sah: ${rincian.amountIdr}`);
+  }
+  const jumlahItem = rincian.items.reduce((n, i) => n + i.price * i.quantity, 0);
+  // Rincian yang tidak menjumlah ke nilai tagihan adalah kuitansi yang bohong.
+  if (jumlahItem !== rincian.amountIdr) {
+    throw new Error(`Rincian item (${jumlahItem}) tidak sama dengan nilai tagihan (${rincian.amountIdr}).`);
+  }
+  return rincian;
+}
+
 export async function createDuitkuTransaction(opts: {
   orderId: string;
   packageId: string;
@@ -129,18 +180,19 @@ export async function createDuitkuTransaction(opts: {
   phone: string;
   email: string;
   customerName?: string;
+  /** Tagihan yang disusun pemanggil (kredit per jenis / langganan). */
+  rincian?: RincianTagihan;
 }): Promise<TransaksiDuitku> {
   if (!config.duitkuMerchantCode || !config.duitkuApiKey) throw new DuitkuNotConfigured();
   if (!kanalSah(opts.method)) throw new Error(`Kanal pembayaran tidak dikenal: ${opts.method}`);
 
-  const pkg = TOPUP_PACKAGES.find((p) => p.id === opts.packageId);
-  if (!pkg) throw new Error(`Paket tidak dikenal: ${opts.packageId}`);
+  const tagihan = rincianDari(opts.packageId, opts.rincian);
 
   const callbackUrl = publicUrl("/api/webhooks/duitku");
   const returnUrl = publicUrl("/kredit");
   const signature = crypto
     .createHash("md5")
-    .update(config.duitkuMerchantCode + opts.orderId + String(pkg.priceIdr) + config.duitkuApiKey)
+    .update(config.duitkuMerchantCode + opts.orderId + String(tagihan.amountIdr) + config.duitkuApiKey)
     .digest("hex");
 
   const res = await fetch(`${duitkuBaseV2()}/api/merchant/v2/inquiry`, {
@@ -148,15 +200,15 @@ export async function createDuitkuTransaction(opts: {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       merchantCode: config.duitkuMerchantCode,
-      paymentAmount: pkg.priceIdr,
+      paymentAmount: tagihan.amountIdr,
       paymentMethod: opts.method,
       merchantOrderId: opts.orderId,
-      productDetails: `${pkg.name} BikinFYP AI`,
+      productDetails: tagihan.label,
       email: opts.email || "hdrvstudio@gmail.com",
       phoneNumber: opts.phone,
       // Nama pemilik VA yang tampil di aplikasi bank pembeli.
       customerVaName: opts.customerName?.slice(0, 20) || "BikinFYP AI",
-      itemDetails: [{ name: `${pkg.name} BikinFYP AI`, price: pkg.priceIdr, quantity: 1 }],
+      itemDetails: tagihan.items,
       callbackUrl,
       returnUrl,
       signature,
@@ -188,14 +240,14 @@ export async function createDuitkuInvoice(opts: {
   packageId: string;
   phone: string;
   email: string;
+  rincian?: RincianTagihan;
 }): Promise<{ providerRef: string; redirectUrl: string }> {
   if (!config.duitkuMerchantCode || !config.duitkuApiKey) throw new DuitkuNotConfigured();
   const callbackUrl = publicUrl("/api/webhooks/duitku");
   // Duitku menempelkan merchantOrderId/resultCode/reference sebagai query di
   // returnUrl; /kredit membacanya untuk melanjutkan cek status order.
   const returnUrl = publicUrl("/kredit");
-  const pkg = TOPUP_PACKAGES.find((p) => p.id === opts.packageId);
-  if (!pkg) throw new Error(`Paket tidak dikenal: ${opts.packageId}`);
+  const tagihan = rincianDari(opts.packageId, opts.rincian);
 
   const timestamp = Date.now();
   const signature = crypto
@@ -212,14 +264,14 @@ export async function createDuitkuInvoice(opts: {
       "x-duitku-merchantcode": config.duitkuMerchantCode,
     },
     body: JSON.stringify({
-      paymentAmount: pkg.priceIdr,
+      paymentAmount: tagihan.amountIdr,
       merchantOrderId: opts.orderId,
-      productDetails: `${pkg.name} BikinFYP AI`,
+      productDetails: tagihan.label,
       // Duitku mewajibkan email; user login-Google/OTP selalu punya, sisanya
       // jatuh ke email dukungan merchant agar invoice tetap bisa dibuat.
       email: opts.email || "hdrvstudio@gmail.com",
       phoneNumber: opts.phone,
-      itemDetails: [{ name: `${pkg.name} BikinFYP AI`, price: pkg.priceIdr, quantity: 1 }],
+      itemDetails: tagihan.items,
       callbackUrl,
       returnUrl,
       expiryPeriod: 60, // menit — selaras dengan janji "cek status" di /kredit

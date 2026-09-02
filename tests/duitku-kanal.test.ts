@@ -74,9 +74,17 @@ test("tanda tangan v2 memakai formula yang diverifikasi ke sandbox", () => {
   const src = baca("lib/duitku.ts");
   const v2 = src.slice(src.indexOf("createDuitkuTransaction"));
   assert.match(v2, /createHash\("md5"\)/);
+  // Nilai tagihan tidak lagi selalu berasal dari daftar paket rupiah: kredit
+  // per jenis video jumlahnya disusun pembeli, jadi ia datang sebagai
+  // `tagihan.amountIdr`. URUTAN komponennya yang dijaga tes ini, dan itu tidak
+  // berubah — merchantCode, orderId, nilai, apiKey.
   assert.match(
     v2,
-    /config\.duitkuMerchantCode \+ opts\.orderId \+ String\(pkg\.priceIdr\) \+ config\.duitkuApiKey/,
+    /config\.duitkuMerchantCode \+ opts\.orderId \+ String\(tagihan\.amountIdr\) \+ config\.duitkuApiKey/,
     "urutan komponen tanda tangan berubah — Duitku akan menolak seluruh transaksi",
   );
+  // Dan nilai yang DITANDATANGANI wajib nilai yang sama dengan yang dikirim di
+  // badan permintaan. Keduanya kini datang dari satu objek; kalau suatu saat
+  // dipisah lagi, tagihan yang ditandatangani bisa berbeda dari yang ditagih.
+  assert.match(v2, /paymentAmount: tagihan\.amountIdr/, "nilai yang ditandatangani dan yang dikirim harus satu sumber");
 });

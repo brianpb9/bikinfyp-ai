@@ -98,10 +98,15 @@ async function ambilRingkasan() {
     // video, dan itu uang yang benar-benar keluar dari kas — bukan diskon.
     // Ditampilkan supaya ia terlihat sejak orang pertama mendaftar, bukan
     // mengejutkan di tagihan BytePlus akhir bulan.
-    pool.query<{ total: string; penerima: string }>(
-      `SELECT COALESCE(SUM(delta),0)::text AS total,
+    // Dihitung dari kredit_video, bukan credit_ledger: sejak paket gratis
+    // berupa JATAH VIDEO, baris bonus rupiah berhenti bertambah — dan kartu
+    // yang membaca tabel lama akan diam di angka bersejarah sementara
+    // pendaftar baru terus menerima jatah. Kartu yang diam di angka lama lebih
+    // berbahaya daripada kartu kosong: ia terlihat seperti kabar baik.
+    pool.query<{ video: string; penerima: string }>(
+      `SELECT COALESCE(SUM(delta),0)::text AS video,
               COUNT(DISTINCT user_id)::text AS penerima
-         FROM credit_ledger WHERE type = 'bonus'`,
+         FROM kredit_video WHERE tipe = 'bonus'`,
     ),
   ]);
   return {
@@ -344,9 +349,9 @@ async function Ringkasan() {
           catatan={`${angka(Number(pengguna?.baru ?? 0))} baru 30 hari`}
         />
         <Kartu
-          label="Biaya paket gratis"
-          nilai={rupiah(Number(gratis?.total ?? 0))}
-          catatan={`${angka(Number(gratis?.penerima ?? 0))} pendaftar dapat bonus`}
+          label="Video gratis diberikan"
+          nilai={angka(Number(gratis?.video ?? 0))}
+          catatan={`${angka(Number(gratis?.penerima ?? 0))} pendaftar dapat paket gratis`}
         />
       </section>
 

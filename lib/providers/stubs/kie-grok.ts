@@ -47,6 +47,7 @@ import {
 } from "../types";
 import { taskMemo } from "../task-memo";
 import { terbitkanGambarProvider } from "../../gambar-provider";
+import { teksPromptShot } from "../teks-prompt";
 
 const PROVIDER_KEY = "kie-grok";
 
@@ -54,24 +55,45 @@ const PROVIDER_KEY = "kie-grok";
 export const MAKS_DETIK_PER_KLIP = 15;
 
 /**
- * TARIF BELUM DIKETAHUI, dan sengaja tidak ditebak.
+ * BIAYA DIHITUNG DARI PEMAKAIAN YANG DILAPORKAN KIE.AI, BUKAN DITEBAK.
  *
- * Kami belum pernah melihat tagihan kie.ai. Mengembalikan 0 akan membuat
- * margin terlihat sempurna pada mesin yang harganya tidak pernah diperiksa
- * siapa pun — pola yang persis membuat tier Rp12.000 dijual di bawah biaya
- * selama berbulan-bulan. Jadi isi KIE_COST_PER_VIDEO_IDR dari tagihan yang
- * benar-benar dilihat; sampai itu ada, biayanya dilaporkan sebagai 0 DENGAN
- * peringatan di log, bukan diam-diam.
+ * recordInfo mengembalikan `creditsConsumed` — kredit kie.ai yang benar-benar
+ * terpakai untuk task itu. Diverifikasi dengan render berbayar 2 Sep 2026:
+ * satu klip 6 detik 480p menghabiskan 14,4 kredit, dan saldo akun turun persis
+ * sebesar itu (21.091,5 -> 21.077,1).
+ *
+ * Yang BELUM diketahui adalah nilai rupiah satu kredit kie.ai — itu ada di
+ * tagihan pembelian kredit, bukan di API. Selama KIE_IDR_PER_CREDIT belum
+ * diisi, biayanya dilaporkan 0 DENGAN peringatan: angka margin apa pun yang
+ * memakainya tidak sah. Mengembalikan tebakan diam-diam akan membuat mesin
+ * yang harganya tidak pernah diperiksa siapa pun terlihat paling untung —
+ * pola yang persis membuat tier Rp12.000 dijual di bawah biaya berbulan-bulan.
  */
-function biayaIdr(): number {
-  const n = parseInt(process.env.KIE_COST_PER_VIDEO_IDR ?? "", 10);
-  if (Number.isFinite(n) && n > 0) return n;
-  console.warn(
-    "[kie-grok] KIE_COST_PER_VIDEO_IDR belum diisi — biaya render dilaporkan 0. " +
-      "Angka margin apa pun yang memakai ini TIDAK sah sampai tarifnya diambil dari tagihan.",
-  );
-  return 0;
+function idrPerKredit(): number {
+  const n = Number(process.env.KIE_IDR_PER_CREDIT ?? "");
+  return Number.isFinite(n) && n > 0 ? n : 0;
 }
+
+function biayaDariKredit(kredit: number): number {
+  const tarif = idrPerKredit();
+  if (!tarif) {
+    console.warn(
+      `[kie-grok] KIE_IDR_PER_CREDIT belum diisi — ${kredit} kredit kie.ai dilaporkan berbiaya 0. ` +
+        "Isi dari tagihan pembelian kredit; sampai itu ada, angka margin yang memakainya TIDAK sah.",
+    );
+    return 0;
+  }
+  return Math.round(kredit * tarif);
+}
+
+/**
+ * Perkiraan sebelum render, dipakai registry untuk mengurutkan provider.
+ *
+ * Diturunkan dari pengukuran nyata: 14,4 kredit untuk 6 detik = 2,4 kredit per
+ * detik pada 480p. Ini PERKIRAAN; biaya yang dicatat ke job memakai angka yang
+ * dilaporkan kie.ai untuk task itu sendiri.
+ */
+const KREDIT_PER_DETIK_480P = 2.4;
 
 /** Rasio yang dipakai kie.ai berbentuk "lebar:tinggi". */
 function rasioDari(spec: VisualSpec): string {
@@ -136,11 +158,10 @@ export function buatBadanTask(spec: VisualSpec, shot: ShotSpec, imageUrl: string
     input: {
       image_urls: [imageUrl],
       index: 0,
-      // Negative prompt DIGABUNG ke prompt: bentuk permintaan yang kami terima
-      // tidak punya field terpisah untuknya, sementara aturan keras repo
-      // mewajibkan "no text, no logo, no writing" ikut terkirim. Menghilangkannya
-      // diam-diam berarti tier ini satu-satunya yang boleh melanggar aturan itu.
-      prompt: `${shot.prompt}\n\nNEGATIVE: ${spec.negativePrompt}`,
+      // Teks yang PERSIS SAMA dengan yang dikirim ke BytePlus — disusun oleh
+      // fungsi yang sama, bukan ditiru. Yang membedakan Standard dari Premium
+      // dan Ultra hanya modelnya; promptnya tidak boleh berbeda satu byte pun.
+      prompt: teksPromptShot(spec, shot),
       mode: "normal",
       aspect_ratio: rasioDari(spec),
       duration: Math.round(shot.durationSec),
@@ -163,7 +184,23 @@ async function buatTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   return id;
 }
 
-async function tungguHasil(taskId: string, mulai: number, batasMs: number): Promise<string> {
+/** Ambil daftar URL hasil dari bentuk apa pun yang dikirim kie.ai. */
+export function ambilResultUrls(isi: Record<string, unknown>): string[] | undefined {
+  const langsung = isi.resultUrls;
+  if (Array.isArray(langsung) && langsung.length) return langsung as string[];
+
+  const rj = isi.resultJson;
+  const objek =
+    typeof rj === "string"
+      ? (() => {
+          try { return JSON.parse(rj) as Record<string, unknown>; } catch { return undefined; }
+        })()
+      : (rj as Record<string, unknown> | undefined);
+  const dari = objek?.resultUrls;
+  return Array.isArray(dari) && dari.length ? (dari as string[]) : undefined;
+}
+
+async function tungguHasil(taskId: string, mulai: number, batasMs: number): Promise<{ url: string; kredit: number }> {
   for (;;) {
     if (Date.now() - mulai > batasMs) {
       throw new Error(`[kie-grok] task ${taskId} melewati batas ${Math.round(batasMs / 1000)} detik`);
@@ -174,11 +211,14 @@ async function tungguHasil(taskId: string, mulai: number, batasMs: number): Prom
     const isi = (data.data as Record<string, unknown> | undefined) ?? data;
     const status = String(isi.state ?? isi.status ?? "").toLowerCase();
 
-    // Bentuk jawaban yang Brian berikan: { resultUrls: [ "...mp4" ] }
-    const urls =
-      (isi.resultUrls as string[] | undefined) ??
-      ((isi.resultJson as Record<string, unknown> | undefined)?.resultUrls as string[] | undefined);
-    if (urls?.length) return urls[0];
+    // resultJson datang sebagai STRING JSON, bukan objek — diverifikasi dari
+    // jawaban sungguhan 2 Sep 2026:
+    //   "resultJson": "{\"resultUrls\":[\"https://...mp4\"]}"
+    // Memperlakukannya sebagai objek membuat urls selalu undefined dan
+    // polling berputar sampai batas waktu untuk task yang sebenarnya SUKSES —
+    // kegagalan yang paling mahal, karena rendernya sudah dibayar.
+    const urls = ambilResultUrls(isi);
+    if (urls?.length) return { url: urls[0], kredit: Number(isi.creditsConsumed ?? 0) };
 
     if (status === "fail" || status === "failed" || status === "error") {
       throw new Error(`[kie-grok] task ${taskId} gagal: ${JSON.stringify(isi).slice(0, 300)}`);
@@ -191,7 +231,8 @@ export const kieGrokVideo: VideoProvider = {
   name: "kie-grok-imagine",
 
   estimateCost(spec: VisualSpec): number {
-    return spec.shots.length * biayaIdr();
+    const detik = spec.shots.reduce((n, s) => n + s.durationSec, 0);
+    return biayaDariKredit(detik * KREDIT_PER_DETIK_480P);
   },
 
   async healthCheck(): Promise<boolean> {
@@ -225,7 +266,7 @@ export const kieGrokVideo: VideoProvider = {
 
     const assets: VideoAsset[] = [];
     for (const { shot, taskId, mulai } of dikirim) {
-      const url = await tungguHasil(taskId, mulai, batasMs);
+      const { url, kredit } = await tungguHasil(taskId, mulai, batasMs);
       const unduh = await fetch(url);
       if (!unduh.ok) throw new Error(`[kie-grok] unduh video HTTP ${unduh.status}`);
       const berkas = path.join(outDir, `shot${shot.index}.mp4`);
@@ -233,7 +274,7 @@ export const kieGrokVideo: VideoProvider = {
       assets.push({
         filePath: path.resolve(berkas),
         durationSec: shot.durationSec,
-        costIdr: biayaIdr(),
+        costIdr: biayaDariKredit(kredit),
         // Grok Imagine selalu menghasilkan audio dan tidak punya tombol untuk
         // mematikannya — dinyatakan apa adanya, bukan disamakan dengan tier.
         hasAudio: true,

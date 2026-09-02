@@ -92,9 +92,16 @@ test("setelah approve -> job dibuat (201) dan state QUEUED", async () => {
   assert.equal(duplicateBody.job_id, body.job_id);
   assert.equal(duplicateBody.duplicate, true);
 
-  // Kredit ter-hold: bonus Rp12.000 - hold Rp12.000 (tier high_quality default) = 0
-  const bal = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
-  assert.equal(bal.b, 0);
-  const holds = db.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE user_id = ? AND type = 'hold'").get(user.id) as { n: number };
-  assert.equal(holds.n, 1);
+  // JATAH VIDEO yang terpotong, bukan rupiah (sejak 2 Sep 2026). Naskah ini
+  // bertier high_quality, yang dipetakan ke jatah "premium" — job dari naskah
+  // lama tetap membayar, dan membayar dari jatah yang setara.
+  const pakai = db
+    .prepare("SELECT jenis, ember, delta FROM kredit_video WHERE user_id = ? AND tipe = 'pakai'")
+    .all(user.id) as { jenis: string; ember: string; delta: number }[];
+  assert.equal(pakai.length, 1, "dua request berdekatan memotong jatah dua kali");
+  assert.equal(pakai[0].jenis, "premium");
+  assert.equal(pakai[0].delta, -1);
+  // Paket gratis pendaftar = 1 video premium, jadi sesudah satu job jatahnya habis.
+  const { sisaKredit } = await import("../lib/kredit-video-sqlite");
+  assert.equal(sisaKredit(user.id).premium.total, 0);
 });

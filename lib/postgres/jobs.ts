@@ -3,6 +3,7 @@
  * route or worker imports this module while SQLite remains the live runtime.
  */
 import crypto from "node:crypto";
+import { kembalikanDenganClient } from "./kredit-video";
 import { Pool, type PoolClient } from "pg";
 import { JOB_STATES, type JobState } from "../jobs";
 import { getPool } from "./pool";
@@ -67,6 +68,12 @@ export class PgJobsRepository {
           await this.audit(client, job.user_id, "credit.release", "jobs", id, { amount_idr: refunded, org_id: job.org_id ?? undefined });
         }
       }
+      // Jatah video dikembalikan di transaksi yang SAMA dengan kegagalan job.
+      // Baris pengguna sudah dikunci di atas, dan job ini baru saja berhasil
+      // dipindah ke FAILED — transisi itu menolak job READY, jadi video yang
+      // sudah diserahkan tidak akan pernah sampai ke sini.
+      const jatahKembali = await kembalikanDenganClient(client, job.user_id, id, at, this.uuid());
+      if (jatahKembali) await this.audit(client, job.user_id, "kredit_video.kembali", "jobs", id, { via: "failJob" });
       const done = await client.query("UPDATE jobs SET state='REFUNDED',state_changed_at=$1 WHERE id=$2 AND state='FAILED'", [at, id]);
       if (done.rowCount !== 1) throw new Error("FAILED job tidak dapat dipindahkan ke REFUNDED.");
       await this.audit(client, "worker", "job.transition", "jobs", id, { to: "REFUNDED", at, refunded_credits: refunded });

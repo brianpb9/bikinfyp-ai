@@ -93,16 +93,24 @@ test("request-otp: mode mock mengembalikan dev_hint, tidak membocorkan kode", as
   assert.ok(row.code_hash.length === 64, "yang tersimpan harus sha256 hash");
 });
 
-test("signup via email: user baru dapat bonus Rp12.000", () => {
+test("signup via email: user baru dapat paket gratis 1 video", () => {
   const user = findOrCreateUserByEmail("Baru@Contoh.com");
   assert.equal(user.email, "baru@contoh.com", "email dinormalisasi lowercase");
-  const bal = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
-  assert.equal(bal.b, 12000);
-  // idempoten: email sama -> user sama, bonus tidak dobel
+  const jatah = () =>
+    (db.prepare("SELECT COALESCE(SUM(delta),0) AS n FROM kredit_video WHERE user_id = ? AND tipe = 'bonus'")
+      .get(user.id) as { n: number }).n;
+  assert.equal(jatah(), 1, "pendaftar tidak menerima paket gratis");
+
+  // SATU KALI PER EMAIL. Pendaftaran ulang dengan email yang sama tidak boleh
+  // menambah jatah — kalau bisa, paket gratis jadi mesin video tak terbatas
+  // untuk siapa pun yang menekan tombol masuk dua kali.
   const again = findOrCreateUserByEmail("baru@contoh.com");
   assert.equal(again.id, user.id);
-  const bal2 = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
-  assert.equal(bal2.b, 12000);
+  assert.equal(jatah(), 1);
+
+  // Dan bukan rupiah: saldo rupiah tidak membeli apa pun lagi.
+  const bal = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
+  assert.equal(bal.b, 0, "pendaftaran masih menulis bonus rupiah yang tidak bisa dibelanjakan");
 });
 
 test("dev-login & webhook stub: 403 saat NODE_ENV=production", async () => {
