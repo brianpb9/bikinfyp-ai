@@ -137,10 +137,15 @@ export async function POST(req: Request) {
       rincian = {
         amountIdr: total,
         label: `Kredit video BikinFYP AI`,
+        // `price` berisi TOTAL BARIS dan quantity selalu 1 — Duitku
+        // menjumlahkan price saja dan menolak (409) kalau hasilnya tidak sama
+        // dengan paymentAmount. Jumlahnya tetap terbaca pembeli lewat nama
+        // barisnya, dan bentuk ini sah di kedua tafsir: jumlah price maupun
+        // jumlah price x quantity sama-sama menghasilkan total yang benar.
         items: items.map((i) => ({
-          name: `Video ${KUALITAS[i.jenis].label}`,
-          price: harga[i.jenis] as number,
-          quantity: i.qty,
+          name: `${i.qty}× Video ${KUALITAS[i.jenis].label}`,
+          price: (harga[i.jenis] as number) * i.qty,
+          quantity: 1,
         })),
       };
     } else {

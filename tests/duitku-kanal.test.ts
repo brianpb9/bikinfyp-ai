@@ -88,3 +88,42 @@ test("tanda tangan v2 memakai formula yang diverifikasi ke sandbox", () => {
   // dipisah lagi, tagihan yang ditandatangani bisa berbeda dari yang ditagih.
   assert.match(v2, /paymentAmount: tagihan\.amountIdr/, "nilai yang ditandatangani dan yang dikirim harus satu sumber");
 });
+
+// ATURAN RINCIAN ITEM DUITKU — diverifikasi ke sandbox mereka, bukan ditebak.
+//
+// 3 Sep 2026: mengirim {price: 14000, quantity: 2} dengan paymentAmount 28000
+// ditolak HTTP 409 "Payment amount must be equal to all item price". Mereka
+// MENJUMLAHKAN price saja; quantity tidak ikut dikalikan. Aritmetika yang
+// terasa benar bagi kita (price x quantity) menghasilkan pesanan yang pasti
+// ditolak — dan penolakannya muncul sebagai 500 di layar pembeli.
+test("rincian item memakai aturan Duitku: jumlah price = nilai tagihan", () => {
+  const src = baca("lib/duitku.ts");
+  assert.match(
+    src,
+    /reduce\(\(n, i\) => n \+ i\.price, 0\)/,
+    "pemeriksaan rincian memakai price x quantity — Duitku akan menolaknya 409",
+  );
+  assert.ok(
+    !/n \+ i\.price \* i\.quantity/.test(src),
+    "aritmetika lama kembali: Duitku tidak mengalikan quantity",
+  );
+});
+
+test("checkout kredit video mengirim TOTAL BARIS, bukan harga satuan", () => {
+  const rute = baca("app/api/kredit-video/checkout/route.ts");
+  // Jumlah barisnya tetap terbaca pembeli lewat NAMA baris, jadi tidak ada
+  // informasi yang hilang dari kuitansi.
+  assert.match(rute, /price: \(harga\[i\.jenis\] as number\) \* i\.qty/, "price masih harga satuan — pesanan akan ditolak 409");
+  assert.match(rute, /quantity: 1/, "quantity harus 1 saat price sudah berisi total baris");
+  assert.match(rute, /name: `\$\{i\.qty\}× Video/, "jumlah video hilang dari rincian yang dilihat pembeli");
+});
+
+test("penolakan Duitku membawa alasannya, bukan cuma kode HTTP", () => {
+  // "HTTP 409 inquiry gagal" tanpa satu pun petunjuk adalah kalimat yang
+  // membuang waktu berjam-jam: penolakannya punya alasan, tapi alasannya
+  // dibuang sebelum sempat terbaca — res.json() yang gagal menghasilkan objek
+  // kosong, dan statusMessage jadi undefined.
+  const src = baca("lib/duitku.ts");
+  assert.match(src, /const mentah = await res\.text\(\)/, "badan jawaban Duitku masih dibuang sebelum terbaca");
+  assert.match(src, /mentah\.slice\(0, 300\)/, "alasan penolakan tidak ikut di pesan galat");
+});

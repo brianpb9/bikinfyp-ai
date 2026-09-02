@@ -51,6 +51,14 @@ function KreditInner() {
   const params = useSearchParams();
   const [katalog, setKatalog] = useState<Katalog | null>(null);
   const [jumlah, setJumlah] = useState<Record<string, number>>({});
+  // PILIHAN PAKET — satu pesanan berisi SATU jenis pembelian.
+  //
+  // Satu invoice tidak bisa sekaligus paket bulanan dan kredit satuan: aturan
+  // hangusnya berbeda (jatah paket habis di akhir masa, jatah satuan tidak),
+  // dan mencampurnya dalam satu pembayaran membuat callback harus menebak
+  // mana yang mana. Jadi memilih paket mengosongkan jumlah satuan, dan
+  // sebaliknya — dinyatakan di layar, bukan disembunyikan.
+  const [paketDipilih, setPaketDipilih] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -161,8 +169,68 @@ function KreditInner() {
 
   const bisaTopup = katalog?.jenis.filter((j) => j.bisa_ditopup) ?? [];
   const totalTopup = bisaTopup.reduce((n, j) => n + (jumlah[j.id] ?? 0) * (j.harga_idr ?? 0), 0);
-  const adaPilihan = bisaTopup.some((j) => (jumlah[j.id] ?? 0) > 0);
-  const tombolMati = busy !== null || bisaBayar !== true || (kanal.length > 0 && !kanalDipilih);
+  const adaSatuan = bisaTopup.some((j) => (jumlah[j.id] ?? 0) > 0);
+  const paket = katalog?.paket.find((p) => p.id === paketDipilih) ?? null;
+
+  // ISI KERANJANG — satu tempat yang tahu apa yang sedang dibeli.
+  //
+  // Sebelum ini tidak ada tempat seperti ini: tiap tombol beli langsung
+  // memanggil checkout, jadi tidak ada satu pun layar yang bisa menjawab
+  // "saya sedang membeli apa, berapa totalnya". Menekan paket lalu tidak
+  // melihat apa-apa adalah kegagalan yang persis itu.
+  const keranjang = paket
+    ? {
+        mode: "langganan" as const,
+        judul: `Paket ${paket.nama}`,
+        rincian: [
+          paket.kuota.standard ? `${paket.kuota.standard}× Standard` : null,
+          paket.kuota.premium ? `${paket.kuota.premium}× Premium` : null,
+          paket.kuota.ultra ? `${paket.kuota.ultra}× Ultra` : null,
+        ].filter(Boolean) as string[],
+        catatan: `Berlaku ${paket.masa_hari} hari — jatah paket hangus saat masa berlakunya habis.`,
+        total: paket.harga_idr,
+        badan: { mode: "langganan", paket_id: paket.id } as Record<string, unknown>,
+      }
+    : adaSatuan
+      ? {
+          mode: "topup" as const,
+          judul: "Kredit satuan",
+          rincian: bisaTopup
+            .filter((j) => (jumlah[j.id] ?? 0) > 0)
+            .map((j) => `${jumlah[j.id]}× ${j.label} — ${rupiah((jumlah[j.id] ?? 0) * (j.harga_idr ?? 0))}`),
+          catatan: "Kredit satuan tidak pernah hangus.",
+          total: totalTopup,
+          badan: {
+            mode: "topup",
+            items: bisaTopup.filter((j) => (jumlah[j.id] ?? 0) > 0).map((j) => ({ jenis: j.id, qty: jumlah[j.id] })),
+          } as Record<string, unknown>,
+        }
+      : null;
+
+  // Tombol bayar HANYA menunggu hal yang benar-benar kurang, dan layar
+  // mengatakan apa itu. Versi sebelumnya mematikan SEMUA tombol beli selama
+  // kanal belum dipilih — tanpa penjelasan di dekat tombolnya — jadi menekan
+  // paket bulanan tidak menghasilkan apa pun sama sekali.
+  const kurang =
+    bisaBayar !== true
+      ? "Pembayaran online belum aktif."
+      : !keranjang
+        ? "Pilih dulu paket atau jumlah videonya."
+        : kanal.length > 0 && !kanalDipilih
+          ? "Pilih dulu cara bayarnya."
+          : null;
+  const tombolMati = busy !== null || kurang !== null;
+
+  function pilihPaket(id: string) {
+    setError(null);
+    setPaketDipilih((lama) => (lama === id ? null : id));
+    setJumlah({}); // satu pesanan = satu jenis pembelian
+  }
+  function ubahJumlah(id: string, delta: number) {
+    setError(null);
+    setPaketDipilih(null); // idem
+    setJumlah((s) => ({ ...s, [id]: Math.max(0, Math.min(500, (s[id] ?? 0) + delta)) }));
+  }
 
   return (
     <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
@@ -212,67 +280,60 @@ function KreditInner() {
         </p>
       )}
 
-      {/* Kanal dipilih SEBELUM paket. Harga VA dan QRIS sama, tapi cara
-          bayarnya berbeda jauh — ditanya sesudah menekan membuat orang merasa
-          sudah terlanjur. */}
-      {bisaBayar === true && kanal.length > 0 && (
-        <div className="rounded-2xl border-2 border-zinc-200 bg-white p-3">
-          <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-400">Bayar pakai</p>
-          <div className="mt-2 grid grid-cols-2 gap-2">
-            {kanal.map((k) => (
-              <button
-                key={k.code} type="button" onClick={() => setKanalDipilih(k.code)}
-                aria-pressed={kanalDipilih === k.code}
-                className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                  kanalDipilih === k.code ? "border-amber-500 bg-amber-50 text-zinc-900" : "border-zinc-200 text-zinc-600 active:bg-zinc-50"
-                }`}
-              >
-                {k.name}
-                {k.type === "qris" && <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">Scan dari aplikasi apa pun</span>}
-              </button>
-            ))}
-          </div>
-          {!kanalDipilih && <p className="mt-2 text-xs text-zinc-500">Pilih dulu cara bayarnya.</p>}
-        </div>
-      )}
+      {/* ── APA YANG DIBELI ─────────────────────────────────────────────
+          Dua cara membeli, dan bedanya BUKAN harga melainkan MASA BERLAKU.
+          Sebelumnya keduanya berdiri sebagai dua daftar tombol beli yang
+          mirip, tanpa satu kalimat pun yang menjelaskan bedanya — jadi wajar
+          kalau membingungkan. Sekarang bedanya dinyatakan di kepala tiap
+          bagian, dan memilih salah satu mengosongkan yang lain. */}
 
       {(katalog?.paket.length ?? 0) > 0 && (
         <section className="space-y-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Berlangganan</p>
-            <h2 className="font-display text-xl font-bold">Paket bulanan</h2>
+          <div className="rounded-2xl bg-zinc-900 px-4 py-3 text-white">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Pilihan 1 · Langganan</p>
+            <h2 className="font-display text-lg font-bold">Paket bulanan</h2>
+            <p className="mt-0.5 text-xs leading-5 text-zinc-300">
+              Lebih hemat per video. Jatahnya <b className="text-white">hangus</b> saat masa berlakunya habis.
+            </p>
           </div>
-          {katalog?.paket.map((p) => (
-            <button
-              key={p.id} type="button" disabled={tombolMati}
-              onClick={() => checkout({ mode: "langganan", paket_id: p.id }, `paket-${p.id}`)}
-              className="w-full rounded-2xl border-2 border-zinc-200 bg-white p-4 text-left shadow-sm transition-transform active:scale-[0.99] disabled:opacity-60"
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="font-bold">{p.nama}</span>
-                <span className="shrink-0 font-bold text-amber-700">{rupiah(p.harga_idr)}</span>
-              </span>
-              {p.keterangan && <span className="mt-0.5 block text-sm text-zinc-500">{p.keterangan}</span>}
-              <span className="mt-2 flex flex-wrap gap-2 text-xs">
-                {p.kuota.standard > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.standard}× Standard</span>}
-                {p.kuota.premium > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.premium}× Premium</span>}
-                {p.kuota.ultra > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.ultra}× Ultra</span>}
-              </span>
-              <span className="mt-2 block text-xs text-zinc-500">
-                Berlaku {p.masa_hari} hari. Jatah paket hangus saat masa berlakunya habis.
-                {busy === `paket-${p.id}` ? " · memproses..." : ""}
-              </span>
-            </button>
-          ))}
+          {katalog?.paket.map((p) => {
+            const terpilih = paketDipilih === p.id;
+            return (
+              <button
+                key={p.id} type="button" onClick={() => pilihPaket(p.id)}
+                aria-pressed={terpilih}
+                className={`w-full rounded-2xl border-2 p-4 text-left shadow-sm transition-transform active:scale-[0.99] ${
+                  terpilih ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                }`}
+              >
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-bold">{p.nama}</span>
+                  <span className="shrink-0 font-bold text-amber-700">{rupiah(p.harga_idr)}</span>
+                </span>
+                {p.keterangan && <span className="mt-0.5 block text-sm text-zinc-500">{p.keterangan}</span>}
+                <span className="mt-2 flex flex-wrap gap-2 text-xs">
+                  {p.kuota.standard > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.standard}× Standard</span>}
+                  {p.kuota.premium > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.premium}× Premium</span>}
+                  {p.kuota.ultra > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.ultra}× Ultra</span>}
+                </span>
+                <span className={`mt-2 block text-xs font-semibold ${terpilih ? "text-amber-700" : "text-zinc-400"}`}>
+                  {terpilih ? "✓ Dipilih — lihat ringkasan di bawah" : `Berlaku ${p.masa_hari} hari · tap untuk pilih`}
+                </span>
+              </button>
+            );
+          })}
         </section>
       )}
 
       {bisaTopup.length > 0 && (
         <section className="space-y-3">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Beli satuan</p>
-            <h2 className="font-display text-xl font-bold">Tambah kredit</h2>
-            <p className="mt-1 text-sm text-zinc-500">Kredit satuan <b>tidak pernah hangus</b>.</p>
+          <div className="rounded-2xl border-2 border-zinc-200 bg-white px-4 py-3">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-zinc-400">Pilihan 2 · Sekali beli</p>
+            <h2 className="font-display text-lg font-bold">Kredit satuan</h2>
+            <p className="mt-0.5 text-xs leading-5 text-zinc-500">
+              Beli sebanyak yang kamu perlu. <b className="text-zinc-900">Tidak pernah hangus</b>, tapi harga per videonya
+              lebih tinggi daripada paket.
+            </p>
           </div>
           {bisaTopup.map((j) => (
             <div key={j.id} className="flex items-center gap-3 rounded-2xl border-2 border-zinc-200 bg-white p-3">
@@ -285,41 +346,84 @@ function KreditInner() {
                 <button
                   type="button" aria-label={`Kurangi ${j.label}`}
                   className="h-10 w-10 rounded-xl border-2 border-zinc-200 text-lg font-bold active:bg-zinc-50"
-                  onClick={() => setJumlah((s) => ({ ...s, [j.id]: Math.max(0, (s[j.id] ?? 0) - 1) }))}
+                  onClick={() => ubahJumlah(j.id, -1)}
                 >−</button>
                 <span className="w-8 text-center font-display text-lg font-bold tabular-nums">{jumlah[j.id] ?? 0}</span>
                 <button
                   type="button" aria-label={`Tambah ${j.label}`}
                   className="h-10 w-10 rounded-xl border-2 border-zinc-200 text-lg font-bold active:bg-zinc-50"
-                  onClick={() => setJumlah((s) => ({ ...s, [j.id]: Math.min(500, (s[j.id] ?? 0) + 1) }))}
+                  onClick={() => ubahJumlah(j.id, 1)}
                 >+</button>
               </div>
             </div>
           ))}
-          <div className="rounded-2xl bg-zinc-900 p-4 text-white">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-zinc-300">Total</span>
-              <span className="font-display text-2xl font-extrabold">{rupiah(totalTopup)}</span>
-            </div>
-            <button
-              type="button"
-              disabled={tombolMati || !adaPilihan}
-              onClick={() => checkout(
-                { mode: "topup", items: bisaTopup.filter((j) => (jumlah[j.id] ?? 0) > 0).map((j) => ({ jenis: j.id, qty: jumlah[j.id] })) },
-                "topup",
-              )}
-              className="mt-3 min-h-[48px] w-full rounded-xl bg-amber-500 font-bold text-white disabled:opacity-40"
-            >
-              {busy === "topup" ? "Memproses..." : adaPilihan ? "Bayar sekarang" : "Pilih dulu jumlahnya"}
-            </button>
-          </div>
         </section>
       )}
 
-      {katalog && bisaTopup.length === 0 && (
+      {katalog && bisaTopup.length === 0 && (katalog.paket.length ?? 0) === 0 && (
         <p className="rounded-2xl border border-zinc-200 bg-white p-3 text-sm text-zinc-500">
-          Pembelian satuan belum dibuka. Harga per jenis video diatur admin.
+          Belum ada paket maupun harga satuan yang dibuka. Hubungi tim kami ya.
         </p>
+      )}
+
+      {/* ── RINGKASAN PESANAN ───────────────────────────────────────────
+          Inilah yang hilang sebelumnya. Tiap tombol beli langsung memanggil
+          checkout, jadi tidak ada satu pun layar yang bisa menjawab "saya
+          sedang membeli apa, berapa totalnya" — dan ketika tombolnya diam
+          (kanal belum dipilih), tidak ada apa pun yang memberi tahu kenapa. */}
+      {keranjang && (
+        <section className="space-y-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4">
+          <div className="flex items-baseline justify-between gap-2">
+            <h2 className="font-display text-lg font-bold">Ringkasan pesanan</h2>
+            <button type="button" className="text-xs underline" onClick={() => { setPaketDipilih(null); setJumlah({}); }}>
+              ganti pilihan
+            </button>
+          </div>
+          <div className="rounded-xl bg-white p-3">
+            <p className="font-bold">{keranjang.judul}</p>
+            <ul className="mt-1 space-y-0.5 text-sm text-zinc-600">
+              {keranjang.rincian.map((r) => <li key={r}>· {r}</li>)}
+            </ul>
+            <p className="mt-2 text-xs text-zinc-500">{keranjang.catatan}</p>
+          </div>
+
+          {kanal.length > 0 && (
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-zinc-500">Bayar pakai</p>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {kanal.map((k) => (
+                  <button
+                    key={k.code} type="button" onClick={() => setKanalDipilih(k.code)}
+                    aria-pressed={kanalDipilih === k.code}
+                    className={`rounded-xl border-2 px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                      kanalDipilih === k.code ? "border-amber-500 bg-white text-zinc-900" : "border-amber-200 bg-white/60 text-zinc-600"
+                    }`}
+                  >
+                    {k.name}
+                    {k.type === "qris" && <span className="mt-0.5 block text-[11px] font-normal text-zinc-400">Scan dari aplikasi apa pun</span>}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between border-t border-amber-200 pt-3">
+            <span className="text-sm font-semibold text-zinc-600">Total bayar</span>
+            <span className="font-display text-2xl font-extrabold">{rupiah(keranjang.total)}</span>
+          </div>
+
+          <button
+            type="button" disabled={tombolMati}
+            onClick={() => checkout(keranjang.badan, "bayar")}
+            className="min-h-[52px] w-full rounded-xl bg-amber-500 font-display text-lg font-bold text-white disabled:opacity-40"
+          >
+            {busy === "bayar" ? "Memproses..." : "Bayar sekarang"}
+          </button>
+          {/* Kalau tombolnya mati, layar MENGATAKAN apa yang kurang. Tombol
+              diam tanpa penjelasan adalah cara tercepat membuat orang mengira
+              sistemnya rusak. */}
+          {kurang && <p className="text-center text-sm font-semibold text-amber-800">{kurang}</p>}
+        </section>
       )}
 
       {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}

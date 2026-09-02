@@ -165,10 +165,22 @@ function rincianDari(packageId: string, rincian?: RincianTagihan): RincianTagiha
   if (!Number.isInteger(rincian.amountIdr) || rincian.amountIdr <= 0) {
     throw new Error(`Nilai tagihan tidak sah: ${rincian.amountIdr}`);
   }
-  const jumlahItem = rincian.items.reduce((n, i) => n + i.price * i.quantity, 0);
-  // Rincian yang tidak menjumlah ke nilai tagihan adalah kuitansi yang bohong.
+  // DUITKU MENJUMLAHKAN `price` SAJA — `quantity` TIDAK ikut dikalikan.
+  //
+  // Diverifikasi langsung ke sandbox mereka 3 Sep 2026: mengirim
+  // {price: 14000, quantity: 2} dengan paymentAmount 28000 ditolak HTTP 409
+  // "Payment amount must be equal to all item price". Jadi `price` harus berisi
+  // TOTAL BARIS, bukan harga satuan.
+  //
+  // Karena itu pemeriksaan di sini memakai aturan MEREKA, bukan aritmetika yang
+  // terasa benar bagi kita. Rincian yang tidak menjumlah ke nilai tagihan bukan
+  // cuma kuitansi yang bohong — ia pesanan yang pasti ditolak.
+  const jumlahItem = rincian.items.reduce((n, i) => n + i.price, 0);
   if (jumlahItem !== rincian.amountIdr) {
-    throw new Error(`Rincian item (${jumlahItem}) tidak sama dengan nilai tagihan (${rincian.amountIdr}).`);
+    throw new Error(
+      `Rincian item (${jumlahItem}) tidak sama dengan nilai tagihan (${rincian.amountIdr}). ` +
+        "Duitku menjumlahkan price saja — isi price dengan total baris, bukan harga satuan.",
+    );
   }
   return rincian;
 }
@@ -216,16 +228,27 @@ export async function createDuitkuTransaction(opts: {
     }),
   });
 
-  const data = (await res.json().catch(() => ({}))) as {
+  // Badan jawaban dibaca sebagai TEKS dulu.
+  //
+  // Duitku tidak selalu menjawab JSON saat menolak — dan `res.json()` yang
+  // gagal diam-diam menghasilkan objek kosong, sehingga pesan galatnya menjadi
+  // "HTTP 409 inquiry gagal" tanpa satu pun petunjuk kenapa. Itu kalimat yang
+  // membuang waktu berjam-jam: penolakannya punya alasan, tapi alasannya
+  // dibuang sebelum sempat terbaca.
+  const mentah = await res.text();
+  let data: {
     statusCode?: string;
     statusMessage?: string;
+    Message?: string;
     reference?: string;
     paymentUrl?: string;
     vaNumber?: string;
     qrString?: string;
-  };
+  } = {};
+  try { data = JSON.parse(mentah); } catch { /* jawaban bukan JSON — teks mentahnya ikut di bawah */ }
   if (!res.ok || data.statusCode !== "00" || !data.reference) {
-    throw new Error(`duitku v2: HTTP ${res.status} ${data.statusMessage ?? "inquiry gagal"}`);
+    const alasan = data.statusMessage ?? data.Message ?? mentah.slice(0, 300) ?? "inquiry gagal";
+    throw new Error(`duitku v2: HTTP ${res.status} ${alasan}`);
   }
   return {
     providerRef: data.reference,

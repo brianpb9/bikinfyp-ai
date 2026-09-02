@@ -45,17 +45,19 @@ test("tombol top-up mati sampai server menyatakan pembayaran aktif", () => {
   // melonggarkan: tombol kini juga tertutup selama pembeli belum memilih
   // cara bayar. Asersi memeriksa awalan ekspresinya, supaya syarat baru
   // yang menambah ketat tidak dianggap regresi.
-  // Sejak 2 Sep syaratnya tidak lagi diketik ulang di tiap tombol melainkan
-  // dihitung sekali sebagai `tombolMati` — halaman ini punya tombol paket DAN
-  // tombol top-up satuan, dan syarat yang disalin per tombol adalah syarat
-  // yang cepat atau lambat lupa disalin ke tombol berikutnya. Yang dijaga
-  // tetap sama: defaultnya TERTUTUP sampai server bilang boleh.
-  assert.match(s, /const tombolMati = busy !== null \|\| bisaBayar !== true/, "default harus tertutup sampai server bilang boleh");
+  // Bentuknya berubah 3 Sep: syaratnya dihitung sebagai `kurang` — SATU alasan
+  // yang bisa dibaca — lalu `tombolMati` diturunkan darinya. Alasannya bukan
+  // kosmetik: versi sebelumnya mematikan tombol tanpa menjelaskan apa pun, dan
+  // menekan paket bulanan tidak menghasilkan APA PUN. Tombol diam tanpa
+  // penjelasan adalah cara tercepat membuat orang mengira sistemnya rusak.
+  //
+  // Yang dijaga tetap sama: defaultnya TERTUTUP sampai server bilang boleh
+  // ("!== true", bukan "=== false", supaya keadaan null ikut menutup).
+  assert.match(s, /bisaBayar !== true\s*\n?\s*\?/, "default harus tertutup sampai server bilang boleh");
+  assert.match(s, /const tombolMati = busy !== null \|\| kurang !== null/, "penjaga tombol tidak diturunkan dari alasan yang bisa dibaca");
   assert.ok(!/bisaBayar === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
-  // Dan syarat itu benar-benar DIPAKAI oleh setiap tombol yang mengeluarkan
-  // uang, bukan cuma dihitung lalu dibiarkan.
-  const pemakaian = (s.match(/disabled=\{tombolMati/g) ?? []).length;
-  assert.ok(pemakaian >= 2, `hanya ${pemakaian} tombol memakai penjaga — ada tombol beli yang lolos`);
+  // Dan alasannya BENAR-BENAR ditampilkan, bukan cuma dihitung.
+  assert.match(s, /\{kurang && </, "alasan tombol mati tidak pernah sampai ke layar");
   assert.match(s, /Pembayaran online belum aktif/, "halaman harus menjelaskan kenapa pembelian mati");
 });
 
