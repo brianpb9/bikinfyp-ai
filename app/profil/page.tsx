@@ -30,7 +30,14 @@ function tanggal(iso: string | null): string {
 
 const LABEL_STATUS: Record<string, { teks: string; kelas: string }> = {
   paid: { teks: "Lunas", kelas: "bg-emerald-50 text-emerald-700" },
-  sandbox_paid: { teks: "Lunas (uji)", kelas: "bg-sky-50 text-sky-700" },
+  // "Lunas (uji)" TERBACA SEBAGAI LUNAS, dan itu masalahnya.
+  //
+  // Brian melaporkan 3 Sep 2026: "status sudah paid tapi kreditnya tidak
+  // bertambah". Yang ia lihat adalah label ini. Uangnya memang terkonfirmasi
+  // Duitku — tapi kreditnya SENGAJA ditahan karena lingkungannya masih
+  // sandbox, dan label yang cuma berkata "Lunas" tidak pernah menyebut bagian
+  // kedua itu. Labelnya harus menyebut AKIBATNYA, bukan cuma keadaannya.
+  sandbox_paid: { teks: "Uji — kredit tidak masuk", kelas: "bg-sky-50 text-sky-700" },
   pending: { teks: "Menunggu", kelas: "bg-amber-50 text-amber-700" },
   failed: { teks: "Gagal", kelas: "bg-red-50 text-red-700" },
   cancelled: { teks: "Dibatalkan", kelas: "bg-zinc-100 text-zinc-500" },
