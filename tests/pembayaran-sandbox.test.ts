@@ -196,13 +196,61 @@ test("MODE UJI dikatakan terang-terangan, bukan disembunyikan", () => {
   // Membiarkan orang menyelesaikan pembayaran sandbox lalu heran kreditnya
   // tidak bertambah adalah kegagalan yang bisa diramalkan.
   assert.match(HALAMAN, /Mode uji coba/);
-  assert.match(HALAMAN, /tidak ada uang sungguhan yang dipotong/);
+  assert.match(HALAMAN, /belum memotong uang sungguhan/);
   assert.match(HALAMAN, /modeSandbox/);
+  // Kenapa kreditnya tidak bertambah HARUS ikut dikatakan — itu bagian yang
+  // paling membingungkan kalau hilang.
+  assert.match(HALAMAN, /jatah hanya bertambah untuk akun penguji terdaftar/);
 });
 
 test("klaim UANG SUNGGUHAN tetap dikunci payments_live", () => {
   // Yang boleh longgar cuma tombolnya. Klaim keamanan/uang sungguhan tetap
   // menunggu production + izin.
-  assert.match(HALAMAN, /paymentsLive !== true && \(/);
+  // Klaimnya pindah ke spanduk mode uji (3 Sep 2026) — bagian "Bayar pakai"
+  // di bawah halaman dihapus karena kanalnya sudah dipilih di ringkasan
+  // pesanan, dan daftar kedua yang tidak bisa ditekan hanya membingungkan.
+  // Yang dijaga tidak berubah: klaim soal uang sungguhan tetap menunggu
+  // payments_live.
+  assert.match(HALAMAN, /paymentsLive !== true &&/);
   assert.match(HALAMAN, /belum memotong uang sungguhan/);
+});
+
+// ── PEMBERITAHUAN OTOMATIS SAAT PEMBAYARAN MASUK ───────────────────────────
+//
+// Callback Duitku tiba di SERVER, bukan di layar pembeli. Tanpa polling,
+// halaman kredit tidak akan pernah tahu pembayarannya lunas — dan satu-satunya
+// cara mengetahuinya adalah menekan "Cek status" sendiri. Orang yang tidak tahu
+// tombol itu ada akan menyimpulkan pembayarannya gagal, lalu membayar lagi.
+// Dilaporkan Brian 3 Sep 2026 setelah membayar lewat simulator Duitku.
+test("halaman kredit memeriksa sendiri, tidak menunggu ditekan", () => {
+  assert.match(HALAMAN, /setInterval\(/, "tidak ada pemeriksaan berkala — pembayaran masuk tanpa ada yang tahu");
+  assert.match(HALAMAN, /checkOrder\(pendingOrder, true\)/, "pemeriksaan berkala tidak memakai mode diam");
+  // Berhenti sendiri: tab yang ditinggalkan terbuka tidak boleh memanggil
+  // server selamanya.
+  assert.match(HALAMAN, /sisa-- <= 0/, "polling tidak punya batas — tab yang ditinggal akan memanggil selamanya");
+  assert.match(HALAMAN, /clearInterval/, "interval tidak pernah dibersihkan");
+});
+
+test("pemeriksaan latar tidak menampilkan galat maupun indikator sibuk", () => {
+  // Kalau tidak, jaringan yang sekejap putus akan memunculkan pesan merah
+  // pada layar orang yang tidak melakukan apa-apa.
+  assert.match(HALAMAN, /if \(!diam\) setBusy\("cek"\)/);
+  assert.match(HALAMAN, /if \(!diam\) setError\(/);
+});
+
+test("setelah lunas, pembeli diantar kembali ke alur bikin konten", () => {
+  // Orang membuka halaman ini karena jatahnya habis DI TENGAH pekerjaan.
+  // Meninggalkannya di halaman dompet memaksa ia mencari sendiri jalan pulang.
+  assert.match(HALAMAN, /res\.status === "paid"/);
+  assert.match(HALAMAN, /router\.push\(target\)/, "tidak ada kepulangan setelah pembayaran berhasil");
+  assert.match(HALAMAN, /loadFlow\(\)\.returnTo \?\? "\/bikin\/jenis"/, "tujuan pulang bukan langkah pertama alur bikin");
+  assert.match(HALAMAN, /Pembayaran diterima/, "layar tidak mengatakan pembayarannya berhasil");
+});
+
+test("bagian 'Bayar pakai' yang berdiri sendiri sudah tidak ada", () => {
+  // Kanal dipilih di dalam ringkasan pesanan, tepat di atas tombol Bayar.
+  // Daftar kedua di bawah halaman tidak bisa ditekan dan hanya membuat orang
+  // bertanya-tanya mana yang berlaku.
+  const jumlahDaftarKanal = (HALAMAN.match(/kanal\.map\(/g) ?? []).length;
+  assert.equal(jumlahDaftarKanal, 1, `ada ${jumlahDaftarKanal} daftar kanal di halaman — seharusnya satu, di ringkasan pesanan`);
 });

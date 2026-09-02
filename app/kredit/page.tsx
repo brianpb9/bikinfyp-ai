@@ -177,24 +177,69 @@ function KreditInner() {
     }
   }
 
-  async function checkOrder() {
-    if (!pendingOrder) return;
-    setBusy("cek");
+  /**
+   * Cek satu pesanan. `diam` = pemeriksaan latar; ia tidak menyalakan indikator
+   * sibuk dan tidak menampilkan galat, supaya polling otomatis tidak membuat
+   * layar berkedip atau memunculkan pesan merah saat jaringan sekejap putus.
+   */
+  async function checkOrder(orderId?: string, diam = false) {
+    const target = orderId ?? pendingOrder;
+    if (!target) return;
+    if (!diam) setBusy("cek");
     try {
-      const res = await apiFetch<{ status: string; message: string }>(`/api/orders/${pendingOrder}`);
+      const res = await apiFetch<{ status: string; message: string }>(`/api/orders/${target}`);
+      setPendingOrder(target);
       setOrderStatus(res.status);
-      setMsg(res.message);
+      if (!diam || res.status !== "pending") setMsg(res.message);
       if (res.status === "paid") {
         await refresh();
-        const target = params.get("return_to") ?? loadFlow().returnTo ?? "/";
-        setTimeout(() => router.push(target), 900);
+        setPaketDipilih(null);
+        setJumlah({});
+        // ANTAR PULANG KE TEMPAT KERJANYA.
+        //
+        // Orang membuka halaman ini karena jatahnya habis di tengah alur
+        // membuat konten. Meninggalkannya di halaman dompet setelah membayar
+        // memaksa ia mencari sendiri jalan kembali ke pekerjaan yang tadi
+        // terhenti.
+        // "/bikin/jenis" adalah langkah PERTAMA alur bikin konten (lihat
+        // LANGKAH di app/_components/ui.tsx) — "/bikin" sendiri bukan halaman.
+        // Kalau pengguna datang dari tengah alur, return_to atau flow.returnTo
+        // mengembalikannya persis ke langkah yang tadi terhenti.
+        const target = params.get("return_to") ?? loadFlow().returnTo ?? "/bikin/jenis";
+        setTimeout(() => router.push(target), 1200);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal cek status.");
+      if (!diam) setError(err instanceof Error ? err.message : "Gagal cek status.");
     } finally {
-      setBusy(null);
+      if (!diam) setBusy(null);
     }
   }
+
+  /**
+   * PEMBERITAHUAN OTOMATIS SAAT PEMBAYARAN MASUK.
+   *
+   * Callback Duitku tiba di server, bukan di layar ini — jadi tanpa polling,
+   * halaman ini tidak akan pernah tahu pembayarannya sudah lunas. Sebelumnya
+   * satu-satunya cara mengetahuinya adalah menekan "Cek status" sendiri, dan
+   * orang yang tidak tahu tombol itu ada akan menyimpulkan pembayarannya
+   * gagal.
+   *
+   * Diperiksa tiap 5 detik selama 10 menit — cukup panjang untuk transfer VA
+   * yang selesai di aplikasi bank, dan berhenti sendiri supaya tab yang
+   * ditinggalkan terbuka tidak memanggil server selamanya.
+   */
+  useEffect(() => {
+    if (!pendingOrder) return;
+    if (orderStatus && orderStatus !== "pending") return;
+    let hidup = true;
+    let sisa = 120; // 120 x 5 detik = 10 menit
+    const jam = setInterval(() => {
+      if (!hidup || sisa-- <= 0) { clearInterval(jam); return; }
+      void checkOrder(pendingOrder, true);
+    }, 5000);
+    return () => { hidup = false; clearInterval(jam); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingOrder, orderStatus]);
 
   const bisaTopup = katalog?.jenis.filter((j) => j.bisa_ditopup) ?? [];
   const totalTopup = bisaTopup.reduce((n, j) => n + (jumlah[j.id] ?? 0) * (j.harga_idr ?? 0), 0);
@@ -307,7 +352,7 @@ function KreditInner() {
                 <button
                   type="button"
                   className="font-bold text-sky-700 underline"
-                  onClick={() => { setPendingOrder(o.order_id); setOrderStatus("pending"); void checkOrder(); }}
+                  onClick={() => void checkOrder(o.order_id)}
                 >
                   Cek status
                 </button>
@@ -335,7 +380,9 @@ function KreditInner() {
       )}
       {bisaBayar === true && modeSandbox === true && (
         <p className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
-          <b>Mode uji coba.</b> Pembayaran memakai sandbox Duitku, jadi <b>tidak ada uang sungguhan yang dipotong</b>,
+          <b>Mode uji coba.</b> Pembayaran memakai sandbox Duitku, jadi{" "}
+          {paymentsLive !== true && <b>belum memotong uang sungguhan</b>}
+          {paymentsLive !== true && ", "}
           dan jatah hanya bertambah untuk akun penguji terdaftar.
         </p>
       )}
@@ -552,34 +599,35 @@ function KreditInner() {
           Buka lagi halaman {instruksi.nama ?? "pembayaran"}
         </a>
       )}
-      {bisaBayar === true && (
-        <section className="space-y-2">
-          <h2 className="font-display text-lg font-bold">Bayar pakai</h2>
-          <div className="flex flex-wrap gap-2">
-            {kanal.map((k) => (
-              <span key={k.code} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
-                {k.name}
-              </span>
-            ))}
-          </div>
-          {/* Klaim UANG SUNGGUHAN tetap dikunci payments_live, terpisah dari
-              tombolnya. Tombol boleh hidup di sandbox — itu yang diminta Duitku
-              untuk diperlihatkan — tapi mengatakan "uangmu benar-benar
-              dipotong" di lingkungan uji adalah bohong. */}
-          {paymentsLive !== true && (
-            <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
-              Metode di atas dilayani lewat sandbox Duitku selama masa verifikasi —
-              belum memotong uang sungguhan.
-            </p>
-          )}
-        </section>
+      {/* Bagian "Bayar pakai" yang berdiri sendiri DIHAPUS 3 Sep 2026.
+          Pemilihan kanal sudah ada di dalam ringkasan pesanan, tepat di atas
+          tombol Bayar. Daftar kedua di bawah halaman tidak bisa dipilih dan
+          tidak menjelaskan apa-apa — ia hanya membuat orang bertanya-tanya
+          mana yang berlaku. Klaim "belum memotong uang sungguhan" pindah ke
+          spanduk mode uji di atas, tempat orang membacanya sebelum membayar,
+          bukan sesudah menggulir sampai bawah. */}
+
+      {/* Layar sudah memeriksa sendiri tiap 5 detik; tombol ini untuk yang
+          tidak mau menunggu — bukan lagi satu-satunya cara mengetahui. */}
+      {pendingOrder && orderStatus !== "paid" && (
+        <div className="space-y-2">
+          <button type="button" onClick={() => void checkOrder()} disabled={busy !== null}
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50 disabled:opacity-60">
+            {busy === "cek" ? "Mengecek..." : "Sudah bayar? Cek status"}
+          </button>
+          <p className="text-center text-xs text-zinc-500">
+            Kami juga mengecek sendiri tiap beberapa detik — halaman ini akan berubah begitu pembayaranmu masuk.
+          </p>
+        </div>
       )}
 
-      {pendingOrder && orderStatus !== "paid" && (
-        <button type="button" onClick={checkOrder} disabled={busy !== null}
-          className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-amber-500 font-bold text-amber-700 active:bg-amber-50 disabled:opacity-60">
-          {busy === "cek" ? "Mengecek..." : "Sudah bayar? Cek status"}
-        </button>
+      {/* Pembayaran MASUK — dan halaman mengatakannya, lalu mengantar kembali
+          ke tempat kerjanya. */}
+      {orderStatus === "paid" && (
+        <div className="rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4 text-center">
+          <p className="font-display text-lg font-bold text-emerald-800">Pembayaran diterima</p>
+          <p className="mt-1 text-sm text-emerald-900">Jatahmu sudah masuk. Mengantar kembali ke halaman bikin konten…</p>
+        </div>
       )}
     </main>
   );
