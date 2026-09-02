@@ -77,6 +77,8 @@ test("approve dengan kata terlarang -> 422 FORBIDDEN_WORDS (L-10 keras saat edit
 });
 
 test("setelah approve -> job dibuat (201) dan state QUEUED", async () => {
+  const { bonusKredit } = await import("../lib/kredit-video-sqlite");
+  bonusKredit(user.id, "premium", 1, "jatah fixture uji");
   const resApprove = await approveScript(req(`/api/scripts/${scriptId}/approve`, {}), ctxOf(scriptId));
   assert.equal(resApprove.status, 200);
 
@@ -95,13 +97,17 @@ test("setelah approve -> job dibuat (201) dan state QUEUED", async () => {
   // JATAH VIDEO yang terpotong, bukan rupiah (sejak 2 Sep 2026). Naskah ini
   // bertier high_quality, yang dipetakan ke jatah "premium" — job dari naskah
   // lama tetap membayar, dan membayar dari jatah yang setara.
+  //
+  // Jatah premiumnya diberikan eksplisit di atas: paket gratis pendaftar
+  // berjenis Standard sejak modalnya diukur, jadi tes ini tidak boleh
+  // menumpang padanya.
   const pakai = db
     .prepare("SELECT jenis, ember, delta FROM kredit_video WHERE user_id = ? AND tipe = 'pakai'")
     .all(user.id) as { jenis: string; ember: string; delta: number }[];
   assert.equal(pakai.length, 1, "dua request berdekatan memotong jatah dua kali");
   assert.equal(pakai[0].jenis, "premium");
   assert.equal(pakai[0].delta, -1);
-  // Paket gratis pendaftar = 1 video premium, jadi sesudah satu job jatahnya habis.
+  // Satu jatah diberikan, satu job dibuat — sisanya nol.
   const { sisaKredit } = await import("../lib/kredit-video-sqlite");
   assert.equal(sisaKredit(user.id).premium.total, 0);
 });

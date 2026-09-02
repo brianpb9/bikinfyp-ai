@@ -100,6 +100,8 @@ test("signup via email: user baru dapat paket gratis 1 video", () => {
     (db.prepare("SELECT COALESCE(SUM(delta),0) AS n FROM kredit_video WHERE user_id = ? AND tipe = 'bonus'")
       .get(user.id) as { n: number }).n;
   assert.equal(jatah(), 1, "pendaftar tidak menerima paket gratis");
+  // Jenisnya mengikuti config, bukan dipaku di tes — yang dijaga adalah
+  // "satu video, sekali per email", bukan jenis mana yang sedang dipilih.
 
   // SATU KALI PER EMAIL. Pendaftaran ulang dengan email yang sama tidak boleh
   // menambah jatah — kalau bisa, paket gratis jadi mesin video tak terbatas

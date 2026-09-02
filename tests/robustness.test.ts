@@ -36,10 +36,11 @@ test("failJob idempoten: refund sekali dan tidak pernah menimpa READY", async ()
   ).run(uuid(), user.id, 5000, "bonus", now());
   assert.ok(holdCredits(user.id, jobId, 5000));
   // Jatah video ikut dipotong, supaya pengembaliannya bisa diperiksa di bawah.
-  // Jatahnya datang dari paket gratis pendaftaran (1 video premium) — tidak
-  // perlu ditambah, dan menambahnya justru menyembunyikan apakah paket gratis
-  // itu benar-benar diberikan.
-  const { pakaiKredit, sisaKredit } = await import("../lib/kredit-video-sqlite");
+  // Jatah diberikan eksplisit: paket gratis pendaftar berjenis Standard sejak
+  // modalnya diukur, dan tes ini menguji mekanik pengembalian — bukan
+  // kebijakan bonus, yang diuji terpisah di tests/security-otp.test.ts.
+  const { pakaiKredit, sisaKredit, bonusKredit } = await import("../lib/kredit-video-sqlite");
+  bonusKredit(user.id, "premium", 1, "jatah fixture uji");
   assert.equal(pakaiKredit(user.id, "premium", jobId), "topup");
   assert.equal(sisaKredit(user.id).premium.total, 0);
   const before = getBalance(user.id);

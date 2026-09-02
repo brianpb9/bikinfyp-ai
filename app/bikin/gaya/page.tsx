@@ -80,6 +80,11 @@ export default function GayaPage() {
   // tetap sah kalau datang dari alur tersimpan, tapi bukan lagi titik awal.
   const [tier, setTier] = useState<Tier>("premium");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
+  // SISA JATAH per jenis. Tanpa ini, pemilih kualitas menawarkan tier yang
+  // jatahnya sudah habis dan orang baru ditolak di langkah TERAKHIR — sesudah
+  // menulis naskah, memilih avatar, dan menekan Bikin. Kegagalan yang bisa
+  // diramalkan sejak layar ini dibuka.
+  const [sisa, setSisa] = useState<Record<string, { total: number }> | null>(null);
   const [format, setFormat] = useState<VideoFormat>("talking_head");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [hookPct, setHookPct] = useState(15);
@@ -128,6 +133,9 @@ export default function GayaPage() {
   useEffect(() => {
     if (!loadFlow().product) router.replace("/bikin/produk");
     apiFetch<{ tiers: TierMeta[] }>("/api/meta").then((m) => setTiers(m.tiers)).catch(() => {});
+    apiFetch<{ sisa: Record<string, { total: number }> }>("/api/kredit-video")
+      .then((d) => setSisa(d.sisa))
+      .catch(() => setSisa(null));
     track("gaya_view");
   }, [router]);
 
@@ -150,6 +158,18 @@ export default function GayaPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarGender]);
+
+  // Pilih otomatis tier yang MASIH punya jatah, sekali saja saat sisa datang.
+  // Pendaftar baru cuma punya jatah Standard; membiarkan Premium terpilih
+  // berarti tombol Bikin-nya pasti gagal.
+  const sudahPilihOtomatis = useRef(false);
+  useEffect(() => {
+    if (!sisa || sudahPilihOtomatis.current || !tiers.length) return;
+    if ((sisa[tier]?.total ?? 0) > 0) { sudahPilihOtomatis.current = true; return; }
+    const punya = tiers.find((t) => (sisa[t.id]?.total ?? 0) > 0);
+    if (punya) setTier(punya.id as Tier);
+    sudahPilihOtomatis.current = true;
+  }, [sisa, tiers, tier]);
 
   const selectedTier = tiers.find((t) => t.id === tier);
   const selectedAvatar = getAvatarPreset(avatarId);
@@ -307,9 +327,12 @@ export default function GayaPage() {
               key={t.id}
               type="button"
               onClick={() => setTier(t.id as Tier)}
+              // Tier tanpa jatah TIDAK dimatikan, hanya diredupkan dan diberi
+              // jalan keluar. Mematikannya menyembunyikan pilihan yang memang
+              // ada — orang berhak melihat Ultra dan memutuskan membelinya.
               className={`relative w-full rounded-2xl border-2 p-4 text-left ${
                 tier === t.id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-zinc-200 bg-white shadow-sm"
-              }`}
+              } ${sisa && (sisa[t.id]?.total ?? 0) === 0 ? "opacity-60" : ""}`}
             >
               {t.tag && (
                 <span className="absolute -top-3 right-4 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white">
@@ -321,6 +344,15 @@ export default function GayaPage() {
                 <span className="font-bold text-amber-700">{rupiah(Math.round(t.price_idr * (durationSec / 15)))}/video</span>
               </span>
               <span className="text-sm text-zinc-500">{t.note}</span>
+              {sisa && (
+                <span className="mt-1 block text-xs font-semibold">
+                  {(sisa[t.id]?.total ?? 0) > 0 ? (
+                    <span className="text-emerald-700">Sisa jatahmu: {sisa[t.id].total} video</span>
+                  ) : (
+                    <span className="text-amber-700">Jatahmu habis — beli dulu di halaman Kredit</span>
+                  )}
+                </span>
+              )}
             </button>
           ))}
         </section>

@@ -397,7 +397,20 @@ export const config = {
   // jadi bonus rupiah akan jadi angka yang tidak bisa dibelanjakan: pendaftar
   // melihat "punya saldo" lalu ditolak saat menekan Bikin. Satu video Premium
   // adalah padanan langsung dari bonus Rp12.000 yang lama.
-  signupBonusJenis: env("SIGNUP_BONUS_JENIS", "premium"),
+  // JENISNYA STANDARD, bukan Premium — dan itu keputusan biaya, bukan pelit.
+  //
+  // Sebelum modalnya diukur, paket gratis diisi Premium karena ia padanan
+  // langsung bonus Rp12.000 yang lama. Setelah diukur: satu Premium berbiaya
+  // Rp26.286. Pada 100 pendaftar sehari itu Rp2,6 juta per hari terbakar
+  // sebelum ada satu rupiah pun masuk — biaya akuisisi yang tidak akan pernah
+  // terlihat sebagai baris tersendiri di tagihan mana pun.
+  //
+  // Standard berbiaya Rp4.360 dan tetap video utuh dengan audio. Ia juga yang
+  // paling banyak dibeli di paket masuk, jadi yang dicicipi pendaftar persis
+  // barang yang akan ia beli.
+  //
+  // Kembalikan ke Premium lewat SIGNUP_BONUS_JENIS bila mau, tanpa deploy.
+  signupBonusJenis: env("SIGNUP_BONUS_JENIS", "standard"),
   signupBonusQty: Number(env("SIGNUP_BONUS_QTY", "1")),
   // Parameter bisnis
   signedUrlTtlSec: 3600, // SRS NF-SEC04: TTL <= 1 jam

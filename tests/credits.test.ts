@@ -9,6 +9,7 @@ process.env.DB_PATH = `/tmp/racun-test-credits-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-credits-storage-${process.pid}`;
 
 const { getDb } = await import("../lib/db");
+const { config } = await import("../lib/config");
 const { findOrCreateUserByPhone } = await import("../lib/auth");
 const { getBalance, holdCredits, captureCredits, releaseCredits, creditTopup, tierPriceIdr } = await import("../lib/credits");
 
@@ -40,8 +41,11 @@ test("pendaftar baru TIDAK lagi menerima saldo rupiah — ia menerima jatah vide
     .prepare("SELECT jenis, delta FROM kredit_video WHERE user_id = ? AND tipe = 'bonus'")
     .all(user.id) as { jenis: string; delta: number }[];
   assert.equal(jatah.length, 1, "pendaftar baru tidak menerima paket gratis apa pun");
-  assert.equal(jatah[0].delta, 1);
-  assert.equal(jatah[0].jenis, "premium");
+  // Jumlah dan jenisnya mengikuti config, bukan dipaku di sini: yang dijaga
+  // adalah "pendaftar menerima jatah VIDEO, sekali", bukan jenis mana yang
+  // sedang dipilih sebagai promosi.
+  assert.equal(jatah[0].delta, config.signupBonusQty);
+  assert.equal(jatah[0].jenis, config.signupBonusJenis);
 });
 
 test("harga tier sesuai keputusan final: 5000 / 12000 / 80000", () => {
