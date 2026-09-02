@@ -34,12 +34,26 @@ interface Paket {
   kuota: { standard: number; premium: number; ultra: number }; total_video: number;
 }
 interface Langganan { id: string; paket_nama: string; berakhir_pada: string; sisa: Record<string, number> }
+interface PesananTertunda {
+  order_id: string; amount_idr: number; dibuat_pada: string;
+  paket_id: string | null; items: { jenis: string; qty: number }[];
+  va_number: string | null; redirect_url: string | null;
+}
 interface Katalog {
   sisa: Record<string, SisaJenis>;
   jenis: Jenis[];
   paket: Paket[];
   langganan: Langganan[];
+  pesanan_tertunda: PesananTertunda[];
 }
+
+/** "5 menit lalu" — umur pesanan lebih berguna daripada jam pastinya. */
+const waktuSingkat = (iso: string) => {
+  const menit = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60_000));
+  if (menit < 1) return "baru saja";
+  if (menit < 60) return `${menit} menit lalu`;
+  return `${Math.round(menit / 60)} jam lalu`;
+};
 
 const tanggal = (iso: string) => {
   const d = new Date(iso);
@@ -51,13 +65,10 @@ function KreditInner() {
   const params = useSearchParams();
   const [katalog, setKatalog] = useState<Katalog | null>(null);
   const [jumlah, setJumlah] = useState<Record<string, number>>({});
-  // PILIHAN PAKET — satu pesanan berisi SATU jenis pembelian.
-  //
-  // Satu invoice tidak bisa sekaligus paket bulanan dan kredit satuan: aturan
-  // hangusnya berbeda (jatah paket habis di akhir masa, jatah satuan tidak),
-  // dan mencampurnya dalam satu pembayaran membuat callback harus menebak
-  // mana yang mana. Jadi memilih paket mengosongkan jumlah satuan, dan
-  // sebaliknya — dinyatakan di layar, bukan disembunyikan.
+  // Paket bulanan dan kredit satuan BOLEH dibeli sekaligus dalam satu
+  // pesanan. Aturan hangusnya tetap berbeda — jatah paket habis di akhir masa,
+  // jatah satuan tidak — dan itu dinyatakan terpisah di ringkasan, bukan
+  // diselesaikan dengan melarang keduanya digabung.
   const [paketDipilih, setPaketDipilih] = useState<string | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -121,13 +132,18 @@ function KreditInner() {
     checkoutLock.current = true;
     setBusy(kunci); setMsg(null); setError(null); setInstruksi(null);
     try {
-      const res = await apiFetch<{ order_id: string; amount_idr: number; redirect_url: string; va_number?: string }>(
+      const res = await apiFetch<{ order_id: string; amount_idr: number; redirect_url: string; va_number?: string; dilanjutkan?: boolean }>(
         "/api/kredit-video/checkout",
         { json: { ...badan, ...(kanalDipilih ? { payment_method: kanalDipilih } : {}) } },
       );
       setPendingOrder(res.order_id);
       setOrderStatus("pending");
       const nama = kanal.find((k) => k.code === kanalDipilih)?.name;
+      // Server MELANJUTKAN pesanan yang sama alih-alih membuat yang baru.
+      // Dikatakan apa adanya: orang yang mengira pesanan pertamanya hilang
+      // akan mengira ini pesanan kedua, dan mencari-cari tagihan yang tidak
+      // pernah ada.
+      if (res.dilanjutkan) setMsg("Ini pesanan yang tadi belum dibayar — nomornya sama, bukan tagihan baru.");
       if (res.va_number) {
         // Nomor VA ditampilkan DI TEMPAT: pembeli harus menyalinnya ke aplikasi
         // banknya, dan membuka tab baru justru memindahkannya menjauh.
@@ -145,6 +161,19 @@ function KreditInner() {
     } finally {
       setBusy(null);
       checkoutLock.current = false;
+    }
+  }
+
+  async function batalkan(orderId: string) {
+    setBusy("batal"); setError(null);
+    try {
+      await apiFetch(`/api/orders/${orderId}`, { method: "DELETE" });
+      setMsg("Pesanan dibatalkan.");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal membatalkan pesanan.");
+    } finally {
+      setBusy(null);
     }
   }
 
@@ -176,45 +205,29 @@ function KreditInner() {
   //
   // Sebelum ini tidak ada tempat seperti ini: tiap tombol beli langsung
   // memanggil checkout, jadi tidak ada satu pun layar yang bisa menjawab
-  // "saya sedang membeli apa, berapa totalnya". Menekan paket lalu tidak
-  // melihat apa-apa adalah kegagalan yang persis itu.
-  const keranjang = paket
-    ? {
-        mode: "langganan" as const,
-        judul: `Paket ${paket.nama}`,
-        rincian: [
-          paket.kuota.standard ? `${paket.kuota.standard}× Standard` : null,
-          paket.kuota.premium ? `${paket.kuota.premium}× Premium` : null,
-          paket.kuota.ultra ? `${paket.kuota.ultra}× Ultra` : null,
-        ].filter(Boolean) as string[],
-        catatan: `Berlaku ${paket.masa_hari} hari — jatah paket hangus saat masa berlakunya habis.`,
-        total: paket.harga_idr,
-        badan: { mode: "langganan", paket_id: paket.id } as Record<string, unknown>,
-      }
-    : adaSatuan
-      ? {
-          mode: "topup" as const,
-          judul: "Kredit satuan",
-          rincian: bisaTopup
-            .filter((j) => (jumlah[j.id] ?? 0) > 0)
-            .map((j) => `${jumlah[j.id]}× ${j.label} — ${rupiah((jumlah[j.id] ?? 0) * (j.harga_idr ?? 0))}`),
-          catatan: "Kredit satuan tidak pernah hangus.",
-          total: totalTopup,
-          badan: {
-            mode: "topup",
-            items: bisaTopup.filter((j) => (jumlah[j.id] ?? 0) > 0).map((j) => ({ jenis: j.id, qty: jumlah[j.id] })),
-          } as Record<string, unknown>,
-        }
-      : null;
+  // "saya sedang membeli apa, berapa totalnya".
+  //
+  // Keranjangnya boleh memuat paket DAN satuan sekaligus; keduanya tetap
+  // ditampilkan sebagai dua baris terpisah karena masa berlakunya berbeda.
+  const barisSatuan = bisaTopup
+    .filter((j) => (jumlah[j.id] ?? 0) > 0)
+    .map((j) => ({ jenis: j.id, qty: jumlah[j.id] as number, label: j.label, subtotal: (jumlah[j.id] ?? 0) * (j.harga_idr ?? 0) }));
+  const adaIsi = Boolean(paket) || barisSatuan.length > 0;
+  const totalKeranjang = (paket?.harga_idr ?? 0) + totalTopup;
+  const badanPesanan: Record<string, unknown> = {
+    mode: paket && barisSatuan.length ? "campuran" : paket ? "langganan" : "topup",
+    ...(paket ? { paket_id: paket.id } : {}),
+    ...(barisSatuan.length ? { items: barisSatuan.map((b) => ({ jenis: b.jenis, qty: b.qty })) } : {}),
+  };
 
   // Tombol bayar HANYA menunggu hal yang benar-benar kurang, dan layar
-  // mengatakan apa itu. Versi sebelumnya mematikan SEMUA tombol beli selama
+  // MENGATAKAN apa itu. Versi sebelumnya mematikan semua tombol beli selama
   // kanal belum dipilih — tanpa penjelasan di dekat tombolnya — jadi menekan
   // paket bulanan tidak menghasilkan apa pun sama sekali.
   const kurang =
     bisaBayar !== true
       ? "Pembayaran online belum aktif."
-      : !keranjang
+      : !adaIsi
         ? "Pilih dulu paket atau jumlah videonya."
         : kanal.length > 0 && !kanalDipilih
           ? "Pilih dulu cara bayarnya."
@@ -223,12 +236,13 @@ function KreditInner() {
 
   function pilihPaket(id: string) {
     setError(null);
+    // Satu paket per pesanan — dua paket sekaligus akan membuat dua periode
+    // langganan dari satu pembayaran, dan indeks unik database menolaknya.
+    // Kredit satuan TIDAK ikut dikosongkan: keduanya boleh berbarengan.
     setPaketDipilih((lama) => (lama === id ? null : id));
-    setJumlah({}); // satu pesanan = satu jenis pembelian
   }
   function ubahJumlah(id: string, delta: number) {
     setError(null);
-    setPaketDipilih(null); // idem
     setJumlah((s) => ({ ...s, [id]: Math.max(0, Math.min(500, (s[id] ?? 0) + delta)) }));
   }
 
@@ -267,6 +281,52 @@ function KreditInner() {
           </p>
         ))}
       </div>
+
+      {/* PESANAN YANG BELUM DIBAYAR — dikatakan lebih dulu, sebelum orang
+          membuat pesanan kedua. Cara paling umum orang membayar dua kali
+          bukan karena serakah, melainkan karena tidak tahu yang pertama masih
+          menunggu. */}
+      {(katalog?.pesanan_tertunda.length ?? 0) > 0 && (
+        <section className="space-y-2 rounded-2xl border-2 border-sky-400 bg-sky-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-sky-700">Belum dibayar</p>
+          {katalog?.pesanan_tertunda.map((o) => (
+            <div key={o.order_id} className="rounded-xl bg-white p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-bold">{rupiah(o.amount_idr)}</p>
+                <p className="shrink-0 text-xs text-zinc-500">{waktuSingkat(o.dibuat_pada)}</p>
+              </div>
+              {o.va_number && (
+                <p className="mt-1 select-all font-display text-lg font-extrabold tracking-wider">{o.va_number}</p>
+              )}
+              <div className="mt-2 flex flex-wrap gap-3 text-sm">
+                {o.redirect_url && !o.va_number && (
+                  <a href={o.redirect_url} target="_blank" rel="noreferrer" className="font-bold text-sky-700 underline">
+                    Lanjutkan bayar
+                  </a>
+                )}
+                <button
+                  type="button"
+                  className="font-bold text-sky-700 underline"
+                  onClick={() => { setPendingOrder(o.order_id); setOrderStatus("pending"); void checkOrder(); }}
+                >
+                  Cek status
+                </button>
+                <button
+                  type="button"
+                  className="text-zinc-500 underline"
+                  onClick={() => batalkan(o.order_id)}
+                >
+                  Batalkan
+                </button>
+              </div>
+            </div>
+          ))}
+          <p className="text-xs leading-5 text-sky-900">
+            Kalau kamu sudah bayar, tap <b>Cek status</b>. Jangan buat pesanan baru untuk hal yang sama —
+            dua nomor pembayaran yang sama-sama hidup berarti bisa terbayar dua kali.
+          </p>
+        </section>
+      )}
 
       {bisaBayar === false && (
         <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
@@ -371,21 +431,61 @@ function KreditInner() {
           checkout, jadi tidak ada satu pun layar yang bisa menjawab "saya
           sedang membeli apa, berapa totalnya" — dan ketika tombolnya diam
           (kanal belum dipilih), tidak ada apa pun yang memberi tahu kenapa. */}
-      {keranjang && (
+      {adaIsi && (
         <section className="space-y-3 rounded-2xl border-2 border-amber-400 bg-amber-50 p-4">
           <div className="flex items-baseline justify-between gap-2">
             <h2 className="font-display text-lg font-bold">Ringkasan pesanan</h2>
             <button type="button" className="text-xs underline" onClick={() => { setPaketDipilih(null); setJumlah({}); }}>
-              ganti pilihan
+              kosongkan
             </button>
           </div>
-          <div className="rounded-xl bg-white p-3">
-            <p className="font-bold">{keranjang.judul}</p>
-            <ul className="mt-1 space-y-0.5 text-sm text-zinc-600">
-              {keranjang.rincian.map((r) => <li key={r}>· {r}</li>)}
-            </ul>
-            <p className="mt-2 text-xs text-zinc-500">{keranjang.catatan}</p>
-          </div>
+
+          {/* Paket dan satuan tetap DUA BARIS TERPISAH walau dibayar sekaligus:
+              yang satu hangus di akhir masa, yang satu tidak. Menggabungkannya
+              jadi satu baris akan menyembunyikan perbedaan yang paling penting
+              bagi pembeli. */}
+          {paket && (
+            <div className="rounded-xl bg-white p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-bold">Paket {paket.nama}</p>
+                <p className="shrink-0 font-bold tabular-nums">{rupiah(paket.harga_idr)}</p>
+              </div>
+              <ul className="mt-1 space-y-0.5 text-sm text-zinc-600">
+                {paket.kuota.standard > 0 && <li>· {paket.kuota.standard}× Standard</li>}
+                {paket.kuota.premium > 0 && <li>· {paket.kuota.premium}× Premium</li>}
+                {paket.kuota.ultra > 0 && <li>· {paket.kuota.ultra}× Ultra</li>}
+              </ul>
+              <p className="mt-2 text-xs text-zinc-500">
+                Berlaku {paket.masa_hari} hari — jatah paket hangus saat masa berlakunya habis.
+              </p>
+              {/* SUDAH BERLANGGANAN? Katakan sekarang, bukan sesudah dibayar.
+                  Paket kedua DITAMBAHKAN, bukan menggantikan — dan orang yang
+                  mengira langganan pertamanya gagal berhak tahu itu sebelum
+                  membayar lagi. */}
+              {(katalog?.langganan.length ?? 0) > 0 && (
+                <p className="mt-2 rounded-lg bg-amber-100 p-2 text-xs leading-5 text-amber-900">
+                  <b>Kamu masih punya langganan aktif</b>
+                  {katalog?.langganan[0] ? ` (${katalog.langganan[0].paket_nama}, sampai ${tanggal(katalog.langganan[0].berakhir_pada)})` : ""}.
+                  Paket ini <b>ditambahkan</b>, bukan menggantikan — jatah lamamu tetap berlaku sampai tanggal itu.
+                </p>
+              )}
+            </div>
+          )}
+
+          {barisSatuan.length > 0 && (
+            <div className="rounded-xl bg-white p-3">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="font-bold">Kredit satuan</p>
+                <p className="shrink-0 font-bold tabular-nums">{rupiah(totalTopup)}</p>
+              </div>
+              <ul className="mt-1 space-y-0.5 text-sm text-zinc-600">
+                {barisSatuan.map((b) => (
+                  <li key={b.jenis}>· {b.qty}× {b.label} — {rupiah(b.subtotal)}</li>
+                ))}
+              </ul>
+              <p className="mt-2 text-xs text-zinc-500">Kredit satuan tidak pernah hangus.</p>
+            </div>
+          )}
 
           {kanal.length > 0 && (
             <div>
@@ -409,12 +509,12 @@ function KreditInner() {
 
           <div className="flex items-center justify-between border-t border-amber-200 pt-3">
             <span className="text-sm font-semibold text-zinc-600">Total bayar</span>
-            <span className="font-display text-2xl font-extrabold">{rupiah(keranjang.total)}</span>
+            <span className="font-display text-2xl font-extrabold">{rupiah(totalKeranjang)}</span>
           </div>
 
           <button
             type="button" disabled={tombolMati}
-            onClick={() => checkout(keranjang.badan, "bayar")}
+            onClick={() => checkout(badanPesanan, "bayar")}
             className="min-h-[52px] w-full rounded-xl bg-amber-500 font-display text-lg font-bold text-white disabled:opacity-40"
           >
             {busy === "bayar" ? "Memproses..." : "Bayar sekarang"}

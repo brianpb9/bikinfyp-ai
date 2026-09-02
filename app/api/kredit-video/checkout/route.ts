@@ -37,7 +37,7 @@ async function simpanPesanan(input: {
   userId: string;
   orderId: string;
   amountIdr: number;
-  jenisPesanan: "topup_video" | "langganan";
+  jenisPesanan: "topup_video" | "langganan" | "campuran";
   paketId: string | null;
   items: ItemTopup[];
   harga: Record<string, number | undefined>;
@@ -46,6 +46,7 @@ async function simpanPesanan(input: {
     jenis_pesanan: input.jenisPesanan,
     paket_id: input.paketId,
     items: input.items,
+    sidik: sidikPesanan(input.paketId, input.items),
     payments_env: paymentsEnv(),
   });
   if (postgresRuntimeEnabled()) {
@@ -67,6 +68,93 @@ async function simpanPesanan(input: {
   await catatAudit(input.userId, "payment.checkout", "payments", input.orderId, {
     jenis_pesanan: input.jenisPesanan, amount_idr: input.amountIdr, paket_id: input.paketId,
   });
+}
+
+/** Sidik isi pesanan — dipakai mengenali pesanan tertunda yang SAMA PERSIS. */
+function sidikPesanan(paketId: string | null, items: ItemTopup[]): string {
+  const bagian = [paketId ?? "-", ...items.map((i) => `${i.jenis}x${i.qty}`)];
+  return bagian.join("|");
+}
+
+/**
+ * Pesanan yang MASIH MENUNGGU dibayar, isinya sama persis, dan invoicenya
+ * belum kedaluwarsa.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA DICARI SEBELUM MEMBUAT YANG BARU
+ * ────────────────────────────────────────────────────────────────────────────
+ * Cara paling umum orang membayar dua kali bukan karena serakah, melainkan
+ * karena ragu: menekan Bayar, tidak sempat menyelesaikannya, lalu kembali dan
+ * menekan lagi. Tanpa penjagaan ini ia mendapat DUA nomor VA yang dua-duanya
+ * hidup — dan kalau ia membayar keduanya, ia benar-benar membayar dua kali.
+ *
+ * Batasnya mengikuti masa berlaku invoice Duitku (60 menit). Lewat itu nomor
+ * VA-nya memang sudah mati, jadi pesanan baru justru yang benar.
+ */
+async function pesananTertundaSama(
+  userId: string, sidik: string,
+): Promise<{ orderId: string; provider: Record<string, unknown> } | null> {
+  const batas = new Date(Date.now() - 60 * 60_000).toISOString();
+  type Baris = { gateway_ref: string; raw_payload: string | null };
+  let baris: Baris[] = [];
+  if (postgresRuntimeEnabled()) {
+    const r = await getPool(config.databaseUrl).query<Baris>(
+      `SELECT gateway_ref, raw_payload FROM payments
+        WHERE user_id = $1 AND status = 'pending' AND created_at > $2
+        ORDER BY created_at DESC LIMIT 10`,
+      [userId, batas],
+    );
+    baris = r.rows;
+  } else {
+    baris = getDb()
+      .prepare(
+        `SELECT gateway_ref, raw_payload FROM payments
+          WHERE user_id = ? AND status = 'pending' AND created_at > ?
+          ORDER BY created_at DESC LIMIT 10`,
+      )
+      .all(userId, batas) as Baris[];
+  }
+  for (const b of baris) {
+    try {
+      const jejak = JSON.parse(b.raw_payload ?? "{}") as {
+        sidik?: string;
+        provider?: Record<string, unknown>;
+      };
+      // Hanya dipakai ulang kalau jejak providernya ADA — pesanan yang gagal
+      // di tengah jalan tidak punya nomor VA untuk dilanjutkan, dan
+      // mengembalikannya berarti menyerahkan pesanan yang tidak bisa dibayar.
+      if (jejak.sidik === sidik && jejak.provider && jejak.provider.redirect_url) {
+        return { orderId: b.gateway_ref, provider: jejak.provider };
+      }
+    } catch { /* jejak rusak — perlakukan sebagai tidak ada */ }
+  }
+  return null;
+}
+
+/** Simpan jawaban gateway supaya pesanan yang sama bisa dilanjutkan, bukan diulang. */
+async function simpanJejakProvider(orderId: string, provider: Record<string, unknown>): Promise<void> {
+  const gabung = (lama: string | null) => {
+    let isi: Record<string, unknown> = {};
+    try { isi = JSON.parse(lama ?? "{}") as Record<string, unknown>; } catch { /* mulai dari kosong */ }
+    return JSON.stringify({ ...isi, provider });
+  };
+  if (postgresRuntimeEnabled()) {
+    const pool = getPool(config.databaseUrl);
+    const { rows } = await pool.query<{ raw_payload: string | null }>(
+      "SELECT raw_payload FROM payments WHERE gateway_ref = $1", [orderId],
+    );
+    await pool.query("UPDATE payments SET raw_payload = $2 WHERE gateway_ref = $1 AND status = 'pending'",
+      [orderId, gabung(rows[0]?.raw_payload ?? null)]).catch(() => undefined);
+    return;
+  }
+  try {
+    const db = getDb();
+    const lama = db.prepare("SELECT raw_payload FROM payments WHERE gateway_ref = ?").get(orderId) as
+      | { raw_payload: string | null }
+      | undefined;
+    db.prepare("UPDATE payments SET raw_payload = ? WHERE gateway_ref = ? AND status = 'pending'")
+      .run(gabung(lama?.raw_payload ?? null), orderId);
+  } catch { /* jejak gagal disimpan bukan alasan menggagalkan checkout */ }
 }
 
 async function tandaiGagalMulai(orderId: string, kegagalan: Record<string, unknown>): Promise<void> {
@@ -113,50 +201,95 @@ export async function POST(req: Request) {
       );
     }
 
-    let rincian: RincianTagihan;
-    let items: ItemTopup[] = [];
-    let paketId: string | null = null;
-    let harga: Record<string, number | undefined> = {};
-    let namaPesanan: string;
+    // ── APA YANG DIBELI ────────────────────────────────────────────────
+    //
+    // Paket bulanan dan kredit satuan boleh berada di SATU pesanan. Callback
+    // tidak perlu menebak apa pun: paket tercatat di payments.paket_id,
+    // satuan di pesanan_item, dan ia memberikan keduanya kalau keduanya ada.
+    //
+    // `mode` masih diterima demi klien lama, tapi yang menentukan sekarang
+    // adalah ISI permintaan — bukan label yang menyertainya.
+    const mintaPaket = typeof body.paket_id === "string" && body.paket_id.trim() !== "";
+    const mintaSatuan = Array.isArray(body.items) && body.items.length > 0;
+    if (!mintaPaket && !mintaSatuan) {
+      throw ERR.BAD_REQUEST("Pilih dulu paket atau jumlah videonya.", "Empty order.");
+    }
+    if (mode !== "topup" && mode !== "langganan" && mode !== "campuran") {
+      throw ERR.BAD_REQUEST("Jenis pesanan tidak dikenal.", `Unknown mode: ${mode}`);
+    }
 
-    if (mode === "langganan") {
-      paketId = String(body.paket_id ?? "");
+    let total = 0;
+    let paketId: string | null = null;
+    let items: ItemTopup[] = [];
+    let harga: Record<string, number | undefined> = {};
+    const bagianNama: string[] = [];
+    const bagianItem: { name: string; price: number; quantity: number }[] = [];
+
+    if (mintaPaket) {
+      paketId = String(body.paket_id);
       const paket = await ambilPaket(paketId);
       if (!paket || !paket.aktif) throw ERR.BAD_REQUEST("Paketnya nggak ketemu atau sudah tidak dijual.", "Unknown package.");
-      namaPesanan = `Paket ${paket.nama}`;
-      rincian = {
-        amountIdr: paket.hargaIdr,
-        label: `${paket.nama} BikinFYP AI`,
-        items: [{ name: `${paket.nama} BikinFYP AI`, price: paket.hargaIdr, quantity: 1 }],
-      };
-    } else if (mode === "topup") {
+      total += paket.hargaIdr;
+      bagianNama.push(`Paket ${paket.nama}`);
+      // `price` berisi TOTAL BARIS dan quantity selalu 1 — Duitku menjumlahkan
+      // price saja dan menolak (409) kalau hasilnya tidak sama dengan
+      // paymentAmount. Diverifikasi ke sandbox mereka 3 Sep 2026.
+      bagianItem.push({ name: `Paket ${paket.nama} BikinFYP AI`, price: paket.hargaIdr, quantity: 1 });
+    }
+
+    if (mintaSatuan) {
       harga = await hargaKredit();
       items = rapikanItem(body.items);
-      const total = totalTagihan(items, harga);
-      namaPesanan = items.map((i) => `${i.qty}× ${KUALITAS[i.jenis].label}`).join(", ");
-      rincian = {
-        amountIdr: total,
-        label: `Kredit video BikinFYP AI`,
-        // `price` berisi TOTAL BARIS dan quantity selalu 1 — Duitku
-        // menjumlahkan price saja dan menolak (409) kalau hasilnya tidak sama
-        // dengan paymentAmount. Jumlahnya tetap terbaca pembeli lewat nama
-        // barisnya, dan bentuk ini sah di kedua tafsir: jumlah price maupun
-        // jumlah price x quantity sama-sama menghasilkan total yang benar.
-        items: items.map((i) => ({
+      const totalSatuan = totalTagihan(items, harga);
+      total += totalSatuan;
+      bagianNama.push(items.map((i) => `${i.qty}× ${KUALITAS[i.jenis].label}`).join(", "));
+      for (const i of items) {
+        bagianItem.push({
           name: `${i.qty}× Video ${KUALITAS[i.jenis].label}`,
           price: (harga[i.jenis] as number) * i.qty,
           quantity: 1,
-        })),
-      };
-    } else {
-      throw ERR.BAD_REQUEST("Jenis pesanan tidak dikenal.", `Unknown mode: ${mode}`);
+        });
+      }
+    }
+
+    const jenisPesanan = mintaPaket && mintaSatuan ? "campuran" : mintaPaket ? "langganan" : "topup_video";
+    const namaPesanan = bagianNama.join(" + ");
+    const rincian: RincianTagihan = {
+      amountIdr: total,
+      label: mintaPaket && mintaSatuan ? "Paket + kredit video BikinFYP AI" : `${namaPesanan} BikinFYP AI`,
+      items: bagianItem,
+    };
+
+    // PESANAN YANG SAMA DAN MASIH MENUNGGU DILANJUTKAN, BUKAN DIULANG.
+    //
+    // Kalau tidak, orang yang ragu — menekan Bayar, tidak menyelesaikannya,
+    // lalu kembali dan menekan lagi — mendapat dua nomor VA yang dua-duanya
+    // hidup. Kalau ia membayar keduanya, ia benar-benar membayar dua kali,
+    // dan kita harus mengembalikannya secara manual.
+    const sidik = sidikPesanan(paketId, items);
+    const tertunda = await pesananTertundaSama(user.id, sidik);
+    if (tertunda) {
+      const p = tertunda.provider as { reference?: string; redirect_url?: string; va_number?: string; qr_string?: string };
+      return Response.json(
+        {
+          order_id: tertunda.orderId,
+          amount_idr: rincian.amountIdr,
+          provider_ref: p.reference ?? "",
+          redirect_url: p.redirect_url ?? "",
+          ...(p.va_number ? { va_number: p.va_number } : {}),
+          ...(p.qr_string ? { qr_string: p.qr_string } : {}),
+          // Klien MEMBERI TAHU pembeli bahwa ini pesanan yang sama, bukan yang
+          // baru — supaya ia tidak mengira pembayaran pertamanya hilang.
+          dilanjutkan: true,
+        },
+        { status: 200 },
+      );
     }
 
     const orderId = newOrderId(user.id);
     await simpanPesanan({
       userId: user.id, orderId, amountIdr: rincian.amountIdr,
-      jenisPesanan: mode === "langganan" ? "langganan" : "topup_video",
-      paketId, items, harga,
+      jenisPesanan, paketId, items, harga,
     });
 
     let hasil: { providerRef: string; redirectUrl: string; vaNumber?: string; qrString?: string };
@@ -178,6 +311,15 @@ export async function POST(req: Request) {
       }
       throw err;
     }
+
+    // Jejak jawaban gateway disimpan supaya pesanan yang sama bisa
+    // DILANJUTKAN kalau pembeli kembali sebelum invoicenya kedaluwarsa.
+    await simpanJejakProvider(orderId, {
+      reference: hasil.providerRef,
+      redirect_url: hasil.redirectUrl,
+      ...(hasil.vaNumber ? { va_number: hasil.vaNumber } : {}),
+      ...(hasil.qrString ? { qr_string: hasil.qrString } : {}),
+    });
 
     // Nomor VA dibutuhkan NANTI, di perangkat lain, setelah tab ini ditutup —
     // jadi ia dikirim lewat email, bukan cuma ditampilkan. Sengaja tidak

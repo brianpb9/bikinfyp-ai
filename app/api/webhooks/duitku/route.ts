@@ -172,13 +172,22 @@ export async function POST(req: Request) {
       // menjalankan pemberian kredit lagi (yang idempoten lewat indeks unik)
       // lalu menuntaskan statusnya.
       const jenisPesanan = String((payment as { jenis_pesanan?: string }).jenis_pesanan ?? "saldo");
-      if (jenisPesanan === "topup_video" || jenisPesanan === "langganan") {
+      if (jenisPesanan !== "saldo") {
+        // APA YANG DIBERIKAN DITENTUKAN OLEH ISI PESANAN, BUKAN LABELNYA.
+        //
+        // Pesanan campuran memuat paket DAN kredit satuan sekaligus. Callback
+        // tidak perlu menebak: paket tercatat di payments.paket_id, satuan di
+        // pesanan_item. Yang ada, itu yang diberikan.
+        //
+        // Keduanya idempoten lewat indeks unik database
+        // (uniq_langganan_payment, uniq_kredit_beli_per_payment), jadi callback
+        // yang datang berkali-kali tetap memberi satu kali — untuk kedua
+        // bagiannya.
+        const paketId = String((payment as { paket_id?: string }).paket_id ?? "");
+        const bagian: string[] = [];
         let diberi = 0;
-        let namaPesanan = "Kredit video";
-        if (jenisPesanan === "topup_video") {
-          diberi = await kreditkanTopup(payment.user_id, orderId);
-        } else {
-          const paketId = String((payment as { paket_id?: string }).paket_id ?? "");
+
+        if (paketId) {
           const paket = await ambilPaket(paketId);
           if (!paket) {
             // Paket hilang setelah pesanan dibuat TIDAK boleh menelan uang
@@ -187,11 +196,20 @@ export async function POST(req: Request) {
             console.error(`[duitku] paket ${paketId} tidak ditemukan untuk order ${orderId} yang sudah dibayar`);
             return Response.json({ code: "PACKAGE_MISSING", message_id: "Paket pesanan tidak ditemukan." }, { status: 500 });
           }
-          namaPesanan = `Paket ${paket.nama}`;
-          diberi = (await mulaiLangganan(payment.user_id, paket, orderId)) ? 1 : 0;
+          if (await mulaiLangganan(payment.user_id, paket, orderId)) {
+            diberi += 1;
+            bagian.push(`Paket ${paket.nama}`);
+          }
         }
+
+        const kredit = await kreditkanTopup(payment.user_id, orderId);
+        if (kredit > 0) {
+          diberi += kredit;
+          bagian.push(`${kredit} kredit video`);
+        }
+
         await tandaiStatus(payment.id, "paid", payload);
-        const meta = { merchant_order_id: orderId, jenis_pesanan: jenisPesanan, diberi };
+        const meta = { merchant_order_id: orderId, jenis_pesanan: jenisPesanan, paket_id: paketId || null, kredit, diberi };
         if (postgresRuntimeEnabled()) await pgAudit("duitku", "webhook.settlement", "payments", orderId, meta);
         else audit("duitku", "webhook.settlement", "payments", orderId, meta);
 
@@ -200,7 +218,14 @@ export async function POST(req: Request) {
         // orang berhenti mempercayai kabar berikutnya.
         if (diberi > 0) {
           const email = await emailPemilik(payment.user_id);
-          if (email) await emailPembayaranLunas({ ke: email, orderId, namaPaket: namaPesanan, jumlahIdr: payment.amount_idr });
+          if (email) {
+            await emailPembayaranLunas({
+              ke: email,
+              orderId,
+              namaPaket: bagian.join(" + ") || "Kredit video",
+              jumlahIdr: payment.amount_idr,
+            });
+          }
         }
         return Response.json({ ok: true, credited: diberi > 0, jenis_pesanan: jenisPesanan });
       }

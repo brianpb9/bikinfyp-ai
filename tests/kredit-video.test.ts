@@ -290,3 +290,81 @@ test("kedua runtime memilih langganan dengan aturan yang sama", async () => {
     assert.match(src, /tipe = 'pakai'/, `${nama}: asal pemotongan tidak dibaca saat mengembalikan`);
   }
 });
+
+// ── PESANAN CAMPURAN: paket + satuan dalam satu pembayaran ──────────────────
+//
+// Dilarang di versi pertama dengan alasan "callback harus menebak apa yang
+// dibeli". Alasan itu keliru: ia tidak menebak apa pun — paket tercatat di
+// payments.paket_id, satuan di pesanan_item. Biaya larangannya ditanggung
+// pembeli, yang harus membayar dua kali ke dua nomor VA berbeda.
+
+test("satu pembayaran boleh memberi langganan DAN kredit satuan sekaligus", () => {
+  const u = pengguna();
+  const bayar = `order-${crypto.randomUUID().slice(0, 8)}`;
+  const p = paket({ kuotaPremium: 2, kuotaStandard: 0 });
+  K.setHargaKredit("standard", 14_000, "admin");
+
+  // Dua bagian, satu payment_id — persis bentuk pesanan campuran.
+  K.catatPesananTopup(bayar, [{ jenis: "standard", qty: 3 }], K.hargaKredit());
+  assert.ok(K.mulaiLangganan(u.id, p, bayar));
+  assert.equal(K.kreditkanTopup(u.id, bayar), 3);
+
+  const sisa = K.sisaKredit(u.id);
+  assert.equal(sisa.premium.langganan, 2, "jatah paket tidak masuk");
+  assert.equal(sisa.standard.topup, 3, "kredit satuan tidak masuk");
+});
+
+test("callback ulangan untuk pesanan campuran tidak memberi dua kali", () => {
+  const u = pengguna();
+  const bayar = `order-${crypto.randomUUID().slice(0, 8)}`;
+  const p = paket({ kuotaUltra: 1, kuotaPremium: 0, kuotaStandard: 0 });
+  K.setHargaKredit("premium", 44_000, "admin");
+  K.catatPesananTopup(bayar, [{ jenis: "premium", qty: 2 }], K.hargaKredit());
+
+  // Panggilan pertama.
+  assert.ok(K.mulaiLangganan(u.id, p, bayar));
+  assert.equal(K.kreditkanTopup(u.id, bayar), 2);
+  // Callback datang lagi — dan memang pernah begitu di produksi.
+  assert.equal(K.mulaiLangganan(u.id, p, bayar), null, "langganan kedua dari satu pembayaran");
+  assert.equal(K.kreditkanTopup(u.id, bayar), 0, "kredit diberikan dua kali");
+
+  const sisa = K.sisaKredit(u.id);
+  assert.equal(sisa.ultra.langganan, 1);
+  assert.equal(sisa.premium.topup, 2);
+});
+
+// ── SUDAH BERLANGGANAN, BERLANGGANAN LAGI ──────────────────────────────────
+//
+// Kasus yang ditanyakan Brian. Jawabannya: DITUMPUK, bukan ditolak dan bukan
+// mengganti. Ia membayar dua kali, jadi ia menerima dua kali — dan tiap
+// periode habis pada tanggalnya sendiri.
+
+test("langganan kedua DITAMBAHKAN ke yang masih aktif, bukan menggantikannya", () => {
+  const u = pengguna();
+  const pertama = K.mulaiLangganan(u.id, paket({ kuotaPremium: 2, kuotaStandard: 0, masaHari: 30 }), `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+  const kedua = K.mulaiLangganan(u.id, paket({ kuotaPremium: 3, kuotaStandard: 0, masaHari: 30 }), `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+  assert.notEqual(pertama, kedua);
+
+  // Jatahnya DIJUMLAH — yang lama tidak hilang, yang baru tidak menimpa.
+  assert.equal(K.sisaKredit(u.id).premium.langganan, 5, "jatah salah satu periode hilang");
+  assert.equal(K.langgananAktif(u.id).length, 2);
+});
+
+test("yang paling cepat berakhir dihabiskan lebih dulu di antara dua langganan", () => {
+  const u = pengguna();
+  const panjang = K.mulaiLangganan(u.id, paket({ kuotaPremium: 1, kuotaStandard: 0, masaHari: 60 }), null)!;
+  const pendek = K.mulaiLangganan(u.id, paket({ kuotaPremium: 1, kuotaStandard: 0, masaHari: 5 }), null)!;
+  const j = job(u.id);
+  assert.equal(K.pakaiKredit(u.id, "premium", j), "langganan");
+  const baris = db.prepare("SELECT langganan_id FROM kredit_video WHERE job_id = ?").get(j) as { langganan_id: string };
+  assert.equal(baris.langganan_id, pendek, "jatah yang lebih dulu hangus justru dibiarkan mengendap");
+  assert.notEqual(baris.langganan_id, panjang);
+});
+
+test("periode yang habis tidak menyeret periode lain yang masih hidup", () => {
+  const u = pengguna();
+  const lama = K.mulaiLangganan(u.id, paket({ kuotaUltra: 2, kuotaPremium: 0, kuotaStandard: 0 }), null)!;
+  K.mulaiLangganan(u.id, paket({ kuotaUltra: 3, kuotaPremium: 0, kuotaStandard: 0 }), null);
+  db.prepare("UPDATE langganan SET berakhir_pada = ? WHERE id = ?").run("2020-01-01T00:00:00.000Z", lama);
+  assert.equal(K.sisaKredit(u.id).ultra.langganan, 3, "periode yang masih hidup ikut hilang");
+});

@@ -127,3 +127,46 @@ test("penolakan Duitku membawa alasannya, bukan cuma kode HTTP", () => {
   assert.match(src, /const mentah = await res\.text\(\)/, "badan jawaban Duitku masih dibuang sebelum terbaca");
   assert.match(src, /mentah\.slice\(0, 300\)/, "alasan penolakan tidak ikut di pesan galat");
 });
+
+// ── PERTAHANAN BAYAR DUA KALI ──────────────────────────────────────────────
+//
+// Cara paling umum orang membayar dua kali bukan karena serakah, melainkan
+// karena ragu: menekan Bayar, tidak menyelesaikannya, lalu kembali dan menekan
+// lagi. Tanpa penjagaan, ia mendapat DUA nomor VA yang dua-duanya hidup.
+
+test("checkout melanjutkan pesanan yang sama, bukan membuat invoice kedua", () => {
+  const rute = baca("app/api/kredit-video/checkout/route.ts");
+  assert.match(rute, /pesananTertundaSama\(user\.id, sidik\)/, "checkout tidak mencari pesanan tertunda yang sama");
+  assert.match(rute, /dilanjutkan: true/, "klien tidak diberi tahu bahwa ini pesanan lama");
+  // Sidiknya harus menutup ISI pesanan — paket DAN jumlah tiap jenis. Sidik
+  // yang cuma melihat paket akan menganggap dua pesanan berbeda sebagai sama.
+  assert.match(rute, /function sidikPesanan\(paketId: string \| null, items: ItemTopup\[\]\)/);
+  assert.match(rute, /items\.map\(\(i\) => `\$\{i\.jenis\}x\$\{i\.qty\}`\)/, "sidik tidak menutup jumlah tiap jenis");
+});
+
+test("pesanan lama hanya dilanjutkan kalau nomornya BENAR-BENAR ada", () => {
+  // Pesanan yang gagal di tengah jalan tidak punya nomor VA; mengembalikannya
+  // berarti menyerahkan tagihan yang tidak bisa dibayar.
+  const rute = baca("app/api/kredit-video/checkout/route.ts");
+  assert.match(rute, /jejak\.provider && jejak\.provider\.redirect_url/, "pesanan tanpa jejak gateway ikut dilanjutkan");
+  assert.match(rute, /simpanJejakProvider\(orderId, \{/, "jawaban gateway tidak disimpan — pesanan tidak akan bisa dilanjutkan");
+});
+
+test("batas 60 menit mengikuti masa berlaku invoice, bukan angka karangan", () => {
+  const rute = baca("app/api/kredit-video/checkout/route.ts");
+  assert.match(rute, /60 \* 60_000/, "batas pesanan tertunda tidak lagi 60 menit");
+  // Angka yang sama dipakai saat memberi tahu Duitku umur invoicenya.
+  assert.match(baca("lib/duitku.ts"), /expiryPeriod: 60/, "masa berlaku invoice berubah — samakan batas pesanan tertunda");
+});
+
+test("pesanan campuran memberi keduanya, dan tahu dari ISI bukan dari label", () => {
+  const webhook = baca("app/api/webhooks/duitku/route.ts");
+  // Paket dari paket_id, satuan dari pesanan_item — keduanya diberikan kalau
+  // keduanya ada, tanpa menebak dari jenis_pesanan.
+  assert.match(webhook, /if \(paketId\) \{/, "webhook tidak memberi paket berdasarkan isinya");
+  assert.match(webhook, /const kredit = await kreditkanTopup\(payment\.user_id, orderId\);/, "webhook tidak memberi kredit satuan pada pesanan campuran");
+  assert.ok(
+    !/jenisPesanan === "topup_video"|jenisPesanan === "langganan"/.test(webhook),
+    "webhook kembali bercabang dari label, bukan dari isi pesanan",
+  );
+});

@@ -99,8 +99,10 @@ CREATE TABLE IF NOT EXISTS payments (
   -- Pesanan tahu dirinya pesanan apa. Tanpa ini, callback pembayaran harus
   -- MENEBAK apakah yang dibeli paket atau kredit satuan — dan tebakan yang
   -- salah berarti orang membayar paket lalu menerima kredit satuan.
+  -- 'campuran' = paket bulanan DAN kredit satuan dalam satu invoice. Callback
+  -- tidak perlu menebak: paket ada di paket_id, satuan ada di pesanan_item.
   jenis_pesanan TEXT NOT NULL DEFAULT 'saldo'
-    CHECK (jenis_pesanan IN ('saldo','topup_video','langganan')),
+    CHECK (jenis_pesanan IN ('saldo','topup_video','langganan','campuran')),
   paket_id TEXT
 );
 
