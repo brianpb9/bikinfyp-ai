@@ -25,6 +25,10 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
+      # WIB untuk log dan pesan galat. TIDAK memengaruhi data: seluruh waktu
+      # disimpan aplikasi sebagai string ISO-8601 UTC (lib/db.ts `now()`),
+      # bukan sebagai timestamptz yang ikut zona server.
+      TZ: Asia/Jakarta
       POSTGRES_USER: ${POSTGRES_USER:?wajib}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?wajib}
       POSTGRES_DB: ${POSTGRES_DB:-bikinfyp}
@@ -46,6 +50,8 @@ services:
     restart: unless-stopped
     # Antrean job tidak boleh hilang saat server reboot.
     command: ["redis-server", "--appendonly", "yes"]
+    environment:
+      TZ: Asia/Jakarta
     volumes:
       - redisdata:/data
     expose: ["6379"]
@@ -109,6 +115,18 @@ services:
     restart: unless-stopped
     env_file: [.env.server]
     environment:
+      # ZONA WAKTU PLATFORM: Asia/Jakarta (GMT+7).
+      #
+      # Yang berubah hanya TAMPILAN yang dirender SERVER — halaman /admin dan
+      # /profil memakai toLocaleString("id-ID"), dan tanpa ini keduanya
+      # menampilkan UTC sementara pembacanya hidup di WIB.
+      #
+      # Yang TIDAK berubah: waktu yang disimpan. Aplikasi menulis
+      # `new Date().toISOString()` yang selalu UTC apa pun zona prosesnya.
+      # Itu memang cara yang benar — menyimpan waktu lokal membuat urutan dan
+      # perbandingan rusak begitu zona berubah, dan kerusakannya baru terlihat
+      # berbulan-bulan kemudian.
+      TZ: Asia/Jakarta
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bikinfyp}
       REDIS_URL: redis://redis:6379
       # Web TIDAK merender. Kalau suatu jalur permintaan sampai memanggil
@@ -139,6 +157,7 @@ services:
     restart: unless-stopped
     env_file: [.env.server]
     environment:
+      TZ: Asia/Jakarta
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bikinfyp}
       REDIS_URL: redis://redis:6379
       # 2 ffmpeg x 2 thread = 4 core, tepat sama dengan pagu cpus di bawah.
