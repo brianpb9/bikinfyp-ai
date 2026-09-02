@@ -254,3 +254,36 @@ test("bagian 'Bayar pakai' yang berdiri sendiri sudah tidak ada", () => {
   const jumlahDaftarKanal = (HALAMAN.match(/kanal\.map\(/g) ?? []).length;
   assert.equal(jumlahDaftarKanal, 1, `ada ${jumlahDaftarKanal} daftar kanal di halaman — seharusnya satu, di ringkasan pesanan`);
 });
+
+// ── PERILAKU HALAMAN BILLING UNTUK PELANGGAN YANG SUDAH BERLANGGANAN ────────
+//
+// Pertanyaan Brian 3 Sep 2026: halaman kredit tidak menyebut masa berlaku
+// langganannya, dan paket yang sudah dimiliki tetap ditawarkan seolah ia belum
+// punya apa-apa. Itu memang keliru — bukan karena membeli lagi terlarang
+// (orang yang menghabiskan jatahnya dalam seminggu HARUS bisa menambah),
+// melainkan karena layar tidak menyatakan keadaan yang sudah dia punya.
+test("paket aktif dipajang lebih dulu, lengkap dengan masa berlakunya", () => {
+  assert.match(HALAMAN, /Paket aktif/, "halaman tidak menyebut langganan yang sedang berjalan");
+  assert.match(HALAMAN, /Berlaku sampai \{tanggal\(l\.berakhir_pada\)\}/, "tanggal berakhir langganan tidak dipajang");
+  assert.match(HALAMAN, /hari lagi/, "sisa hari tidak ditampilkan");
+  assert.match(HALAMAN, /Sisa \{l\.sisa\[j\]\}/, "sisa jatah per jenis tidak dipajang di kartu paket aktif");
+});
+
+test("paket yang sedang dipakai ditandai, dan aksinya disebut MENAMBAH", () => {
+  // Membeli lagi tetap boleh — tapi tidak boleh tampil seperti pembelian
+  // pertama. Yang dilarang adalah tombol yang diam soal akibatnya.
+  assert.match(HALAMAN, /const sedangAktif = katalog\?\.langganan\.some\(\(l\) => l\.paket_id === p\.id\)/);
+  assert.match(HALAMAN, /Paket aktif<\/span>|Paket aktif\s*\n/, "paket yang dimiliki tidak diberi lencana");
+  assert.match(HALAMAN, /MENAMBAH paket yang sama/, "aksinya tidak menyebut bahwa paket ditambahkan, bukan diganti");
+});
+
+test("chip header menampilkan jatah video, bukan saldo rupiah warisan", async () => {
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const chip = fs.readFileSync(path.join(process.cwd(), "app/_components/CreditChip.tsx"), "utf8");
+  // Angka yang tidak pernah berubah, di tempat paling terlihat, adalah cara
+  // tercepat membuat orang menyimpulkan pembayarannya gagal.
+  assert.match(chip, /\/api\/kredit-video/, "chip masih membaca dompet rupiah");
+  assert.ok(!/\/api\/credits/.test(chip.replace(/^\s*\*.*$/gm, "")), "chip masih memanggil /api/credits");
+  assert.match(chip, /video`/, "chip tidak menyatakan satuannya (video)");
+});

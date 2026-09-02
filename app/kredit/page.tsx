@@ -33,7 +33,7 @@ interface Paket {
   id: string; nama: string; keterangan: string; harga_idr: number; masa_hari: number;
   kuota: { standard: number; premium: number; ultra: number }; total_video: number;
 }
-interface Langganan { id: string; paket_nama: string; berakhir_pada: string; sisa: Record<string, number> }
+interface Langganan { id: string; paket_id: string; paket_nama: string; berakhir_pada: string; sisa: Record<string, number> }
 interface PesananTertunda {
   order_id: string; amount_idr: number; dibuat_pada: string;
   paket_id: string | null; items: { jenis: string; qty: number }[];
@@ -327,6 +327,44 @@ function KreditInner() {
         ))}
       </div>
 
+      {/* PAKET AKTIF — dipajang lebih dulu, seperti halaman billing SaaS mana
+          pun. Orang yang membuka halaman ini pertama-tama ingin tahu "saya
+          sedang berlangganan apa, sampai kapan, dan sisanya berapa". Sebelum
+          ini halaman langsung menawarkan paket seolah ia belum punya apa-apa —
+          dan tanggal berakhirnya tidak muncul di mana pun. */}
+      {(katalog?.langganan.length ?? 0) > 0 && (
+        <section className="space-y-2 rounded-2xl border-2 border-emerald-500 bg-emerald-50 p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">Paket aktif</p>
+          {katalog?.langganan.map((l) => {
+            const hari = Math.max(0, Math.ceil((new Date(l.berakhir_pada).getTime() - Date.now()) / 86_400_000));
+            return (
+              <div key={l.id} className="rounded-xl bg-white p-3">
+                <div className="flex items-baseline justify-between gap-2">
+                  <p className="font-display text-lg font-bold">{l.paket_nama}</p>
+                  <p className="shrink-0 text-xs font-semibold text-emerald-700">
+                    {hari > 0 ? `${hari} hari lagi` : "berakhir hari ini"}
+                  </p>
+                </div>
+                <p className="mt-0.5 text-xs text-zinc-500">Berlaku sampai {tanggal(l.berakhir_pada)}</p>
+                <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                  {(["standard", "premium", "ultra"] as const).map((j) =>
+                    l.sisa[j] > 0 ? (
+                      <span key={j} className="rounded-full bg-emerald-100 px-2 py-1 font-semibold text-emerald-800">
+                        Sisa {l.sisa[j]}× {j === "standard" ? "Standard" : j === "premium" ? "Premium" : "Ultra"}
+                      </span>
+                    ) : null,
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <p className="text-xs leading-5 text-emerald-900">
+            Jatah paket <b>hangus</b> saat masa berlakunya habis. Butuh tambahan sebelum itu? Beli
+            <b> kredit satuan</b> di bawah — kredit satuan tidak pernah hangus.
+          </p>
+        </section>
+      )}
+
       {/* PESANAN YANG BELUM DIBAYAR — dikatakan lebih dulu, sebelum orang
           membuat pesanan kedua. Cara paling umum orang membayar dua kali
           bukan karena serakah, melainkan karena tidak tahu yang pertama masih
@@ -405,12 +443,18 @@ function KreditInner() {
           </div>
           {katalog?.paket.map((p) => {
             const terpilih = paketDipilih === p.id;
+            // Paket yang SEDANG dipakai tidak boleh tampil seolah pembeli
+            // belum punya apa-apa. Ia tetap BISA dibeli lagi — orang yang
+            // menghabiskan jatahnya dalam seminggu harus bisa menambah — tapi
+            // aksinya dinyatakan apa adanya: menambah, bukan mengganti.
+            const sedangAktif = katalog?.langganan.some((l) => l.paket_id === p.id) ?? false;
+            const punyaLangganan = (katalog?.langganan.length ?? 0) > 0;
             return (
               <button
                 key={p.id} type="button" onClick={() => pilihPaket(p.id)}
                 aria-pressed={terpilih}
-                className={`w-full rounded-2xl border-2 p-4 text-left shadow-sm transition-transform active:scale-[0.99] ${
-                  terpilih ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                className={`relative w-full rounded-2xl border-2 p-4 text-left shadow-sm transition-transform active:scale-[0.99] ${
+                  terpilih ? "border-amber-500 bg-amber-50" : sedangAktif ? "border-emerald-300 bg-white" : "border-zinc-200 bg-white"
                 }`}
               >
                 <span className="flex items-center justify-between gap-2">
@@ -423,8 +467,19 @@ function KreditInner() {
                   {p.kuota.premium > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.premium}× Premium</span>}
                   {p.kuota.ultra > 0 && <span className="rounded-full bg-zinc-100 px-2 py-1 font-semibold">{p.kuota.ultra}× Ultra</span>}
                 </span>
+                {sedangAktif && (
+                  <span className="absolute right-3 top-3 rounded-full bg-emerald-600 px-2 py-0.5 text-[11px] font-bold text-white">
+                    Paket aktif
+                  </span>
+                )}
                 <span className={`mt-2 block text-xs font-semibold ${terpilih ? "text-amber-700" : "text-zinc-400"}`}>
-                  {terpilih ? "✓ Dipilih — lihat ringkasan di bawah" : `Berlaku ${p.masa_hari} hari · tap untuk pilih`}
+                  {terpilih
+                    ? "✓ Dipilih — lihat ringkasan di bawah"
+                    : sedangAktif
+                      ? `Berlaku ${p.masa_hari} hari · tap untuk MENAMBAH paket yang sama`
+                      : punyaLangganan
+                        ? `Berlaku ${p.masa_hari} hari · tap untuk menambah paket ini`
+                        : `Berlaku ${p.masa_hari} hari · tap untuk pilih`}
                 </span>
               </button>
             );

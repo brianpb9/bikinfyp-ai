@@ -101,6 +101,10 @@ export async function GET(req: Request) {
       })),
       langganan: langganan.map((l) => ({
         id: l.id,
+        // paket_id dikirim supaya layar bisa menandai paket mana yang SEDANG
+        // dipakai — tanpa itu, halaman menawarkan paket yang sudah dimiliki
+        // seolah pembeli belum punya apa-apa.
+        paket_id: l.paketId,
         paket_nama: l.paketNama,
         berakhir_pada: l.berakhirPada,
         sisa: l.sisa,
