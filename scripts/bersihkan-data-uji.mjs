@@ -20,6 +20,7 @@
  * dari dashboard-nya sendiri; menghapus audit menghapus catatan siapa
  * melakukan apa — justru yang paling dibutuhkan sesudah pembersihan.
  */
+import { randomUUID } from "node:crypto";
 import pg from "pg";
 
 const { Pool } = pg;
@@ -37,6 +38,7 @@ if (!databaseUrl || !/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
 // urutan yang salah, dan penolakan di tengah meninggalkan pembersihan separuh
 // jalan — lebih buruk daripada tidak dibersihkan sama sekali.
 const URUTAN = [
+  "events",
   "kredit_video",
   "pesanan_item",
   "langganan",
@@ -89,6 +91,25 @@ try {
 
   const sisa = await pool.query("SELECT COUNT(*)::int AS n FROM users");
   console.log(`Akun tersisa: ${sisa.rows[0].n}`);
+
+  // PAKET GRATIS DIKEMBALIKAN setelah pembersihan.
+  //
+  // kredit_video ikut dikosongkan, jadi tanpa langkah ini setiap akun yang
+  // tersisa berdiri tanpa jatah apa pun — termasuk akun yang dipakai menguji,
+  // dan pembersihan yang meninggalkan sistem tidak bisa diuji bukan
+  // pembersihan. Pendaftar BARU tetap menerimanya otomatis saat akun dibuat.
+  if (!dryRun) {
+    const { rows } = await pool.query("SELECT id FROM users");
+    const waktu = new Date().toISOString();
+    for (const u of rows) {
+      await pool.query(
+        `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+         VALUES ($1,$2,'premium','topup',1,'bonus',NULL,NULL,NULL,$3,$4)`,
+        [randomUUID(), u.id, "paket gratis (setelah pembersihan data uji)", waktu],
+      );
+    }
+    console.log(`Paket gratis dikembalikan ke ${rows.length} akun.`);
+  }
 } finally {
   await pool.end();
 }
