@@ -119,17 +119,26 @@ export function tierMasihDiterima(id: string): boolean {
 }
 
 export const TIER_HARGA: TierHarga[] = [
+  // CADANGAN halaman harga, dipakai hanya saat harga_kredit_video masih kosong.
+  // Angkanya wajib sama dengan config.tiers — ada tes yang menjaganya. Harga
+  // yang benar-benar ditagih diatur admin di /admin/paket.
+  {
+    id: "standard",
+    nama: "Video Standard",
+    hargaIdr: 8_000,
+    dapat: "Video iklan produk 480p bersuara — cepat dan hemat, untuk konten harian.",
+  },
   {
     id: "premium",
     nama: "Video Premium",
-    hargaIdr: 12_000,
+    hargaIdr: 40_000,
     dapat: "Video iklan produk 720p dengan narasi bahasa Indonesia yang menjelaskan produkmu.",
   },
   {
     id: "ultra",
     nama: "Video Ultra",
-    hargaIdr: 80_000,
-    dapat: "Video iklan produk 720p, presenter AI bicara langsung ke kamera dengan gerak bibir sinkron.",
+    hargaIdr: 50_000,
+    dapat: "Video iklan produk 720p kualitas tertinggi, presenter AI bicara dengan gerak bibir sinkron.",
   },
 ];
 

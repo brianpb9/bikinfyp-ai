@@ -24,6 +24,15 @@ import { teksPromptShot } from "../teks-prompt";
 // - 1.5 pro: ~$0,26 per 5 dtk 720p — https://tutorial.theaibuilders.dev (Seedance API tutorial)
 // Tarif bisa berubah; bila respons mengandung usage.total_tokens DAN model punya tarif token,
 // biaya dihitung dari usage (aktual); selain itu dari tarif/detik (estimasi, ditandai di log).
+/**
+ * Tarif token yang BENAR-BENAR ditagih ke akun kami.
+ *
+ * $1.300 / 295.026.776 token = $4,41 per 1 juta token. Diturunkan dari tagihan
+ * sungguhan, BUKAN dari harga brosur BytePlus ($6,40 / $10,70) — yang terakhir
+ * tidak pernah menjadi angka yang kita bayar.
+ */
+const TARIF_TAGIHAN_USD_PER_1M = 4.41;
+
 const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<string, number> }> = {
   "seedance-1-0-lite-i2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring — jangan dipakai
   "seedance-1-0-lite-t2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring
@@ -31,8 +40,41 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
   "seedance-1-0-pro-fast-250528": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
   "seedance-1-0-pro-250528": { tokenUsdPerM: 2.5 },
   "seedance-1-5-pro-251215": { perSecUsd: { "480p": 0.026, "720p": 0.052 } },
-  "dreamina-seedance-2-0-mini-260615": { perSecUsd: { "720p": 0.034 } }, // ESTIMASI dari COGS BRD §5.3 (Rp8.802/video)
-  "dreamina-seedance-2-0-260128": { perSecUsd: { "720p": 0.143 } }, // ESTIMASI dari COGS BRD §5.3 (Rp37.164/video)
+  // ── Dreamina Seedance 2.x — TARIF TERVERIFIKASI, bukan estimasi lagi ──────
+  //
+  // Sebelumnya ketiganya memakai perSecUsd turunan BRD ($0,034/dtk), yang
+  // menghasilkan Rp8.313 untuk video 15 detik 720p. Diukur langsung ke
+  // BytePlus 2 Sep 2026: satu klip 4 detik 720p menghabiskan 87.300 token —
+  // 21.825 token/detik. Dengan tarif tagihan $4,41/1M token, video 15 detik
+  // 720p berbiaya Rp23.533, yaitu 2,8x lebih mahal daripada yang dipakai
+  // menetapkan harga selama ini.
+  //
+  // Estimasi yang meleset ke arah "lebih murah" adalah arah yang paling
+  // berbahaya: ia membuat tier terlihat untung padahal rugi, dan tidak ada
+  // yang gagal ketika itu terjadi.
+  //
+  // Terukur juga: 480p = 10.149 token/detik (46% dari 720p), dan konsumsi
+  // token TIDAK bergantung versi model — 2.0-mini dan 2.5 sama persis pada
+  // durasi, resolusi, dan mode yang sama.
+  //
+  // tokenUsdPerM dipakai lebih dulu bila jawaban memuat usage.total_tokens,
+  // dan BytePlus MEMANG mengirimkannya (diverifikasi). perSecUsd tinggal
+  // sebagai cadangan kalau usage hilang, diturunkan dari pengukuran yang sama.
+  "dreamina-seedance-2-0-mini-260615": {
+    tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
+    perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
+  },
+  "dreamina-seedance-2-0-260128": {
+    tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
+    perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
+  },
+  // 2.5 SEBELUMNYA TIDAK ADA DI DAFTAR INI SAMA SEKALI — tier Ultra jatuh ke
+  // tarif cadangan $0,01/dtk, yaitu 1/10 biaya sebenarnya. Tier termahal kita
+  // adalah tier yang biayanya paling salah dihitung.
+  "dreamina-seedance-2-5-260628": {
+    tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
+    perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
+  },
 };
 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };

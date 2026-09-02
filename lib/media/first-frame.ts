@@ -160,6 +160,16 @@ export const MAKS_FRAME_PER_TIER: Record<string, number> = {
   silent_caption: 1,
   high_quality: 1,
   super_hq: 6,
+  // Susunan baru. Sebelumnya ketiganya TIDAK ada di sini dan jatuh ke bawaan
+  // 1 — termasuk Ultra, tier termahal kita, yang jadi diam-diam kehilangan
+  // kemampuan yang dulu dipunyai super_hq.
+  //
+  // Angkanya keputusan MARGIN: 6 frame = Rp3.600, masih di bawah seperempat
+  // margin Ultra (Rp26.467). Untuk Standard dan Premium marginnya lebih tipis,
+  // jadi jatahnya tetap 1.
+  standard: 1,
+  premium: 1,
+  ultra: 6,
 };
 
 /** Pilih shot mana yang dapat jatah frame buatan. Mengembalikan indeks shot,

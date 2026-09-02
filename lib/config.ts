@@ -309,7 +309,10 @@ export const config = {
     },
     high_quality: {
       priceIdr: 12000,
-      cogsIdr: 8802,
+      // TERUKUR 2 Sep 2026, bukan turunan BRD: 21.825 token/dtk di 720p x 15 dtk
+      // x $4,41/1M (tarif tagihan) x Rp16.300. Angka lama (8.802) 2,8x terlalu
+      // rendah — tier ini dijual Rp12.000 dan sebenarnya RUGI Rp11.533.
+      cogsIdr: 23533,
       byteplusModel: env("BYTEPLUS_MODEL_HQ", "dreamina-seedance-2-0-mini-260615"),
       // Resolusi bisa dinaikkan lewat env untuk uji: teks kecil di label butuh
       // piksel, dan 720p tidak punya cukup untuk menilai apakah sebuah model
@@ -323,7 +326,9 @@ export const config = {
       // sync sungguhan dari model), COGS-nya juga paling tinggi (Rp37rb) —
       // margin lama (Rp49rb-37rb=Rp12rb, ~24%) terlalu tipis untuk premium.
       priceIdr: 80000,
-      cogsIdr: 37164,
+      // TERUKUR: konsumsi token TIDAK bergantung versi model — sama dengan
+      // high_quality pada durasi, resolusi, dan mode yang sama.
+      cogsIdr: 23533,
       byteplusModel: env("BYTEPLUS_MODEL_SUPER", "dreamina-seedance-2-0-260128"),
       resolution: "720p",
       generateAudio: true,
@@ -344,25 +349,33 @@ export const config = {
     // harga baru di sini berarti mengunci tebakan ke dalam kode sebelum Brian
     // memutuskannya.
     standard: {
-      priceIdr: 12000,
-      // COGS BELUM DIKETAHUI: tarif kie.ai belum pernah kami lihat dari
-      // tagihan. Diisi sama dengan premium sebagai penahan sementara, dan
-      // ditandai di sini supaya tidak dikutip sebagai fakta.
-      cogsIdr: 12456,
+      // Harga jual acuan untuk laporan; harga yang DITAGIH pembeli diatur
+      // admin di /admin/paket (tabel harga_kredit_video).
+      priceIdr: 8000,
+      // TERUKUR: Grok Imagine lewat kie.ai menghabiskan 2,4 kredit/detik di
+      // 480p (14,4 kredit untuk 6 detik, render berbayar 2 Sep 2026), dan
+      // kredit kie.ai berharga Rp100 (Rp1.000.000 / 10.000 kredit).
+      // 15 dtk x 2,4 x Rp100 = Rp3.600.
+      cogsIdr: 3600,
       byteplusModel: "",
       resolution: "480p",
       generateAudio: true,
     },
     premium: {
-      priceIdr: 12000,
-      cogsIdr: 12456,
+      priceIdr: 40000,
+      // TERUKUR: 21.825 token/dtk x 15 dtk x $4,41/1M x Rp16.300 = Rp23.533.
+      cogsIdr: 23533,
       byteplusModel: env("BYTEPLUS_MODEL_PREMIUM", "dreamina-seedance-2-0-mini-260615"),
       resolution: env("BYTEPLUS_RES_PREMIUM", "720p"),
       generateAudio: true,
     },
     ultra: {
-      priceIdr: 80000,
-      cogsIdr: 12456,
+      priceIdr: 50000,
+      // SAMA PERSIS dengan premium, dan itu bukan kelalaian: diukur langsung
+      // ke BytePlus, 2.0-mini dan 2.5 menghabiskan 87.300 token untuk klip 4
+      // detik 720p yang sama. Selisih harga Ultra adalah keputusan posisi,
+      // bukan biaya — dan harus disebut begitu, bukan disamarkan.
+      cogsIdr: 23533,
       byteplusModel: env("BYTEPLUS_MODEL_ULTRA", "dreamina-seedance-2-5-260628"),
       resolution: env("BYTEPLUS_RES_ULTRA", "720p"),
       generateAudio: true,

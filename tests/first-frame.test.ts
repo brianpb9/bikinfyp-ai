@@ -45,13 +45,24 @@ test("shot biasa TIDAK dibuatkan frame — foto produk asli lebih baik dan grati
 });
 
 // Batas jatah adalah keputusan MARGIN, bukan teknis. Kalau tarif atau harga
-// berubah dan angka ini tidak ditinjau, tiap video bersuara bisa kehilangan
-// hampir seluruh marginnya tanpa ada yang sadar.
-test("jatah frame per tier menjaga biaya di bawah seperempat margin", () => {
+// berubah dan angka ini tidak ditinjau, tiap video bisa kehilangan hampir
+// seluruh marginnya tanpa ada yang sadar.
+//
+// Diperiksa hanya untuk tier yang BENAR-BENAR DIJUAL. Tier lama tetap ada di
+// config supaya riwayat job bisa dihitung, tapi marginnya sudah tidak berarti:
+// pengukuran 2 Sep 2026 menunjukkan high_quality (Rp12.000) sebenarnya
+// berbiaya Rp23.533 — ia memang rugi, dan itu justru alasannya berhenti
+// dijual. Menguji jatah frame terhadap margin negatif hanya akan mengukur
+// kerugian lama, bukan menjaga keputusan yang berlaku.
+test("jatah frame per tier menjaga biaya di bawah seperempat margin", async () => {
+  const { TIER_DIJUAL } = await import("../lib/paket-kredit");
   const tiers: Record<string, { priceIdr: number; cogsIdr: number }> = config.tiers as never;
+  let diperiksa = 0;
   for (const [tier, maks] of Object.entries(MAKS_FRAME_PER_TIER)) {
     const t = tiers[tier];
     assert.ok(t, `tier "${tier}" tidak ada di config — daftar jatah usang`);
+    if (!TIER_DIJUAL.includes(tier)) continue;
+    diperiksa += 1;
     const margin = t.priceIdr - t.cogsIdr;
     const biaya = maks * BIAYA_FRAME_IDR;
     assert.ok(
@@ -59,7 +70,26 @@ test("jatah frame per tier menjaga biaya di bawah seperempat margin", () => {
       `tier ${tier}: ${maks} frame = Rp${biaya}, lebih dari 25% margin Rp${margin}`
     );
   }
+  assert.ok(diperiksa > 0, "tidak satu pun tier yang dijual punya jatah frame — daftarnya usang");
 });
+
+// Dan yang lebih mendasar daripada jatah frame: tidak boleh ada tier yang
+// DIJUAL di bawah biayanya sendiri. Ini yang bobol diam-diam sampai 2 Sep
+// 2026 — cogsIdr berisi estimasi BRD yang 2,8x terlalu rendah, jadi tier yang
+// rugi tampak untung dan tidak ada satu pun tes yang berbunyi.
+test("tidak ada tier yang DIJUAL di bawah biayanya", async () => {
+  const { TIER_DIJUAL } = await import("../lib/paket-kredit");
+  const tiers: Record<string, { priceIdr: number; cogsIdr: number }> = config.tiers as never;
+  for (const tier of TIER_DIJUAL) {
+    const t = tiers[tier];
+    assert.ok(t, `tier ${tier} dijual tapi tidak ada di config`);
+    assert.ok(
+      t.priceIdr > t.cogsIdr,
+      `tier ${tier} dijual Rp${t.priceIdr} dengan biaya Rp${t.cogsIdr} — rugi Rp${t.cogsIdr - t.priceIdr} per video`,
+    );
+  }
+});
+
 
 test("saat jatah habis, shot yang WAJIB menahan produk didahulukan", () => {
   // Shot 0 wajib menahan produk, shot 2 hanya "perlu" komposisi khusus.

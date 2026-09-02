@@ -61,8 +61,12 @@ test("urutan kualitas naik, bukan acak", () => {
 test("padanan nama lama menunjuk tier yang HARGANYA sama, bukan yang lebih murah", () => {
   assert.equal(setaraBaru("super_hq"), "ultra");
   assert.equal(setaraBaru("high_quality"), "premium");
-  assert.equal(config.tiers.super_hq.priceIdr, config.tiers.ultra.priceIdr);
-  assert.equal(config.tiers.high_quality.priceIdr, config.tiers.premium.priceIdr);
+  // Yang dijaga BIAYA-nya, bukan harga jualnya. Keduanya berjalan di mesin dan
+  // konsumsi token yang sama (terukur 2 Sep 2026), jadi biayanya wajib sama —
+  // sementara harga jual memang sengaja berbeda sejak katalog baru disusun
+  // dari modal yang benar.
+  assert.equal(config.tiers.super_hq.cogsIdr, config.tiers.ultra.cogsIdr);
+  assert.equal(config.tiers.high_quality.cogsIdr, config.tiers.premium.cogsIdr);
   // Idempoten: memetakan yang sudah baru tidak boleh menggesernya.
   for (const k of URUTAN_KUALITAS) assert.equal(setaraBaru(k), k);
 });
