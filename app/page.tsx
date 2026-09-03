@@ -19,7 +19,10 @@ interface JobItem {
 
 // S1 — BERANDA
 export default function HomePage() {
-  const [credits, setCredits] = useState<number | null>(null);
+  // SISA JATAH VIDEO, bukan saldo rupiah. Kartu ini sempat berbunyi "Kredit
+  // tinggal Rp12.000" ke pengguna yang baru saja membeli 9 video — angka
+  // rupiah warisan yang tidak pernah berubah lagi, dipajang sebagai kredit.
+  const [sisaVideo, setSisaVideo] = useState<number | null>(null);
   const [jobs, setJobs] = useState<JobItem[] | null>(null);
   // User yang menutup HP saat render lalu buka app lagi mendarat DI SINI,
   // bukan di halaman proses — beranda wajib memberi tahu ada video yang
@@ -27,9 +30,9 @@ export default function HomePage() {
   const [processing, setProcessing] = useState<JobItem[]>([]);
 
   useEffect(() => {
-    apiFetch<{ credits: number }>("/api/auth/me")
-      .then((d) => setCredits(d.credits))
-      .catch(() => setCredits(null));
+    apiFetch<{ total_video: number }>("/api/auth/me")
+      .then((d) => setSisaVideo(d.total_video))
+      .catch(() => setSisaVideo(null));
     apiFetch<{ jobs: JobItem[] }>("/api/jobs")
       .then((d) => {
         setJobs(d.jobs.filter((j) => j.state === "READY").slice(0, 6));
@@ -104,18 +107,23 @@ export default function HomePage() {
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src="/icons/ui/empty-video.png" alt="" className="mx-auto h-12 w-12" />
             <p className="mt-2 font-display text-lg font-bold text-zinc-900">Belum ada video</p>
-            <p className="mt-1 text-sm leading-6 text-zinc-600">Yuk bikin yang pertama — gratis pakai kredit bonus kamu!</p>
+            <p className="mt-1 text-sm leading-6 text-zinc-600">Yuk bikin yang pertama — gratis pakai video bonus kamu!</p>
           </div>
         </div>
       )}
 
-      {credits !== null && credits < 15000 && (
+      {/* Ambang 2 video, bukan nominal rupiah: yang menentukan orang perlu
+          top-up adalah berapa video lagi yang bisa ia buat, bukan berapa rupiah
+          tersisa di dompet yang sudah tidak dipakai. */}
+      {sisaVideo !== null && sisaVideo <= 2 && (
         <Link
           href="/kredit"
           className="flex min-h-[56px] items-center justify-between rounded-2xl border-2 border-amber-200 bg-amber-50 px-4"
         >
-          <span className="font-semibold text-amber-900">Kredit tinggal Rp{credits.toLocaleString("id-ID")}</span>
-          <span className="font-bold text-amber-600">Top-up →</span>
+          <span className="font-semibold text-amber-900">
+            {sisaVideo === 0 ? "Jatah videomu habis" : `Sisa ${sisaVideo} video lagi`}
+          </span>
+          <span className="font-bold text-amber-600">{sisaVideo === 0 ? "Beli →" : "Tambah →"}</span>
         </Link>
       )}
 

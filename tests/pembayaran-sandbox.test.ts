@@ -287,3 +287,32 @@ test("chip header menampilkan jatah video, bukan saldo rupiah warisan", async ()
   assert.ok(!/\/api\/credits/.test(chip.replace(/^\s*\*.*$/gm, "")), "chip masih memanggil /api/credits");
   assert.match(chip, /video`/, "chip tidak menyatakan satuannya (video)");
 });
+
+test("tidak ada layar retail yang memajang RUPIAH sebagai kredit", async () => {
+  // Dompet rupiah warisan tidak lagi membeli video. Layar mana pun yang
+  // menampilkannya sebagai "kredit" akan menunjukkan angka MATI — dan itu
+  // sudah terjadi dua kali: chip header, dan kartu ajakan top-up di beranda
+  // yang berbunyi "Kredit tinggal Rp12.000" kepada orang yang baru saja
+  // membeli sembilan video.
+  const fs = await import("node:fs");
+  const path = await import("node:path");
+  const baca = (f: string) => fs.readFileSync(path.join(process.cwd(), f), "utf8");
+
+  const beranda = baca("app/page.tsx");
+  assert.match(beranda, /total_video/, "beranda tidak membaca sisa jatah video");
+  assert.ok(!/d\.credits/.test(beranda), "beranda masih membaca saldo rupiah dari /api/auth/me");
+  // Kalimatnya harus menyebut VIDEO, bukan nominal rupiah.
+  assert.ok(!/Kredit tinggal/.test(beranda), "kalimat 'Kredit tinggal Rp...' masih ada");
+  assert.match(beranda, /video lagi`|Jatah videomu habis/, "ajakan top-up tidak menyebut satuan video");
+
+  // Rupiah TETAP sah di tempat yang memang uang — riwayat pembelian di profil.
+  // Yang dilarang adalah menyebutnya "kredit" atau memakainya sebagai jatah.
+  const profil = baca("app/profil/page.tsx");
+  assert.match(profil, /sisaKredit\(user\.id\)/, "profil tidak membaca sisa jatah video");
+  assert.ok(!/rupiah\(saldo\)/.test(profil), "profil masih memajang saldo rupiah");
+
+  // Dan /api/auth/me benar-benar menyediakan angka penggantinya.
+  const me = baca("app/api/auth/me/route.ts");
+  assert.match(me, /total_video:/, "/api/auth/me tidak mengirim sisa jatah video");
+  assert.match(me, /sisa_video: sisa/, "/api/auth/me tidak mengirim rincian per jenis");
+});
