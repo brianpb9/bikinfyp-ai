@@ -21,3 +21,11 @@
     transform: scale(0.96);
   }
 }
+
+/* Bar tunggu indeterminate (TungguNaskah). Geser kiri-kanan, bukan mengisi:
+   bentuknya harus menyatakan "masih hidup" dan bukan sekian persen, karena
+   persentasenya memang tidak kita ketahui. */
+@keyframes tunggu {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}

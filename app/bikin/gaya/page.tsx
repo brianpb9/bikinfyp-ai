@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail, pesanUntukPengguna} from "../../_components/api";
+import { TungguNaskah } from "../../_components/TungguNaskah";
 import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "../../../lib/avatar-presets";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
@@ -221,6 +222,11 @@ export default function GayaPage() {
 
   return (
     <main className="min-h-dvh bg-gradient-to-b from-amber-50/70 via-white to-white pb-10">
+      {/* Sampai 3 Sep 2026 satu-satunya tanda bahwa naskah sedang ditulis adalah
+          tulisan di tombol. Pada koneksi lambat itu tak bisa dibedakan dari
+          aplikasi menggantung — dan gerbang viral membuat penantian terburuk
+          jadi tiga kali lipat. Lihat catatan di TungguNaskah.tsx. */}
+      <TungguNaskah terlihat={loading} />
       <FlowHeader title="Gaya Video" step={2} />
       <div className="space-y-7 px-4">
         <section className="space-y-3">
