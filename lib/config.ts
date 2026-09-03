@@ -465,15 +465,36 @@ export function paymentsLive(): boolean {
   return paymentsConfigured() && paymentsEnv() === "production" && config.paymentsGoLive;
 }
 
+/**
+ * Siapkan direktori kerja.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DIREKTORI SQLite HANYA DIBUAT KALAU SQLite MEMANG DIPAKAI
+ * ────────────────────────────────────────────────────────────────────────────
+ * Fungsi ini dulu selalu membuat direktori database SQLite, termasuk di
+ * production tempat SQLite DIMATIKAN dan container web berjalan sebagai
+ * pengguna tanpa izin tulis di /srv/app. Hasilnya:
+ *
+ *     EACCES: permission denied, mkdir '/srv/app/data'
+ *
+ * Cacat ini LAMA, tapi baru terlihat 3 Sep 2026 — ia berada di jalur unduh
+ * foto produk, dan ekstraksi link berbagi SELALU gagal sebelum sampai ke sana.
+ * Begitu ekstraksinya diperbaiki, alurnya maju satu langkah dan langsung
+ * menabrak ini. Bug yang tersembunyi di belakang bug lain.
+ *
+ * Direktori penyimpanan tetap dibuat tanpa syarat: ia dipakai kedua runtime
+ * sebagai tempat singgah berkas untuk FFmpeg, bahkan saat penyimpanan
+ * utamanya S3/MinIO.
+ */
 export function ensureDirs() {
-  for (const d of [
-    path.dirname(config.dbPath),
-    config.storageDir,
-    path.join(config.storageDir, "uploads"),
-    path.join(config.storageDir, "jobs"),
-  ]) {
-    fs.mkdirSync(d, { recursive: true });
-  }
+  const dir = [config.storageDir, path.join(config.storageDir, "uploads"), path.join(config.storageDir, "jobs")];
+  // Penanda runtime dibaca langsung dari env — config.ts tidak boleh mengimpor
+  // lapisan Postgres (ia diimpor oleh hampir semua jalur, termasuk yang tidak
+  // memerlukan `pg`). Nama env-nya sama persis dengan postgresRuntimeEnabled().
+  const pakaiPostgres =
+    process.env.RACUN_POSTGRES_SMOKE === "1" || process.env.RACUN_DB_RUNTIME === "postgres";
+  if (!pakaiPostgres) dir.unshift(path.dirname(config.dbPath));
+  for (const d of dir) fs.mkdirSync(d, { recursive: true });
 }
 
 // Gagal-tertutup pada rahasia tanda tangan. Diletakkan di sini, bukan di

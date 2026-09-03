@@ -174,3 +174,49 @@ test("pengalihan ke luar daftar putih DITOLAK, bukan diikuti", async () => {
   assert.match(src, /pengalihan ke luar daftar putih/, "pengalihan ke luar daftar putih tidak ditolak");
   assert.match(src, /MAKS_LOMPATAN/, "tidak ada batas jumlah pengalihan");
 });
+
+test("ensureDirs tidak membuat direktori SQLite saat runtime Postgres", async () => {
+  // Cacat lama yang baru terlihat 3 Sep 2026: ensureDirs() selalu membuat
+  // direktori database SQLite, termasuk di production tempat SQLite dimatikan
+  // dan container web tidak punya izin tulis di /srv/app —
+  //   EACCES: permission denied, mkdir '/srv/app/data'
+  //
+  // Ia bersembunyi di belakang bug lain: jalurnya ada di unduh foto produk,
+  // dan ekstraksi link berbagi selalu gagal sebelum sampai ke sana.
+  const src = baca("lib/config.ts");
+  const fungsi = src.slice(src.indexOf("export function ensureDirs()"));
+  const badan = fungsi.slice(0, fungsi.indexOf("\n}\n") + 2);
+  assert.match(badan, /RACUN_DB_RUNTIME/, "ensureDirs tidak memeriksa runtime");
+  assert.match(badan, /if \(!pakaiPostgres\) dir\.unshift\(path\.dirname\(config\.dbPath\)\)/,
+    "direktori SQLite masih dibuat tanpa syarat");
+  // Direktori penyimpanan TETAP dibuat tanpa syarat — ia tempat singgah berkas
+  // untuk FFmpeg di kedua runtime, bahkan saat penyimpanan utamanya S3/MinIO.
+  assert.match(badan, /config\.storageDir/, "direktori penyimpanan tidak lagi dibuat");
+});
+
+test("ensureDirs benar-benar melewati direktori SQLite di runtime Postgres", async () => {
+  // Bukan cuma bentuk kodenya — perilakunya. Dijalankan dengan penanda runtime
+  // Postgres pada direktori database yang TIDAK ADA; kalau ia masih mencoba
+  // membuatnya, direktori itu akan lahir.
+  const os = await import("node:os");
+  const dirUji = path.join(os.tmpdir(), `uji-ensuredirs-${process.pid}`);
+  const dbUji = path.join(dirUji, "db", "racun.db");
+  const asalRuntime = process.env.RACUN_DB_RUNTIME;
+  const { config, ensureDirs } = await import("../lib/config");
+  const asalDb = config.dbPath;
+  const asalStorage = config.storageDir;
+  (config as { dbPath: string }).dbPath = dbUji;
+  (config as { storageDir: string }).storageDir = path.join(dirUji, "storage");
+  process.env.RACUN_DB_RUNTIME = "postgres";
+  try {
+    ensureDirs();
+    assert.equal(fs.existsSync(path.dirname(dbUji)), false, "direktori SQLite tetap dibuat di runtime Postgres");
+    assert.equal(fs.existsSync(path.join(dirUji, "storage", "uploads")), true, "direktori penyimpanan tidak dibuat");
+  } finally {
+    (config as { dbPath: string }).dbPath = asalDb;
+    (config as { storageDir: string }).storageDir = asalStorage;
+    if (asalRuntime === undefined) delete process.env.RACUN_DB_RUNTIME;
+    else process.env.RACUN_DB_RUNTIME = asalRuntime;
+    fs.rmSync(dirUji, { recursive: true, force: true });
+  }
+});
