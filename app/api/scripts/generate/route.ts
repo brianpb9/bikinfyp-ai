@@ -11,7 +11,10 @@ import type { QualityTier } from "@/lib/providers/types";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { AMBANG_VIRAL, lewatiGerbangViral } from "@/lib/script-engine/gerbang-viral";
+import type { FypQualityTier } from "@/lib/fyp-score";
 import { pastikanSegar } from "@/lib/kredensial";
+import { catatAudit } from "@/lib/audit-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -100,8 +103,60 @@ export async function POST(req: Request) {
       hookLevel,
       hookFamilies: hookFamilies.length ? hookFamilies : undefined,
     });
-    const jaring = await cobaDenganNamaPendek(jalan, product.name);
-    const variants = jaring.variants;
+    // ── GERBANG VIRALITAS (permintaan Brian, 3 Sep 2026) ────────────────────
+    //
+    //   "apabila kurang lakukan regenerate ulang scriptnya sehingga memiliki
+    //    nilai tinggi. lakukan sampai 3 kali baru tampilkan opsinya.
+    //    minimum tresholdnya 60."
+    //
+    // Skor FYP sudah dihitung sejak lama — /api/jobs menyimpannya, layar S4
+    // menampilkannya — tapi tidak pernah MENOLAK apa pun. Naskah berskor 38
+    // ditawarkan persis sama dengan naskah 97.
+    //
+    // Formatnya belum dipilih di tahap ini (baru dipilih saat membuat job),
+    // jadi dipakai talking_head — bawaan yang sama dengan yang dipakai layar
+    // S4 saat menampilkan skor, supaya angka yang menggerbangi dan angka yang
+    // dilihat pengguna berasal dari asumsi yang sama.
+    // shortenedTo DIPERTAHANKAN lintas percobaan: pemanggil memakainya untuk
+    // memberi tahu pengguna bahwa nama produknya dipendekkan agar naskahnya
+    // muat. Percobaan kedua yang berhasil dengan nama utuh tidak boleh
+    // menghapus fakta itu kalau naskah yang akhirnya dipakai berasal dari
+    // percobaan yang memendekkannya — jadi yang disimpan milik percobaan
+    // TERAKHIR yang menghasilkan naskah sah, sama seperti sebelum gerbang ada.
+    let shortenedTo: string | null = null;
+    const gerbang = await lewatiGerbangViral(
+      async () => {
+        const j = await cobaDenganNamaPendek(jalan, product.name);
+        if (j.adaLolos) shortenedTo = j.shortenedTo;
+        return j.variants;
+      },
+      {
+        qualityTier: tier as FypQualityTier,
+        durationSec,
+        format: "talking_head",
+        productName: product.name,
+        priceIdr: product.price_idr ?? 0,
+      },
+      {
+        catat: (m) => console.log(`[gerbang-viral] "${product.name}": ${m}`),
+        // Hanya naskah yang lolos gerbang validator yang boleh memuaskan
+        // ambang — yang gagal tetap dibuang di hilir.
+        layak: (v) => v.validation.passed,
+      },
+    );
+    const variants = gerbang.terpilih.map((d) => d.varian);
+
+    // Hasil gerbang DICATAT, bukan cuma dipakai lalu dibuang. Tanpa ini
+    // mustahil menjawab "berapa sering naskah harus ditulis ulang demi skor,
+    // dan berapa yang tetap di bawah 60" — dua angka yang menentukan apakah
+    // ambangnya sehat atau justru menyiksa penulis dan menghabiskan token.
+    await catatAudit(user.id, "naskah.gerbang_viral", "products", product.id, {
+      skor_tertinggi: gerbang.skorTertinggi,
+      ambang: AMBANG_VIRAL,
+      percobaan: gerbang.percobaan,
+      lolos: gerbang.lolosAmbang,
+      tier,
+    });
 
     // NASKAH YANG GAGAL GATE TIDAK DISIMPAN.
     //
@@ -129,13 +184,23 @@ export async function POST(req: Request) {
     const hasilValidasi = (v: typeof variants[number]) =>
       amplopValidasi(v.validation, { script_source: v.script_source, admisi: v.admisi });
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
+    const ringkasGerbang = {
+      skor_tertinggi: gerbang.skorTertinggi,
+      ambang: AMBANG_VIRAL,
+      percobaan: gerbang.percobaan,
+      lolos_ambang: gerbang.lolosAmbang,
+    };
     if (postgresRuntimeEnabled()) {
       const created = await smokeCreateScripts(user.id, product.id, sah.map((v) => ({
         hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
         caption: v.caption, hashtags: v.hashtags, validationResult: hasilValidasi(v), qualityTier: tier,
         hookLevel,
       })));
-      return Response.json({ scripts: sah.map((v, index) => makeOut(v, created[index].id)), shortened_to: jaring.shortenedTo });
+      return Response.json({
+        scripts: sah.map((v, index) => makeOut(v, created[index].id)),
+        shortened_to: shortenedTo,
+        viral: ringkasGerbang,
+      });
     }
     const db = getDb();
     const out = sah.map((v) => {
@@ -154,7 +219,7 @@ export async function POST(req: Request) {
       return makeOut(v, id);
     });
 
-    return Response.json({ scripts: out, shortened_to: jaring.shortenedTo });
+    return Response.json({ scripts: out, shortened_to: shortenedTo, viral: ringkasGerbang });
   } catch (err) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
