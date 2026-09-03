@@ -104,6 +104,38 @@ worker.on("failed", (job, error) => {
     attempts_allowed: attempts,
     message: redactWorkerError(error.message),
   }));
+  // BELUM percobaan terakhir: job DIKEMBALIKAN ke QUEUED, bukan dibiarkan
+  // duduk di state terakhirnya.
+  //
+  // ────────────────────────────────────────────────────────────────────────
+  // KEGAGALAN NYATA YANG DIPERBAIKI INI (job 000de02e, 3 Sep 2026)
+  // ────────────────────────────────────────────────────────────────────────
+  // Job standard gagal QC, BullMQ menjadwalkan percobaan ke-2 dari 3, dan
+  // barisnya di database DIBIARKAN di QC_CHECK. Worker berjalan
+  // concurrency=1, dan job berikutnya (ultra) memakai mesin selama 617 detik
+  // — jadi percobaan ulang itu mengantre di belakangnya.
+  //
+  // Sementara itu penyapu menghitung "sudah 10 menit di QC_CHECK" lalu
+  // memvonisnya macet: FAILED -> REFUNDED, dengan DUA percobaan masih
+  // tersisa. Pembeli melihat "Gagal", kami menanggung Rp6.750 render yang
+  // sudah dibayar, dan penyebabnya bukan rendernya melainkan pembukuan kami
+  // sendiri.
+  //
+  // Job yang MENGANTRE bukan job yang MACET. QUEUED menyatakannya apa adanya,
+  // dan jamnya dimulai ulang — jam yang benar untuk antrean, bukan untuk
+  // pemeriksaan yang menggantung. Batas percobaan BullMQ tetap yang
+  // mengakhiri: pengulangan ini tidak bisa berputar selamanya.
+  if (job.attemptsMade < attempts && postgresRuntimeEnabled()) {
+    void (async () => {
+      const { PgJobsRepository } = await import("../lib/postgres/jobs");
+      const jobs = new PgJobsRepository(config.databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
+      try {
+        await jobs.transition(job.data.jobId, "QUEUED", { alasan: "menunggu percobaan ulang", percobaan: job.attemptsMade });
+      } catch (e) {
+        console.error(`[worker] gagal mengembalikan job ${job.data.jobId} ke QUEUED:`, e);
+      } finally { await jobs.close(); }
+    })();
+  }
   // BullMQ increments attemptsMade before emitting failed; only the final
   // failure enters the established FAILED -> release -> REFUNDED workflow.
   if (job.attemptsMade >= attempts) {
