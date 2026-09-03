@@ -298,7 +298,7 @@ export async function GET(req: Request) {
     if (!postgresRuntimeEnabled()) sweepStaleJobs();
     const jobs = postgresRuntimeEnabled() ? await pgListJobs(user.id) : getDb()
       .prepare(
-        `SELECT j.id, j.state, j.format, j.duration_s, j.created_at, j.completed_at,
+        `SELECT j.id, j.state, j.format, j.duration_s, j.quality_tier, j.created_at, j.completed_at,
                 j.provider_video, j.provider_voice, j.cost_actual_idr, j.script_id,
                 p.name AS product_name, p.images AS product_images,
                 o.video_url AS output_video,

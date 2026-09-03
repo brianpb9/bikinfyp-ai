@@ -88,6 +88,32 @@ export function langgananAktif(userId: string) {
 }
 
 /** Potong satu jatah. Mengembalikan ember yang dipotong, atau null bila habis. */
+/**
+ * Riwayat pemakaian jatah — cermin dari PgKreditVideo.riwayat().
+ *
+ * Bentuk barisnya WAJIB sama dengan jalur Postgres: ia dibaca satu komponen UI,
+ * dan dua bentuk berbeda untuk satu layar adalah cara paling pasti membuat
+ * salah satunya rusak diam-diam di runtime yang jarang dipakai.
+ */
+export function riwayatKredit(userId: string, batas = 50) {
+  return getDb()
+    .prepare(
+      `SELECT kv.jenis, kv.ember, kv.delta, kv.tipe, kv.catatan, kv.dibuat_pada,
+              kv.job_id, j.state AS job_state, p.name AS produk
+         FROM kredit_video kv
+         LEFT JOIN jobs j ON j.id = kv.job_id
+         LEFT JOIN products p ON p.id = j.product_id
+        WHERE kv.user_id = ?
+        ORDER BY kv.dibuat_pada DESC
+        LIMIT ?`,
+    )
+    .all(userId, Math.max(1, Math.min(200, batas))) as {
+      jenis: JenisVideo; ember: Ember; delta: number; tipe: string;
+      catatan: string | null; dibuat_pada: string;
+      job_id: string | null; job_state: string | null; produk: string | null;
+    }[];
+}
+
 export function pakaiKredit(userId: string, jenis: JenisVideo, jobId: string): Ember | null {
   const db = getDb();
   return db.transaction(() => {

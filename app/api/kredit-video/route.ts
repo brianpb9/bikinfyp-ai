@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { hargaKredit, daftarPaket, sisaKredit, langgananAktif } from "@/lib/kredit-video-runtime";
+import { hargaKredit, daftarPaket, sisaKredit, langgananAktif, riwayatKredit } from "@/lib/kredit-video-runtime";
 import { JENIS_VIDEO, totalVideoPaket } from "@/lib/kredit-video";
 import { KUALITAS } from "@/lib/kualitas-video";
 import { config } from "@/lib/config";
@@ -68,16 +68,31 @@ export async function GET(req: Request) {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 
-    const [harga, paket, sisa, langganan, tertunda] = await Promise.all([
+    const [harga, paket, sisa, langganan, tertunda, riwayat] = await Promise.all([
       hargaKredit(),
       daftarPaket(true),
       sisaKredit(user.id),
       langgananAktif(user.id),
       pesananTertunda(user.id),
+      // Ikut di panggilan yang SAMA, sesuai alasan yang sudah ditulis di atas
+      // untuk sisa dan harga: layar yang mengambil datanya sepotong-sepotong
+      // sempat menampilkan riwayat lama di sebelah sisa yang sudah baru.
+      riwayatKredit(user.id, 30),
     ]);
 
     return Response.json({
       sisa,
+      riwayat: riwayat.map((r) => ({
+        jenis: r.jenis,
+        ember: r.ember,
+        delta: r.delta,
+        tipe: r.tipe,
+        catatan: r.catatan,
+        pada: r.dibuat_pada,
+        job_id: r.job_id,
+        job_state: r.job_state,
+        produk: r.produk,
+      })),
       jenis: JENIS_VIDEO.map((j) => ({
         id: j,
         label: KUALITAS[j].label,

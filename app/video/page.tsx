@@ -16,9 +16,29 @@ interface JobItem {
   thumb_url: string | null;
   preview_url: string | null;
   script_id: string;
+  /** Paket yang dipakai — permintaan Brian 3 Sep 2026: "saya ingin ditambahkan
+   *  informasi video yang di generate itu menggunakan package yang mana". */
+  quality_tier?: string | null;
   fyp_score?: number | null;
   fyp_posted_url?: string | null;
 }
+
+/**
+ * Nama paket yang dibaca pembeli, bukan id internal.
+ *
+ * Tier lama ikut dipetakan: riwayat memuat job yang dibuat sebelum susunan
+ * standard/premium/ultra ada, dan menampilkan "high_quality" mentah-mentah
+ * kepada orang yang membeli "Premium" adalah cara membuat riwayatnya sendiri
+ * terasa asing.
+ */
+const PAKET_LABEL: Record<string, string> = {
+  standard: "Standard",
+  premium: "Premium",
+  ultra: "Ultra",
+  high_quality: "Premium (lama)",
+  super_hq: "Ultra (lama)",
+  silent_caption: "Senyap (pensiun)",
+};
 
 // Lapor hasil posting (loop belajar Skor FYP): link beku setelah tersimpan,
 // angka views/pesanan boleh diisi/diperbarui menyusul.
@@ -203,6 +223,14 @@ export default function VideoPage() {
               <p className="truncate font-bold">{j.product_name}</p>
               <p className="text-xs text-zinc-500">
                 {relTime(j.created_at)} · {STATE_LABEL[j.state] ?? "Sedang dibikin"}
+                {/* PAKET ikut ditampilkan di video GAGAL juga, bukan cuma yang
+                    berhasil: saat sesuatu tidak beres, hal pertama yang ingin
+                    diketahui orang adalah jatah mana yang barusan dipakai. */}
+                {j.quality_tier && (
+                  <span className="ml-1 rounded-full bg-zinc-100 px-2 py-0.5 font-bold text-zinc-600">
+                    {PAKET_LABEL[j.quality_tier] ?? j.quality_tier}
+                  </span>
+                )}
                 {/* Skor menilai RENCANA konten (skrip/struktur vs pola video
                     pemenang), bukan kualitas render — di video gagal disembunyikan
                     dan labelnya dibuat jujur (insiden "video sampah skor 97"). */}

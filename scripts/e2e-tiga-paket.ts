@@ -47,7 +47,10 @@ const email = (process.argv[2] ?? "").toLowerCase();
 const productId = process.argv[3] ?? "";
 if (!email || !productId) throw new Error("Pakai: e2e-tiga-paket.ts <email> <product-id>");
 
-const PAKET: QualityTier[] = ["standard", "premium", "ultra"];
+// Paket bisa dipilih lewat argumen ke-3 supaya ulangan tidak membayar ulang
+// tier yang SUDAH terbukti. Premium sudah READY pada jalan sebelumnya.
+const PAKET: QualityTier[] = (process.argv[4] ?? "standard,premium,ultra")
+  .split(",").map((x) => x.trim()).filter(Boolean) as QualityTier[];
 const DURASI = 15;
 const FORMAT = "talking_head";
 

@@ -4,7 +4,8 @@ import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiFail, pesanUntukPengguna} from "../_components/api";
 import { ErrorText } from "../_components/ui";
-import { loadFlow, rupiah } from "../_components/flow";
+import Link from "next/link";
+import { loadFlow, relTime, rupiah } from "../_components/flow";
 
 /**
  * KREDIT — dihitung per JENIS VIDEO, bukan rupiah.
@@ -39,8 +40,58 @@ interface PesananTertunda {
   paket_id: string | null; items: { jenis: string; qty: number }[];
   va_number: string | null; redirect_url: string | null;
 }
+/**
+ * Satu baris riwayat jatah video.
+ *
+ * Permintaan Brian 3 Sep 2026: "history penggunaan video dan video apa yang
+ * digunakan juga perlu ditambahkan sehingga user dapat melihat".
+ *
+ * Sampai kini pembeli hanya melihat ANGKA SISA. Angka sisa yang turun tanpa
+ * riwayat adalah bentuk paling murni dari "jatah saya hilang ke mana": tidak
+ * ada cara membedakan jatah yang jadi video, jatah yang dikembalikan karena
+ * rendernya gagal, dan bonus yang masuk.
+ */
+/**
+ * Label riwayat dalam bahasa pembeli.
+ *
+ * `tipe` di database ditulis untuk mesin: "pakai", "kembali", "bonus", "beli",
+ * "langganan". Menampilkannya mentah membuat riwayat terbaca seperti log
+ * server — dan riwayat yang tidak bisa dibaca sama saja dengan tidak ada
+ * riwayat, karena ia dibuka justru oleh orang yang sedang bingung.
+ *
+ * "kembali" sengaja menyebut ALASANNYA: itu baris yang paling sering
+ * ditanyakan, dan jawabannya ("rendernya gagal, jatahmu tidak hangus") adalah
+ * kabar baik yang tidak boleh disimpan sebagai satu kata teknis.
+ */
+const LABEL_TIPE: Record<string, string> = {
+  pakai: "dipakai untuk video",
+  kembali: "dikembalikan — render gagal",
+  bonus: "bonus masuk",
+  beli: "pembelian satuan",
+  langganan: "dari paket langganan",
+};
+
+const LABEL_JENIS: Record<string, string> = {
+  standard: "Standard",
+  premium: "Premium",
+  ultra: "Ultra",
+};
+
+interface BarisRiwayat {
+  jenis: string;
+  ember: string;
+  delta: number;
+  tipe: string;
+  catatan: string | null;
+  pada: string;
+  job_id: string | null;
+  job_state: string | null;
+  produk: string | null;
+}
+
 interface Katalog {
   sisa: Record<string, SisaJenis>;
+  riwayat: BarisRiwayat[];
   jenis: Jenis[];
   paket: Paket[];
   langganan: Langganan[];
@@ -694,6 +745,55 @@ function KreditInner() {
             Kami juga mengecek sendiri tiap beberapa detik — halaman ini akan berubah begitu pembayaranmu masuk.
           </p>
         </div>
+      )}
+
+      {/* RIWAYAT PEMAKAIAN JATAH.
+          Ditaruh paling bawah dengan sengaja: yang dicari orang saat membuka
+          halaman ini adalah sisa dan cara menambah. Riwayat dibutuhkan justru
+          ketika angkanya terasa salah — dan saat itu ia dicari, bukan
+          dilewati. */}
+      {(katalog?.riwayat.length ?? 0) > 0 && (
+        <section className="space-y-2">
+          <h2 className="font-display text-lg font-bold">Riwayat jatah video</h2>
+          <p className="text-xs leading-4 text-zinc-500">
+            Tiap jatah yang terpakai, kembali, atau masuk — beserta videonya.
+          </p>
+          <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
+            {katalog?.riwayat.map((r, i) => (
+              <li key={`${r.pada}-${i}`} className="flex items-start gap-3 px-4 py-3">
+                {/* Tanda + / − dibaca lebih dulu daripada kalimatnya. Warnanya
+                    bukan hiasan: hijau untuk yang menambah jatah, dan ABU-ABU
+                    untuk yang memakainya — bukan merah. Memakai jatah adalah
+                    hal yang normal dan memang dibeli; mewarnainya seperti galat
+                    membuat pemakaian yang wajar terasa seperti kerugian. */}
+                <span
+                  className={`mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${
+                    r.delta > 0 ? "bg-emerald-50 text-emerald-700" : "bg-zinc-100 text-zinc-600"
+                  }`}
+                >
+                  {r.delta > 0 ? `+${r.delta}` : r.delta}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold">
+                    {LABEL_JENIS[r.jenis] ?? r.jenis}
+                    <span className="ml-1 font-normal text-zinc-500">· {LABEL_TIPE[r.tipe] ?? r.tipe}</span>
+                  </p>
+                  {/* VIDEO APA-nya disebut, bukan cuma bahwa ada pemakaian —
+                      itu bagian yang diminta dan bagian yang menjawab
+                      "terpakai untuk apa". */}
+                  {r.produk && <p className="truncate text-xs text-zinc-500">{r.produk}</p>}
+                  {!r.produk && r.catatan && <p className="truncate text-xs text-zinc-500">{r.catatan}</p>}
+                  <p className="text-[11px] text-zinc-400">{relTime(r.pada)}</p>
+                </div>
+                {r.job_id && (
+                  <Link href="/video" className="mt-0.5 shrink-0 text-xs font-semibold text-amber-700 underline">
+                    Lihat
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {/* Pembayaran MASUK — dan halaman mengatakannya, lalu mengantar kembali

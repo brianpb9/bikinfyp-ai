@@ -29,6 +29,25 @@ export async function sisaKredit(userId: string): Promise<SisaKredit> {
   return postgresRuntimeEnabled() ? (await pg()).sisa(userId) : (await sq()).sisaKredit(userId);
 }
 
+/** Satu baris riwayat jatah, bentuk yang sama di kedua runtime. */
+export interface BarisRiwayat {
+  jenis: JenisVideo;
+  ember: string;
+  delta: number;
+  tipe: string;
+  catatan: string | null;
+  dibuat_pada: string;
+  job_id: string | null;
+  job_state: string | null;
+  produk: string | null;
+}
+
+export async function riwayatKredit(userId: string, batas = 50): Promise<BarisRiwayat[]> {
+  return postgresRuntimeEnabled()
+    ? ((await pg()).riwayat(userId, batas) as unknown as Promise<BarisRiwayat[]>)
+    : ((await sq()).riwayatKredit(userId, batas) as unknown as BarisRiwayat[]);
+}
+
 export interface LanggananRingkas {
   id: string;
   paketId: string;

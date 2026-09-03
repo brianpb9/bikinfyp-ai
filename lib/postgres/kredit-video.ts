@@ -72,6 +72,19 @@ const SQL_LANGGANAN_AKTIF = `
    WHERE l.user_id = $1 AND l.status = 'aktif' AND l.berakhir_pada > $2
    ORDER BY l.berakhir_pada ASC`;
 
+/** Satu baris riwayat jatah video, sebagaimana dibaca pembeli. */
+export interface BarisRiwayatKredit {
+  jenis: JenisVideo;
+  ember: Ember;
+  delta: number;
+  tipe: string;
+  catatan: string | null;
+  dibuat_pada: string;
+  job_id: string | null;
+  job_state: string | null;
+  produk: string | null;
+}
+
 export class PgKreditVideo {
   private readonly pool: Pool;
   private readonly now: () => string;
@@ -120,6 +133,42 @@ export class PgKreditVideo {
     const t: Partial<Record<JenisVideo, number>> = {};
     for (const row of topupRows.rows) t[row.jenis] = Number(row.sisa);
     return susunSisa(l, t);
+  }
+
+  /**
+   * RIWAYAT PEMAKAIAN JATAH — apa yang terjadi pada kredit, dan untuk video apa.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * KENAPA INI ADA
+   * ──────────────────────────────────────────────────────────────────────────
+   * Permintaan Brian 3 Sep 2026: "history penggunaan video dan video apa yang
+   * digunakan juga perlu ditambahkan sehingga user dapat melihat".
+   *
+   * Sampai kini pembeli hanya melihat ANGKA SISA. Angka sisa yang turun tanpa
+   * riwayat adalah bentuk paling murni dari "uang saya hilang ke mana": tidak
+   * ada cara membedakan jatah yang terpakai untuk video yang jadi, jatah yang
+   * terpakai lalu dikembalikan karena rendernya gagal, dan bonus yang masuk.
+   *
+   * Ketiganya sudah tercatat di kredit_video sejak awal — yang belum ada hanya
+   * pintu untuk membacanya.
+   *
+   * Produknya di-LEFT JOIN, bukan JOIN: baris bonus dan baris pembelian tidak
+   * punya job, dan menghilangkannya dari riwayat justru membuang penjelasan
+   * atas kenaikan saldo — separuh pertanyaan yang mau dijawab.
+   */
+  async riwayat(userId: string, batas = 50): Promise<BarisRiwayatKredit[]> {
+    const r = await this.pool.query<BarisRiwayatKredit>(
+      `SELECT kv.jenis, kv.ember, kv.delta, kv.tipe, kv.catatan, kv.dibuat_pada,
+              kv.job_id, j.state AS job_state, p.name AS produk
+         FROM kredit_video kv
+         LEFT JOIN jobs j ON j.id = kv.job_id
+         LEFT JOIN products p ON p.id = j.product_id
+        WHERE kv.user_id = $1
+        ORDER BY kv.dibuat_pada DESC
+        LIMIT $2`,
+      [userId, Math.max(1, Math.min(200, batas))],
+    );
+    return r.rows;
   }
 
   async langgananAktif(userId: string): Promise<(Langganan & { sisa: Record<JenisVideo, number> })[]> {
