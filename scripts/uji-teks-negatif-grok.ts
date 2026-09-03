@@ -35,8 +35,13 @@ import { config } from "../lib/config";
 if (process.env.RENDER_CONFIRM !== "YA") {
   throw new Error("Skrip ini MEMBAYAR render sungguhan. Setel RENDER_CONFIRM=YA kalau memang itu yang diinginkan.");
 }
-const gambar = process.argv[2];
-if (!gambar || !fs.existsSync(gambar)) throw new Error(`Sebutkan file gambar referensi yang ada: ${gambar ?? "(kosong)"}`);
+// Argumennya KUNCI OBJEK di penyimpanan media (mis.
+// "uploads/<id-produk>/0.webp"), bukan path lokal: di server, foto produk ada
+// di MinIO dan direktori storage kontainer memang kosong. materialize()
+// menurunkannya ke path lokal lewat jalur yang sama dengan yang dipakai
+// provider produksi.
+const kunci = process.argv[2];
+if (!kunci) throw new Error("Sebutkan kunci objek gambar, mis. uploads/<id-produk>/0.webp");
 if (!config.kieApiKey) throw new Error("KIE_API_KEY kosong.");
 
 // Shot yang dipakai SAMA untuk keduanya — hanya ekornya yang berbeda.
@@ -86,6 +91,9 @@ fs.mkdirSync(keluar, { recursive: true });
 // Gambar referensi harus bisa diambil kie.ai lewat URL publik. Dipakai ulang
 // jalur yang sama dengan produksi: unggah ke penyimpanan kita, lalu kirim URL-nya.
 const { terbitkanGambarProvider } = await import("../lib/gambar-provider");
+const { mediaStorage } = await import("../lib/storage");
+const gambar = await mediaStorage().materialize(kunci);
+if (!gambar || !fs.existsSync(gambar)) throw new Error(`objek tidak ditemukan di penyimpanan: ${kunci}`);
 const imageUrl = await terbitkanGambarProvider(gambar, "uji-teks-negatif", 0);
 console.log(`gambar referensi: ${imageUrl}\n`);
 
