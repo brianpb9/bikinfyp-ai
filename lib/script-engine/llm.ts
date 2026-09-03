@@ -488,9 +488,23 @@ export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
  * kabar buruk ini disampaikan — dan supaya ada yang bisa diuji.
  */
 export function laporJatuhKeTemplate(sebab: string, konteks: { productName: string }): void {
+  // TINDAKANNYA MENGIKUTI SEBABNYA, bukan selalu "pasang kunci".
+  //
+  // Saran lama selalu berbunyi "pasang ANTHROPIC_API_KEY" — dan itu menyesatkan
+  // begitu kuncinya SUDAH terpasang. Pada 3 Sep 2026 penyebab sebenarnya adalah
+  // saldo akun Anthropic habis; log menyuruh memasang kunci yang sudah ada,
+  // sementara yang perlu dilakukan sama sekali berbeda. Petunjuk yang salah
+  // lebih buruk daripada tanpa petunjuk: ia mengirim orang ke arah yang keliru.
+  const tindakan = /credit balance is too low|insufficient.*credit|billing/i.test(sebab)
+    ? "SALDO AKUN ANTHROPIC HABIS — isi ulang di Plans & Billing. Kuncinya sendiri sah."
+    : /401|unauthorized|invalid x-api-key|authentication/i.test(sebab)
+      ? "Kunci Anthropic DITOLAK — periksa nilainya di /admin/kredensial."
+      : /belum di-set|kosong/i.test(sebab)
+        ? "Pasang ANTHROPIC_API_KEY di layanan web atau lewat /admin/kredensial."
+        : "Periksa jawaban Anthropic di atas — sebabnya ada di pesan itu, bukan di kuncinya.";
   console.error(
     `[script-engine] JATUH KE TEMPLATE untuk "${konteks.productName}" — naskah yang keluar adalah ` +
       `template pengisi, BUKAN tulisan LLM. Sebab: ${sebab}. ` +
-      `Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.`
+      `Ini bukan kondisi normal: ${tindakan}`
   );
 }

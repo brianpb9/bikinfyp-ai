@@ -21,6 +21,7 @@ import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import type { QualityTier } from "@/lib/providers/types";
+import { pastikanSegar } from "@/lib/kredensial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,6 +82,11 @@ function pastikanMatriksAktif() {
 
 export async function POST(req: Request) {
   try {
+    // Kredensial partner bisa diganti dari /admin/kredensial tanpa restart.
+    // Tanpa penyegaran ini, kunci yang baru dipasang tidak berpengaruh sampai
+    // container dimuat ulang — dan halaman itu tetap bilang "tersimpan",
+    // yaitu kegagalan diam yang paling membingungkan.
+    await pastikanSegar();
     pastikanMatriksAktif();
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);

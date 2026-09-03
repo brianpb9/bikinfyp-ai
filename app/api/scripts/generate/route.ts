@@ -11,6 +11,7 @@ import type { QualityTier } from "@/lib/providers/types";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { pastikanSegar } from "@/lib/kredensial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,6 +19,11 @@ export const dynamic = "force-dynamic";
 // POST /api/scripts/generate {product_id, register, emotion, format} -> 3 skrip tervalidasi.
 export async function POST(req: Request) {
   try {
+    // Kredensial partner bisa diganti dari /admin/kredensial tanpa restart.
+    // Tanpa penyegaran ini, kunci yang baru dipasang tidak berpengaruh sampai
+    // container dimuat ulang — dan halaman itu tetap bilang "tersimpan",
+    // yaitu kegagalan diam yang paling membingungkan.
+    await pastikanSegar();
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 

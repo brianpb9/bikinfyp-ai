@@ -11,6 +11,7 @@ import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { TIER_DITERIMA, tierMasihDiterima } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
 import type { QualityTier } from "@/lib/providers/types";
+import { pastikanSegar } from "@/lib/kredensial";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,11 @@ const MAX_VIDEOS = 6;
 // gerbang HITL manusia (aturan keras #5) di langkah confirm.
 export async function POST(req: Request) {
   try {
+    // Kredensial partner bisa diganti dari /admin/kredensial tanpa restart.
+    // Tanpa penyegaran ini, kunci yang baru dipasang tidak berpengaruh sampai
+    // container dimuat ulang — dan halaman itu tetap bilang "tersimpan",
+    // yaitu kegagalan diam yang paling membingungkan.
+    await pastikanSegar();
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
     await assertDashboardRate("generate", membership.org_id);

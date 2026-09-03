@@ -5,6 +5,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
 import { config } from "@/lib/config";
+import { pastikanSegar } from "@/lib/kredensial";
 
 /** Bonus daftar ditulis dari config, bukan diketik: angka Rp5.000 di sini
  * bertahan berbulan-bulan sesudah tier itu pensiun (temuan board 20 Agu). */
@@ -27,6 +28,11 @@ export const dynamic = "force-dynamic";
 // demonya dinilai sepadan; itu keputusan sadar, bukan efek samping.
 export async function POST(req: Request) {
   try {
+    // Kredensial partner bisa diganti dari /admin/kredensial tanpa restart.
+    // Tanpa penyegaran ini, kunci yang baru dipasang tidak berpengaruh sampai
+    // container dimuat ulang — dan halaman itu tetap bilang "tersimpan",
+    // yaitu kegagalan diam yang paling membingungkan.
+    await pastikanSegar();
     const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!(await allowRate("try", ip, 15, 15 * 60)))
       return Response.json(
