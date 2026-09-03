@@ -82,5 +82,5 @@ test("riwayat memakai bahasa pembeli, bukan istilah database", () => {
   // Baris yang paling sering ditanyakan harus menyebut ALASANNYA, bukan satu
   // kata teknis: "jatahmu tidak hangus" adalah kabar baik.
   assert.match(hal, /kembali: "dikembalikan — render gagal"/);
-  assert.match(hal, /Riwayat jatah video/);
+  assert.match(hal, /Riwayat Penggunaan Package/);
 });

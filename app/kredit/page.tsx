@@ -754,9 +754,9 @@ function KreditInner() {
           dilewati. */}
       {(katalog?.riwayat.length ?? 0) > 0 && (
         <section className="space-y-2">
-          <h2 className="font-display text-lg font-bold">Riwayat jatah video</h2>
+          <h2 className="font-display text-lg font-bold">Riwayat Penggunaan Package</h2>
           <p className="text-xs leading-4 text-zinc-500">
-            Tiap jatah yang terpakai, kembali, atau masuk — beserta videonya.
+            Tiap jatah package yang terpakai, kembali, atau masuk — beserta videonya.
           </p>
           <ul className="divide-y divide-zinc-100 overflow-hidden rounded-2xl border border-zinc-200 bg-white">
             {katalog?.riwayat.map((r, i) => (

@@ -77,7 +77,7 @@ async function main() {
       jobId: `uji-${tier}`,
       width: 720,
       height: 1280,
-      shots: [{ index: 0, durationSec: 6, prompt: PROMPT, imageRefPath: gambar }],
+      shots: [{ index: 0, durationSec: Number(process.env.UJI_DETIK ?? 6), prompt: PROMPT, imageRefPath: gambar }],
       negativePrompt: NEGATIF,
       qualityTier: tier,
       generateAudio: true,
