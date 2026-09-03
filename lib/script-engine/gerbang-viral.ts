@@ -49,6 +49,26 @@ export const AMBANG_VIRAL = 60;
  */
 export const MAKS_PERCOBAAN_VIRAL = 3;
 
+/**
+ * Pagar WAKTU, bukan cuma jumlah percobaan.
+ *
+ * Terukur di E2E produksi 3 Sep 2026: tier ultra menghabiskan lebih dari 30
+ * menit di tahap naskah. Jumlah percobaan sudah dibatasi tiga — yang tidak
+ * dibatasi adalah LAMANYA satu percobaan, dan pada tier tinggi satu percobaan
+ * berisi Idea Stage (belasan panggilan model) plus penulisan plus sampai tiga
+ * perbaikan validator.
+ *
+ * Batas percobaan menjaga BIAYA per putaran. Batas waktu menjaga hal yang
+ * berbeda dan sama pentingnya: orang yang menunggu di depan layar. Tidak ada
+ * pembeli yang menunggu setengah jam untuk tiga pilihan naskah, dan naskah
+ * bagus yang datang terlambat sudah kalah oleh halaman yang ditutup.
+ *
+ * Yang dijaga: percobaan yang SUDAH berjalan tidak pernah dipotong di
+ * tengah — memotongnya berarti membayar penuh lalu membuang hasilnya. Yang
+ * dicegah hanyalah MEMULAI putaran baru saat jatah waktunya sudah habis.
+ */
+export const BATAS_WAKTU_VIRAL_MS = 120_000;
+
 export interface KonteksSkor {
   qualityTier: FypQualityTier;
   durationSec: number;
@@ -155,6 +175,10 @@ export async function lewatiGerbangViral<T extends VarianTerskor>(
      * pasti bisa menilai dengan format itu.
      */
     nilai?: (v: T) => number | null;
+    /** Jatah waktu total sebelum putaran BARU berhenti dimulai. */
+    batasMs?: number;
+    /** Jam, supaya pagar waktunya bisa diuji tanpa benar-benar menunggu. */
+    sekarang?: () => number;
   } = {},
 ): Promise<HasilGerbang<T>> {
   const ambang = opsi.ambang ?? AMBANG_VIRAL;
@@ -162,6 +186,9 @@ export async function lewatiGerbangViral<T extends VarianTerskor>(
   const catat = opsi.catat ?? (() => {});
   const layak = opsi.layak ?? (() => true);
   const nilai = opsi.nilai ?? ((v: T) => skorVarian(v, ctx));
+  const batasMs = opsi.batasMs ?? BATAS_WAKTU_VIRAL_MS;
+  const sekarang = opsi.sekarang ?? (() => Date.now());
+  const mulai = sekarang();
   const kumpulan: VarianBerskor<T>[] = [];
   let percobaan = 0;
 
@@ -185,6 +212,14 @@ export async function lewatiGerbangViral<T extends VarianTerskor>(
     );
     if (memenuhiAmbang(kumpulan, ambang, layak)) {
       catat(`skor viral ${tertinggi} >= ${ambang} pada percobaan ${i}/${maks}`);
+      break;
+    }
+    const lewat = sekarang() - mulai;
+    if (i < maks && lewat >= batasMs) {
+      catat(
+        `skor viral tertinggi ${tertinggi ?? "(tak terukur)"} < ${ambang}, tapi sudah ${Math.round(lewat / 1000)} dtk ` +
+          `(jatah ${Math.round(batasMs / 1000)} dtk) — berhenti di percobaan ${i}/${maks}, hasil terbaik disajikan`,
+      );
       break;
     }
     catat(

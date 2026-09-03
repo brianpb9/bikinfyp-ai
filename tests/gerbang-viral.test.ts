@@ -118,3 +118,48 @@ test("tangga nama tidak diulang tiap percobaan — biayanya berlipat tanpa guna"
   );
   assert.match(rute, /namaBerhasil = j\.shortenedTo \?\? product\.name;/, "nama yang berhasil tidak disimpan");
 });
+
+test("jatah waktu menghentikan putaran BARU, tapi tidak memotong yang sedang jalan", async () => {
+  // Terukur di E2E produksi 3 Sep 2026: tier ultra menghabiskan >30 menit di
+  // tahap naskah. Batas percobaan menjaga biaya per putaran; ia tidak menjaga
+  // orang yang menunggu di depan layar, karena satu putaran tier tinggi berisi
+  // Idea Stage plus penulisan plus perbaikan validator.
+  //
+  // Yang dijaga di sini DUA arah: putaran baru tidak dimulai kalau jatah habis,
+  // DAN putaran yang sudah berjalan tetap diselesaikan — memotongnya berarti
+  // membayar penuh lalu membuang hasilnya.
+  let jam = 0;
+  const dipanggil: number[] = [];
+  const hasil = await lewatiGerbangViral(
+    async (n) => {
+      dipanggil.push(n);
+      jam += 80_000; // tiap putaran makan 80 detik
+      return [v(`babak${n}`)];
+    },
+    {} as never,
+    {
+      nilai: () => 30, // selalu di bawah ambang
+      layak: (x: Palsu) => x.validation.passed,
+      batasMs: 120_000,
+      sekarang: () => jam,
+    } as never,
+  );
+  // Putaran 1 selesai (80 dtk). 80 < 120 -> putaran 2 boleh mulai.
+  // Putaran 2 selesai (160 dtk). 160 >= 120 -> putaran 3 TIDAK dimulai.
+  assert.deepEqual(dipanggil, [1, 2], "jatah waktu tidak menahan putaran ketiga");
+  // Hasil kedua putaran tetap disajikan — tidak ada yang dibuang.
+  assert.equal(hasil.terpilih.length, 2, "hasil putaran yang sudah dibayar ikut hilang");
+  assert.equal(hasil.lolosAmbang, false);
+});
+
+test("jatah waktu tidak ikut campur kalau ambang tercapai lebih dulu", async () => {
+  let jam = 0;
+  const dipanggil: number[] = [];
+  const hasil = await lewatiGerbangViral(
+    async (n) => { dipanggil.push(n); jam += 500_000; return [v(`babak${n}`)]; },
+    {} as never,
+    { nilai: () => 91, layak: (x: Palsu) => x.validation.passed, batasMs: 1, sekarang: () => jam } as never,
+  );
+  assert.deepEqual(dipanggil, [1]);
+  assert.equal(hasil.lolosAmbang, true, "mutu yang sudah cukup tidak boleh dianggap kehabisan waktu");
+});
