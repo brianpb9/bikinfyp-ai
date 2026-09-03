@@ -152,3 +152,56 @@ export const POLA_PERANGKAT: Record<string, RegExp> = {
 export function memakaiPerangkat(hook: string): boolean {
   return Object.values(POLA_PERANGKAT).some((re) => re.test(hook));
 }
+
+/**
+ * Penanda yang TERBUKTI dikenali POLA_PERANGKAT — untuk diberitahukan ke penulis.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA INI ADA
+ * ────────────────────────────────────────────────────────────────────────────
+ * L-19 dijadikan gerbang keras, tapi isinya tidak pernah sampai ke penulis.
+ * Akibatnya terukur di produksi 3 Sep 2026: pada empat run berturut-turut,
+ * "Hook belum memakai perangkat retoris yang dikenali" muncul di SETIAP
+ * percobaan, dan tiga run habis di percobaan ketiga tanpa naskah. Penulis
+ * disuruh menebak bentuk yang kita ukur dengan regex.
+ *
+ * Ini pola bug yang sama dengan jendela kata (L-05) dan kata ganti (L-16),
+ * yang dua-duanya sudah dibayar sekali: aturan dipakai menolak tanpa pernah
+ * diberitahukan. Ini yang ketiga.
+ *
+ * KENAPA DAFTAR PENANDA, BUKAN PARAFRASE. Yang menilai adalah regex, jadi yang
+ * berguna bagi penulis adalah kata yang benar-benar dicocoki — bukan penjelasan
+ * gaya bahasa. Tiap penanda di bawah diuji melawan memakaiPerangkat(): kalau
+ * ada yang tidak lolos pengukurnya sendiri, tesnya merah. Jadi daftar ini tidak
+ * bisa hanyut dari detektornya, sebagaimana POLA_PERANGKAT tidak boleh hanyut
+ * dari perangkatnya.
+ */
+export const PENANDA_PERANGKAT: Record<string, string> = {
+  pertanyaan: 'akhiri hook dengan tanda tanya "?"',
+  "sebut harga": '"harga", "seharga", "ribu", "juta"',
+  "larangan atau negasi": '"jangan", "nggak", "bukan", "belum", "tidak"',
+  segmentasi: '"khusus", "buat kalian yang", "buat yang"',
+  superlatif: '"paling", "terbaik", "termurah", "banget"',
+  "pengakuan pribadi": '"aku", "gue", "saya", "kirain", "ternyata"',
+  perbandingan: '"kayak", "mirip", "setara", "mendekati", "dibanding"',
+  "penemuan setelah gagal": '"akhirnya", "ganti-ganti", "berkali-kali", "baru ini"',
+  kejutan: '"tiba-tiba", "baru saja", "mendadak", "kaget"',
+  "sudut mustahil": '"dari dalam", "dari balik", "dari atas", "sedekat ini"',
+  "ajakan lihat": '"coba tebak", "perhatiin", "lihat dulu"',
+};
+
+/**
+ * Panduan L-19 siap-tempel untuk prompt penulis, disusun DARI PENANDA_PERANGKAT.
+ *
+ * Disusun, bukan ditulis ulang: satu-satunya cara daftar di prompt tetap sama
+ * dengan daftar yang diuji adalah keduanya berasal dari satu sumber.
+ */
+export function panduanPerangkatHook(): string {
+  const baris = Object.entries(PENANDA_PERANGKAT).map(([nama, penanda]) => `  - ${nama}: ${penanda}`);
+  return [
+    "HOOK DEVICE — the first segment MUST use at least one recognisable rhetorical device.",
+    "  A flat description of the product is rejected. Pick ONE of these and make it audible:",
+    ...baris,
+    "  This is measured mechanically on the hook line, so the marker must actually appear in it.",
+  ].join("\n");
+}

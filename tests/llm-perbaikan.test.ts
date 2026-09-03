@@ -220,3 +220,60 @@ test("keberhasilan jalur LLM meninggalkan baris log POSITIF", async () => {
     assert.ok(baris.some((b) => /naskah LLM DIPAKAI/.test(b)), `tidak ada baris positif:\n${baris.join("\n")}`);
   } finally { console.log = logAsli; globalThis.fetch = aslinya; }
 });
+
+// ---------------------------------------------------------------------------
+// ATURAN YANG DIPAKAI MENOLAK HARUS SAMPAI KE PENULIS — kasus ketiga
+// ---------------------------------------------------------------------------
+//
+// Dua kali sebelumnya cacat yang sama sudah dibayar: jendela kata (L-05) dan
+// kata ganti (L-16) dipakai menolak tanpa pernah diberitahukan. Diukur di
+// produksi 3 Sep 2026, tiga aturan lagi ternyata masih begitu — dan akibatnya
+// bukan teoretis: empat run berturut-turut ditolak, tiga di antaranya habis di
+// percobaan ketiga tanpa naskah sama sekali.
+//
+//   L-19        "Hook belum memakai perangkat retoris yang dikenali"
+//               -> muncul di SETIAP percobaan keempat run. Tidak pernah dikirim.
+//   §B baris 9  "segmen demo 11 kata — maksimal 10 kata untuk shot 6 detik"
+//               -> prompt cuma menyebut RATA-RATA per segmen, bukan batas keras.
+//   L-21        'Negasi tentang orang di arahan visual: "No face"'
+//               -> aturannya ADA, tapi contohnya semua kalimat naratif, jadi
+//                  penulis tidak menghubungkannya dengan field yang ia isi.
+
+const { batasKataShot } = await import("../lib/script-engine/standar-10");
+
+test("prompt menyampaikan L-19, batas kata per segmen, dan larangan negasi di field visual", async () => {
+  const dikirim = stub(segmenSah);
+  try {
+    const { minWc, maxWc } = jendelaKata({
+      qualityTier: "high_quality", durationSec: 15, productName: "Scarlett Acne Serum",
+    });
+    await tulisNaskah({
+      productName: "Scarlett Acne Serum", productCategory: "beauty", priceIdr: 75000,
+      durationSec: 15, contentType: "affiliate", cartLabel: "keranjang kuning",
+      register: "bestie", hookFamily: "H1", hookLevel: "normal", format: "talking_head",
+      wordMin: minWc, wordMax: maxWc,
+    });
+    const p = dikirim[0];
+
+    // L-19 — beserta penandanya, bukan cuma namanya. Menyuruh "pakai perangkat
+    // retoris" tanpa menyebut yang dikenali sama saja dengan tidak menyuruh.
+    assert.match(p, /HOOK DEVICE/, "aturan hook tidak dikirim");
+    assert.ok(p.includes('"kirain"'), `penanda perangkat tidak ikut:\n${p}`);
+
+    // §B baris 9 — angkanya dari batasKataShot(), sumber yang sama dengan yang
+    // menolak. Kalau ini disalin jadi angka mati, ia akan hanyut diam-diam.
+    const batas = batasKataShot(15 / 3);
+    assert.ok(
+      p.includes(`may exceed ${batas} spoken words`),
+      `batas keras per segmen (${batas}) tidak dikirim:\n${p}`,
+    );
+    // Dan ia harus dinyatakan BERBEDA dari jendela total — itu justru bedanya.
+    assert.match(p, /SEPARATE, harder rule than the total window/);
+
+    // L-21 — dialamatkan ke field yang benar-benar dilanggar di produksi.
+    assert.match(p, /THIS APPLIES TO visual_direction, start_state AND action/);
+    assert.ok(p.includes("'no hands visible'"), "contoh yang benar-benar terjadi tidak disebut");
+  } finally {
+    globalThis.fetch = aslinya;
+  }
+});

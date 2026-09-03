@@ -21,7 +21,8 @@
  * ada yang menyadarinya. Sekali lagi tidak boleh terjadi.
  */
 import { z } from "zod";
-import { MAKS_KATA_PER_SHOT } from "./standar-10";
+import { MAKS_KATA_PER_SHOT, batasKataShot } from "./standar-10";
+import { panduanPerangkatHook } from "./hook-devices";
 import { blokMaster, blokStandar } from "./standar-10-teks";
 import { config } from "../config";
 import {
@@ -109,9 +110,18 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     "  Move the action to a sink, a table, a doorway. Describe cloth as 'a folded cloth', not a towel.",
     "- Never put a bathroom door and a second person in the same scene. Keep one person in frame.",
     "- Never write weapons of any kind, including a baton.",
+    // FIELD-NYA DISEBUT (3 Sep 2026). Aturan ini sudah ada sejak lama dan tetap
+    // dilanggar: produksi merekam "No face", "no person", dan "no hands visible
+    // yet hands" DI visual_direction, tiga run berturut-turut sampai naskahnya
+    // habis. Contoh lamanya semua berbentuk kalimat naratif, jadi penulis tidak
+    // menghubungkannya dengan field arahan kamera yang ia isi. Yang kurang
+    // bukan aturannya — alamatnya.
     "- NEVER USE NEGATIONS ABOUT PEOPLE. Not 'no other residents', not 'her face is never sharp',",
     "  not 'she never speaks'. Two reasons: the filter reads the words you wrote, and the video model",
     "  renders what you name — 'no other residents' is how you get other residents.",
+    "  THIS APPLIES TO visual_direction, start_state AND action, not just dialogue. 'No face',",
+    "  'no person', 'no hands visible' in those fields are the exact strings that get rejected,",
+    "  and they are how you get a face, a person, and extra hands in the render.",
     "  Write the positive instead: 'the corridor is empty', 'the camera stays on her hands',",
     "  'she listens quietly'. Say what IS there.",
     "",
@@ -310,6 +320,17 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
     r.register === "genz"
       ? `PRONOUNS — this register uses ${gue}. Never use ${aku}. Never mix the two families.`
       : `PRONOUNS — this register uses ${aku}. Never use ${gue}. Never mix the two families.`,
+    // L-19. Penyebab penolakan TERBANYAK di produksi 3 Sep 2026, dan sampai
+    // saat itu satu-satunya gerbang keras yang tidak pernah disampaikan sama
+    // sekali — penulis disuruh menebak bentuk yang diukur regex. Daftarnya
+    // DISUSUN dari PENANDA_PERANGKAT, bukan ditulis ulang di sini.
+    panduanPerangkatHook(),
+    // §B baris 9. Jendela TOTAL di atas adalah sasaran; INI batas keras PER
+    // SEGMEN, dan keduanya tidak sama. Terukur 3 Sep 2026: naskah yang totalnya
+    // sah tetap ditolak karena satu segmen 11 kata. Batasnya diambil dari
+    // batasKataShot() — sumber yang sama dengan yang menolaknya.
+    `PER-SEGMENT HARD CAP — no single segment may exceed ${batasKataShot(r.durationSec / Math.max(1, jumlahSegmen))} spoken words.`,
+    `  This is a SEPARATE, harder rule than the total window: a script inside the total is still rejected here.`,
   ].join("\n");
 }
 

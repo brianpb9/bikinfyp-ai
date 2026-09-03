@@ -45,14 +45,55 @@ test("teks yang dikirim ke kie.ai IDENTIK dengan yang dikirim ke BytePlus", () =
   assert.equal(teksKie, teksPromptShot(spec("standard"), shot));
 });
 
-test("bentuk pemisahnya tidak berubah — teks inilah yang masuk ke model", () => {
-  // Dipaku pada bentuk yang sudah berjalan di produksi, titik dan spasinya
-  // sekalian. Mengubah pemisah berarti mengubah masukan yang selama ini
-  // menghasilkan keluaran yang diterima.
+test("bentuk teksnya dipaku — teks inilah yang masuk ke model", () => {
+  // Dipaku berikut titik dan spasinya: teks ini yang masuk ke model, dan
+  // mengubahnya berarti mengubah masukan yang menghasilkan keluaran.
+  //
+  // Bentuk lamanya "<shot>. Negative: <negativePrompt>" DIBUANG 3 Sep 2026.
+  // Tidak ada mesin yang kita pakai punya pengurai "Negative:" — kie.ai
+  // grok-imagine hanya punya field `prompt` ("describing the desired video
+  // motion") dan BytePlus menerimanya sebagai satu item teks. Lihat catatan
+  // panjang di lib/providers/teks-prompt.ts.
   assert.equal(
     teksPromptShot(spec("ultra"), shot),
-    "a woman holds the bottle at chest height, gentle push in. Negative: no text, no logo, no writing",
+    "a woman holds the bottle at chest height, gentle push in. " +
+      "Single continuous take of exactly one person, both hands with five fingers each, " +
+      "natural undistorted face and anatomy, solid opaque objects that stay whole, " +
+      "realistic skin texture, product packaging stable and undeformed with its printed label legible throughout. " +
+      "Do not add any text overlay, caption bar, subtitle, watermark, or invented logo.",
   );
+});
+
+test("tidak satu pun nama cacat ikut terkirim ke model", () => {
+  // ────────────────────────────────────────────────────────────────────────
+  // KEGAGALAN YANG DIJAGA TES INI — nyata, terukur, dan mahal
+  // ────────────────────────────────────────────────────────────────────────
+  // Daftar di bawah disalin apa adanya dari job_prompts.negative_prompt milik
+  // job 2f95311f di produksi, yaitu teks yang BENAR-BENAR dikirim ke Grok
+  // sesudah frasaNegatifBersih() membuang kata "no" dari tiap butirnya.
+  //
+  // Vonis Brian atas videonya: "tangan yang tiba-tiba banyak, ada sosok objek
+  // banyak, transparan". Ketiganya ada di daftar ini kata per kata. Job itu
+  // berakhir REFUNDED sesudah Rp20.250 keluar tanpa satu video pun lolos.
+  //
+  // Model video merender apa yang disebut. Menyebut cacat — mau diberi "no"
+  // atau tidak — menaruh cacat itu di dalam konteks. Jadi yang dijaga di sini
+  // bukan "ada kata no-nya", melainkan NAMANYA TIDAK ADA SAMA SEKALI.
+  const cacatYangPernahTerkirim = [
+    "extra hands", "third hand", "duplicated limbs", "disembodied hands", "extra fingers",
+    "second person", "duplicate of the same person", "twin", "extra people in frame",
+    "floating parts", "flickering", "morphing", "warping", "melted plastic",
+    "face distortion", "deformed packaging", "plastic skin", "oversmoothed skin",
+  ];
+  for (const tier of ["standard", "premium", "ultra"] as QualityTier[]) {
+    const teks = teksPromptShot(spec(tier), shot).toLowerCase();
+    for (const cacat of cacatYangPernahTerkirim) {
+      assert.ok(
+        !teks.includes(cacat),
+        `paket ${tier} masih menyebut "${cacat}" ke model — itu permintaan, bukan larangan`,
+      );
+    }
+  }
 });
 
 test("tidak ada provider yang menyusun teks promptnya sendiri lagi", () => {

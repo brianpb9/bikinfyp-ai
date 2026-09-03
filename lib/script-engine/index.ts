@@ -472,6 +472,7 @@ async function generateOne(
   // dan tidak akan pernah bisa menambah jeda lisan atau membetulkan kata ganti.
   let hasil: { segments: SegmentDraft[]; validation: ReturnType<typeof validate> } | null = null;
   let keluhan: string[] = [];
+  let galatPenyedia = "";
   if (llmSiap() && !tanpaLlm) {
     for (let percobaan = 0; percobaan < MAKS_PERBAIKAN_LLM; percobaan++) {
       try {
@@ -506,15 +507,28 @@ async function generateOne(
         // L-13, dan S-09 sekaligus. Memperbaiki satu sambil merusak tiga
         // bukan perbaikan — dan model tidak bisa menjaga aturan yang tidak
         // pernah lagi disebutkan kepadanya.
-        for (const e of kandidat.validation.errors) {
-          if (!keluhan.includes(e.message_id)) keluhan.push(e.message_id);
+        // DUA daftar, bukan satu (3 Sep 2026). Log lama hanya mencetak keluhan
+        // KUMULATIF, jadi mustahil membedakan "aturan ini masih dilanggar" dari
+        // "aturan ini sudah diperbaiki dua percobaan lalu tapi tetap tercetak".
+        // Saat menyelidiki kegagalan produksi, itu perbedaan yang menentukan:
+        // yang perlu diperbaiki adalah aturan yang MASIH dilanggar di percobaan
+        // terakhir, dan angka itu tidak bisa dibaca dari daftar kumulatif.
+        const sekarang = kandidat.validation.errors.map((e) => e.message_id);
+        for (const e of sekarang) {
+          if (!keluhan.includes(e)) keluhan.push(e);
         }
         console.warn(
           `[script-engine] naskah LLM "${product.name}" ditolak validator ` +
-            `(percobaan ${percobaan + 1}/${MAKS_PERBAIKAN_LLM}): ${keluhan.join(" | ")}`
+            `(percobaan ${percobaan + 1}/${MAKS_PERBAIKAN_LLM}) — masih dilanggar: ${sekarang.join(" | ")}` +
+            (keluhan.length > sekarang.length ? ` || kumulatif: ${keluhan.join(" | ")}` : "")
         );
       } catch (err) {
-        laporJatuhKeTemplate((err as Error).message, { productName: product.name });
+        // DISIMPAN, bukan cuma dilaporkan. Kalau penyedia yang jatuh, keluhan
+        // validator kosong — dan tanpa ini pesan di bawah akan menuduh
+        // validator atas kegagalan yang bukan miliknya, yaitu persis jenis
+        // pesan menyesatkan yang sedang diperbaiki.
+        galatPenyedia = (err as Error).message;
+        laporJatuhKeTemplate(galatPenyedia, { productName: product.name });
         break;
       }
     }
@@ -541,12 +555,22 @@ async function generateOne(
   // ia menampilkan contoh, tidak pernah dirender, dan mematikannya akan
   // membunuh magic moment tanpa login tanpa alasan.
   if (!hasil && !tanpaLlm) {
+    // SEBABNYA IKUT, bukan cuma bahwa ada sebab (3 Sep 2026).
+    //
+    // Kalimat lama — "penulis LLM gagal setelah percobaan ulang" — itulah yang
+    // tersimpan di audit_log, dan ia menyamakan dua kegagalan yang tindakannya
+    // berlawanan: penyedia yang benar-benar mati (isi saldo, periksa kunci)
+    // dengan validator yang menolak tulisan penyedia yang sehat (perbaiki
+    // aturan atau promptnya). Menyelidiki empat kegagalan produksi 3 Sep
+    // terpaksa mengejar log kontainer karena auditnya tidak menyimpan bedanya.
     throw new TemplateTidakDisajikan(
       llmSengajaDimatikan()
         ? "penulis LLM dimatikan sengaja (SCRIPT_LLM=0)"
-        : llmSiap()
-          ? "penulis LLM gagal setelah percobaan ulang; naskah template tidak disajikan"
-          : "kunci API penulis LLM belum di-set di server"
+        : !llmSiap()
+          ? "kunci API penulis LLM belum di-set di server"
+          : galatPenyedia
+            ? `penyedia LLM gagal menjawab: ${galatPenyedia}`
+            : `naskah ditolak validator ${MAKS_PERBAIKAN_LLM}x; penyedia SEHAT. Aturan yang menolak: ${keluhan.join(" | ") || "(tidak tercatat)"}`
     );
   }
   let sumberNaskah: SumberNaskah = hasil ? "llm" : "template";

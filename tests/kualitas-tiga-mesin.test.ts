@@ -153,9 +153,23 @@ test("badan permintaan memuat bentuk yang diberikan penyedia, bukan karangan", (
   assert.equal(b.model, config.kieGrokModel);
 });
 
-test("negative prompt IKUT terkirim — aturan keras repo tidak boleh bolong di satu tier", () => {
+test("larangan kepatuhan IKUT terkirim — aturan keras repo tidak boleh bolong di satu tier", () => {
+  // NIATNYA tetap sama: apa yang wajib sampai ke model harus sampai di SETIAP
+  // paket, tidak boleh bolong di yang termurah. Yang berubah adalah APA yang
+  // wajib sampai.
+  //
+  // Sampai 3 Sep 2026 tes ini menuntut seluruh spec.negativePrompt terkirim
+  // apa adanya. Itu keliru, dan keliru dengan mahal: tidak ada mesin yang kita
+  // pakai punya pengurai "Negative:", jadi daftar itu terbaca sebagai
+  // PERMINTAAN. Yang terkirim untuk job 2f95311f antara lain "extra hands",
+  // "second person", dan "floating parts" — persis tiga cacat yang kemudian
+  // dilaporkan Brian, dan job itu berakhir REFUNDED setelah Rp20.250 keluar.
+  //
+  // Yang wajib sampai sekarang: larangan kepatuhan (overlay teks, watermark,
+  // logo karangan) — janji yang kami buat ke pengguna dan tidak punya bentuk
+  // positif yang jujur.
   const b = buatBadanTask(spec("standard"), shot, "https://contoh.id/a.png");
-  assert.match(b.input.prompt, /no text, no logo, no writing/);
+  assert.match(b.input.prompt, /Do not add any text overlay, caption bar, subtitle, watermark, or invented logo\./);
   assert.match(b.input.prompt, /hands presenting product/);
 });
 

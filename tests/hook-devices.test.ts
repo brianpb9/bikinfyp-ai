@@ -16,7 +16,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { memakaiPerangkat, PERANGKAT_HOOK, POLA_PERANGKAT } from "../lib/script-engine/hook-devices";
+import { memakaiPerangkat, panduanPerangkatHook, PENANDA_PERANGKAT, PERANGKAT_HOOK, POLA_PERANGKAT } from "../lib/script-engine/hook-devices";
 import { TEMPLATE_COPY, TEMPLATE_COPY_CAPACITY } from "../lib/script-engine/template-copy";
 import { stripDeliveryTags } from "../lib/script-engine/delivery-tags";
 import { REGISTERS } from "../lib/script-engine/registers";
@@ -79,5 +79,46 @@ test("setiap perangkat mendokumentasikan kapan ia TIDAK cocok", () => {
     assert.ok(p.cara.length > 20, `${p.nama}: mekanismenya belum dijelaskan`);
     // Contoh wajib benar-benar memakai perangkatnya sendiri.
     assert.ok(memakaiPerangkat(p.contoh(ctx)), `${p.nama}: contohnya sendiri tidak memakai perangkat apa pun`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PANDUAN L-19 KE PENULIS — tidak boleh hanyut dari pengukurnya
+// ---------------------------------------------------------------------------
+//
+// Terukur di produksi 3 Sep 2026: "Hook belum memakai perangkat retoris yang
+// dikenali" muncul di SETIAP percobaan pada empat run berturut-turut, dan tiga
+// di antaranya habis tanpa naskah. Sebabnya bukan hook yang lemah — L-19 tidak
+// pernah sekali pun disampaikan ke penulis, jadi ia menebak bentuk yang kita
+// ukur dengan regex.
+//
+// Panduan itu sekarang dikirim. Tes ini menjaga satu-satunya hal yang membuat
+// panduan itu berguna: setiap penanda yang kita SURUH pakai harus benar-benar
+// lolos memakaiPerangkat(). Panduan yang menyebut kata yang ditolak detektornya
+// sendiri lebih buruk daripada tidak ada panduan — ia mengirim penulis ke arah
+// yang salah dengan penuh keyakinan.
+
+test("tiap penanda yang diajarkan ke penulis benar-benar lolos detektornya", () => {
+  for (const [nama, penanda] of Object.entries(PENANDA_PERANGKAT)) {
+    // Penandanya ditulis sebagai contoh berkutip; ambil isinya lalu uji satu per satu.
+    const kata = [...penanda.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    if (nama === "pertanyaan") {
+      assert.ok(memakaiPerangkat("Capek nggak sih ngurus ini terus?"), "tanda tanya harus dikenali");
+      continue;
+    }
+    assert.ok(kata.length > 0, `penanda "${nama}" tidak menyebut satu kata pun yang bisa diuji`);
+    for (const k of kata) {
+      assert.ok(
+        memakaiPerangkat(`Kalimat hook dengan ${k} di dalamnya`),
+        `panduan menyuruh pakai "${k}" untuk perangkat "${nama}", tapi memakaiPerangkat() menolaknya`,
+      );
+    }
+  }
+});
+
+test("panduan hook menyebut setiap perangkat yang diukur", () => {
+  const panduan = panduanPerangkatHook();
+  for (const nama of Object.keys(POLA_PERANGKAT)) {
+    assert.ok(panduan.includes(nama), `perangkat "${nama}" diukur tapi tidak diajarkan`);
   }
 });
