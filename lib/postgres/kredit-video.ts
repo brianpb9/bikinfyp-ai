@@ -257,24 +257,83 @@ export class PgKreditVideo {
   }
 
   /**
-   * Mulai satu periode langganan. Kuotanya DISALIN dari paket, tidak dirujuk:
-   * kalau admin mengubah isi paket bulan depan, yang sudah membeli tidak ikut
-   * berubah — ke atas maupun ke bawah.
+   * Mulai atau PERPANJANG langganan.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * PAKET SAMA = PERPANJANG; PAKET BEDA = MENUMPUK
+   * ──────────────────────────────────────────────────────────────────────────
+   * Membeli paket yang SAMA saat paket itu masih aktif dulu melahirkan periode
+   * kedua yang berdampingan. Akibatnya nyata: pembeli dengan sisa 3 video dan
+   * 5 hari lagi mendapat 9 video, tapi 3 di antaranya tetap hangus dalam 5
+   * hari. Sekarang kuotanya ditambahkan ke periode yang ada dan tanggal
+   * berakhirnya DIDORONG dari tanggal lamanya — bukan dari hari ini, karena
+   * itulah arti "perpanjang".
+   *
+   * Paket BERBEDA tetap menumpuk: kuota lama utuh, kuota baru ditambahkan, dan
+   * pemakaian menghabiskan periode yang paling cepat hangus lebih dulu.
+   *
+   * Kuota paket tetap DISALIN, tidak dirujuk: mengubah isi paket bulan depan
+   * tidak boleh mengubah apa yang sudah dibeli — ke atas maupun ke bawah.
+   *
+   * IDEMPOTENSINYA PINDAH. Perpanjangan tidak melahirkan baris langganan baru,
+   * jadi uniq_langganan_payment tidak lagi menjaganya. Kunci primer payment_id
+   * di langganan_perpanjangan memulihkan penjagaan itu — callback Duitku yang
+   * datang dua kali tidak bisa mendorong tanggalnya dua kali.
    */
   async mulaiLangganan(userId: string, paket: PaketLangganan, paymentId: string | null): Promise<string | null> {
     return this.transaction(async (client) => {
-      const mulai = this.now();
+      await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
+      const sekarang = this.now();
+
+      if (paymentId) {
+        const sudah = await client.query(
+          `SELECT 1 FROM langganan_perpanjangan WHERE payment_id = $1
+            UNION ALL SELECT 1 FROM langganan WHERE payment_id = $1`,
+          [paymentId],
+        );
+        if (sudah.rowCount) return null;
+      }
+
+      const berjalan = await client.query<{
+        id: string; berakhir_pada: string;
+      }>(
+        `SELECT id, berakhir_pada FROM langganan
+          WHERE user_id = $1 AND paket_id = $2 AND status = 'aktif' AND berakhir_pada > $3
+          ORDER BY berakhir_pada DESC LIMIT 1`,
+        [userId, paket.id, sekarang],
+      );
+
+      if (berjalan.rows[0]) {
+        const lama = berjalan.rows[0];
+        const berakhirBaru = akhirDari(lama.berakhir_pada, paket.masaHari);
+        await client.query(
+          `UPDATE langganan SET kuota_standard = kuota_standard + $2, kuota_premium = kuota_premium + $3,
+                                kuota_ultra = kuota_ultra + $4, berakhir_pada = $5
+            WHERE id = $1`,
+          [lama.id, paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra, berakhirBaru],
+        );
+        await client.query(
+          `INSERT INTO langganan_perpanjangan
+             (payment_id,langganan_id,paket_id,kuota_standard,kuota_premium,kuota_ultra,hari,berakhir_sebelum,berakhir_sesudah,dibuat_pada)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+          [paymentId ?? `manual-${this.uuid()}`, lama.id, paket.id,
+           paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra, paket.masaHari,
+           lama.berakhir_pada, berakhirBaru, sekarang],
+        );
+        await this.audit(client, userId, "langganan.perpanjang", "langganan", lama.id, {
+          paket_id: paket.id, payment_id: paymentId, berakhir_sebelum: lama.berakhir_pada, berakhir_sesudah: berakhirBaru,
+        });
+        return lama.id;
+      }
+
       const id = this.uuid();
-      const r = await client.query<{ id: string }>(
+      await client.query(
         `INSERT INTO langganan (id,user_id,paket_id,paket_nama,harga_idr,kuota_standard,kuota_premium,kuota_ultra,
                                 mulai_pada,berakhir_pada,status,payment_id,dibuat_pada)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'aktif',$11,$9)
-         ON CONFLICT (payment_id) WHERE payment_id IS NOT NULL DO NOTHING
-         RETURNING id`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'aktif',$11,$9)`,
         [id, userId, paket.id, paket.nama, paket.hargaIdr, paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra,
-         mulai, akhirDari(mulai, paket.masaHari), paymentId],
+         sekarang, akhirDari(sekarang, paket.masaHari), paymentId],
       );
-      if (!r.rowCount) return null;
       await this.audit(client, userId, "langganan.mulai", "langganan", id, { paket_id: paket.id, payment_id: paymentId });
       return id;
     });

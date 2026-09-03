@@ -274,7 +274,7 @@ test("paket yang sedang dipakai ditandai, dan aksinya disebut MENAMBAH", () => {
   // pertama. Yang dilarang adalah tombol yang diam soal akibatnya.
   assert.match(HALAMAN, /const sedangAktif = katalog\?\.langganan\.some\(\(l\) => l\.paket_id === p\.id\)/);
   assert.match(HALAMAN, /Paket aktif<\/span>|Paket aktif\s*\n/, "paket yang dimiliki tidak diberi lencana");
-  assert.match(HALAMAN, /MENAMBAH paket yang sama/, "aksinya tidak menyebut bahwa paket ditambahkan, bukan diganti");
+  assert.match(HALAMAN, /MEMPERPANJANG paket ini/, "aksinya tidak menyebut bahwa paket yang sama diperpanjang");
 });
 
 test("chip header menampilkan jatah video, bukan saldo rupiah warisan", async () => {
@@ -315,4 +315,13 @@ test("tidak ada layar retail yang memajang RUPIAH sebagai kredit", async () => {
   const me = baca("app/api/auth/me/route.ts");
   assert.match(me, /total_video:/, "/api/auth/me tidak mengirim sisa jatah video");
   assert.match(me, /sisa_video: sisa/, "/api/auth/me tidak mengirim rincian per jenis");
+});
+
+test("akibat membeli paket dinyatakan BERBEDA untuk paket sama dan paket lain", () => {
+  // Paket sama = perpanjang (tanggal mundur, tidak ada yang hangus).
+  // Paket lain = menumpuk (dua periode, yang lama dipakai lebih dulu).
+  // Keduanya harus dikatakan SEBELUM tombol Bayar ditekan.
+  assert.match(HALAMAN, /Ini memperpanjang paket \{aktifSama\.paket_nama\} kamu/, "perpanjangan tidak dinyatakan");
+  assert.match(HALAMAN, /masa berlakunya mundur dari \{tanggal\(aktifSama\.berakhir_pada\)\}/, "tanggal baru tidak ditunjukkan");
+  assert.match(HALAMAN, /ditambahkan<\/b>, bukan menggantikan/, "penumpukan paket lain tidak dinyatakan");
 });

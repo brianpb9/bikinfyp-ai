@@ -368,3 +368,98 @@ test("periode yang habis tidak menyeret periode lain yang masih hidup", () => {
   db.prepare("UPDATE langganan SET berakhir_pada = ? WHERE id = ?").run("2020-01-01T00:00:00.000Z", lama);
   assert.equal(K.sisaKredit(u.id).ultra.langganan, 3, "periode yang masih hidup ikut hilang");
 });
+
+// ── PERPANJANGAN: paket SAMA menambah masa, paket BEDA menumpuk ─────────────
+//
+// Sampai 3 Sep 2026 membeli paket yang sama melahirkan periode kedua yang
+// berdampingan. Dijalankan sebagai skenario nyata: sisa 3 video dengan 5 hari
+// lagi, beli Mulai lagi -> 9 video, TAPI 3 di antaranya tetap hangus dalam 5
+// hari. Urutan "paling cepat hangus dulu" memperkecil kerugiannya, tidak
+// menghilangkannya.
+
+test("beli paket YANG SAMA memperpanjang periode yang ada, bukan membuat kedua", () => {
+  const u = pengguna();
+  const p = paket({ kuotaStandard: 6, kuotaPremium: 0, kuotaUltra: 0, masaHari: 30 });
+  const id = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+
+  // Dipakai 3, dan tinggal 5 hari lagi.
+  for (let i = 0; i < 3; i++) K.pakaiKredit(u.id, "standard", job(u.id));
+  const lima = new Date(Date.now() + 5 * 86_400_000).toISOString();
+  db.prepare("UPDATE langganan SET berakhir_pada = ? WHERE id = ?").run(lima, id);
+  assert.equal(K.sisaKredit(u.id).standard.langganan, 3);
+
+  const idKedua = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`);
+  assert.equal(idKedua, id, "periode kedua dibuat — seharusnya periode yang ada diperpanjang");
+  assert.equal(K.langgananAktif(u.id).length, 1, "ada dua periode aktif untuk paket yang sama");
+  assert.equal(K.sisaKredit(u.id).standard.langganan, 9, "kuota tidak dijumlahkan");
+
+  // Tanggalnya DIDORONG dari tanggal lama, bukan dihitung dari hari ini —
+  // itulah bedanya "perpanjang" dari "mulai lagi".
+  const baris = db.prepare("SELECT berakhir_pada FROM langganan WHERE id = ?").get(id) as { berakhir_pada: string };
+  const seharusnya = new Date(Date.parse(lima) + 30 * 86_400_000).toISOString();
+  assert.equal(baris.berakhir_pada, seharusnya, "tanggal berakhir tidak didorong dari tanggal lama");
+});
+
+test("perpanjangan meninggalkan jejak: tanggal sebelum dan sesudah", () => {
+  const u = pengguna();
+  const p = paket({ kuotaUltra: 2, kuotaStandard: 0, kuotaPremium: 0 });
+  const id = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+  const sebelum = (db.prepare("SELECT berakhir_pada FROM langganan WHERE id = ?").get(id) as { berakhir_pada: string }).berakhir_pada;
+  const bayar = `bayar-${crypto.randomUUID().slice(0, 6)}`;
+  K.mulaiLangganan(u.id, p, bayar);
+
+  const jejak = db.prepare("SELECT * FROM langganan_perpanjangan WHERE payment_id = ?").get(bayar) as
+    { langganan_id: string; hari: number; berakhir_sebelum: string; berakhir_sesudah: string; kuota_ultra: number };
+  assert.equal(jejak.langganan_id, id);
+  assert.equal(jejak.hari, p.masaHari);
+  assert.equal(jejak.kuota_ultra, 2);
+  assert.equal(jejak.berakhir_sebelum, sebelum, "jejak tidak mencatat tanggal sebelum diperpanjang");
+  assert.notEqual(jejak.berakhir_sesudah, sebelum);
+});
+
+test("callback ulangan TIDAK memperpanjang dua kali", () => {
+  // Idempotensinya pindah: perpanjangan tidak melahirkan baris langganan, jadi
+  // uniq_langganan_payment tidak lagi menjaganya. Kunci primer payment_id di
+  // langganan_perpanjangan yang memulihkannya.
+  const u = pengguna();
+  const p = paket({ kuotaPremium: 3, kuotaStandard: 0, kuotaUltra: 0 });
+  const id = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+  const bayar = `bayar-${crypto.randomUUID().slice(0, 6)}`;
+
+  assert.equal(K.mulaiLangganan(u.id, p, bayar), id);
+  const setelahSatu = (db.prepare("SELECT berakhir_pada, kuota_premium FROM langganan WHERE id = ?").get(id)) as
+    { berakhir_pada: string; kuota_premium: number };
+
+  assert.equal(K.mulaiLangganan(u.id, p, bayar), null, "pembayaran yang sama memperpanjang dua kali");
+  const setelahDua = (db.prepare("SELECT berakhir_pada, kuota_premium FROM langganan WHERE id = ?").get(id)) as
+    { berakhir_pada: string; kuota_premium: number };
+
+  assert.equal(setelahDua.berakhir_pada, setelahSatu.berakhir_pada, "tanggal didorong dua kali");
+  assert.equal(setelahDua.kuota_premium, setelahSatu.kuota_premium, "kuota ditambah dua kali");
+});
+
+test("paket BERBEDA tetap menumpuk — tidak ada kuota lama yang hilang", () => {
+  const u = pengguna();
+  const kecil = paket({ id: "uji-kecil", kuotaStandard: 6, kuotaPremium: 0, kuotaUltra: 0 });
+  const besar = paket({ id: "uji-besar", kuotaStandard: 10, kuotaPremium: 2, kuotaUltra: 0 });
+  K.mulaiLangganan(u.id, kecil, `bayar-${crypto.randomUUID().slice(0, 6)}`);
+  K.mulaiLangganan(u.id, besar, `bayar-${crypto.randomUUID().slice(0, 6)}`);
+
+  assert.equal(K.langgananAktif(u.id).length, 2, "naik paket menghapus periode lama");
+  const sisa = K.sisaKredit(u.id);
+  assert.equal(sisa.standard.langganan, 16, "kuota paket lama hilang saat naik paket");
+  assert.equal(sisa.premium.langganan, 2);
+});
+
+test("langganan yang SUDAH kedaluwarsa tidak diperpanjang — ia mulai periode baru", () => {
+  // Memperpanjang periode mati akan menghidupkan kembali kuota yang sudah
+  // hangus, dan tanggalnya dihitung dari masa lalu.
+  const u = pengguna();
+  const p = paket({ kuotaStandard: 6, kuotaPremium: 0, kuotaUltra: 0 });
+  const id = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`)!;
+  db.prepare("UPDATE langganan SET berakhir_pada = ? WHERE id = ?").run("2020-01-01T00:00:00.000Z", id);
+
+  const baru = K.mulaiLangganan(u.id, p, `bayar-${crypto.randomUUID().slice(0, 6)}`);
+  assert.notEqual(baru, id, "periode yang sudah mati justru diperpanjang");
+  assert.equal(K.sisaKredit(u.id).standard.langganan, 6, "kuota periode mati ikut dihidupkan");
+});

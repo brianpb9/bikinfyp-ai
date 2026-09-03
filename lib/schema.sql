@@ -423,3 +423,23 @@ CREATE TABLE IF NOT EXISTS pesanan_item (
   harga_satuan_idr INTEGER NOT NULL CHECK (harga_satuan_idr > 0),
   PRIMARY KEY (payment_id, jenis)
 );
+
+-- Perpanjangan langganan (cermin migrations/postgres/0037). Alasan lengkapnya
+-- ada di berkas migrasi itu. Ringkasnya: membeli paket yang SAMA menambah masa
+-- dan kuota pada periode yang ada, dan kunci primer di payment_id memastikan
+-- satu pembayaran hanya bisa memperpanjang SEKALI — penjagaan yang tadinya
+-- dipegang uniq_langganan_payment, yang tidak lagi berlaku saat tidak ada
+-- baris langganan baru yang lahir.
+CREATE TABLE IF NOT EXISTS langganan_perpanjangan (
+  payment_id TEXT PRIMARY KEY,
+  langganan_id TEXT NOT NULL REFERENCES langganan(id),
+  paket_id TEXT NOT NULL,
+  kuota_standard INTEGER NOT NULL DEFAULT 0,
+  kuota_premium INTEGER NOT NULL DEFAULT 0,
+  kuota_ultra INTEGER NOT NULL DEFAULT 0,
+  hari INTEGER NOT NULL,
+  berakhir_sebelum TEXT NOT NULL,
+  berakhir_sesudah TEXT NOT NULL,
+  dibuat_pada TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_perpanjangan_langganan ON langganan_perpanjangan(langganan_id);

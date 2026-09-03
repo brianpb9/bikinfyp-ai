@@ -359,8 +359,9 @@ function KreditInner() {
             );
           })}
           <p className="text-xs leading-5 text-emerald-900">
-            Jatah paket <b>hangus</b> saat masa berlakunya habis. Butuh tambahan sebelum itu? Beli
-            <b> kredit satuan</b> di bawah — kredit satuan tidak pernah hangus.
+            Jatah paket <b>hangus</b> saat masa berlakunya habis. Beli paket yang sama lagi untuk{" "}
+            <b>memperpanjang</b> — jatah dan masanya ditambahkan, tidak ada yang hangus. Butuh tambahan
+            yang tidak terikat masa? Beli <b>kredit satuan</b> di bawah.
           </p>
         </section>
       )}
@@ -476,7 +477,7 @@ function KreditInner() {
                   {terpilih
                     ? "✓ Dipilih — lihat ringkasan di bawah"
                     : sedangAktif
-                      ? `Berlaku ${p.masa_hari} hari · tap untuk MENAMBAH paket yang sama`
+                      ? `+${p.masa_hari} hari · tap untuk MEMPERPANJANG paket ini`
                       : punyaLangganan
                         ? `Berlaku ${p.masa_hari} hari · tap untuk menambah paket ini`
                         : `Berlaku ${p.masa_hari} hari · tap untuk pilih`}
@@ -564,13 +565,32 @@ function KreditInner() {
                   Paket kedua DITAMBAHKAN, bukan menggantikan — dan orang yang
                   mengira langganan pertamanya gagal berhak tahu itu sebelum
                   membayar lagi. */}
-              {(katalog?.langganan.length ?? 0) > 0 && (
-                <p className="mt-2 rounded-lg bg-amber-100 p-2 text-xs leading-5 text-amber-900">
-                  <b>Kamu masih punya langganan aktif</b>
-                  {katalog?.langganan[0] ? ` (${katalog.langganan[0].paket_nama}, sampai ${tanggal(katalog.langganan[0].berakhir_pada)})` : ""}.
-                  Paket ini <b>ditambahkan</b>, bukan menggantikan — jatah lamamu tetap berlaku sampai tanggal itu.
-                </p>
-              )}
+              {/* Akibatnya BEDA untuk paket yang sama dan paket yang berbeda —
+                  dan itu harus dikatakan sebelum tombol Bayar ditekan, bukan
+                  ditemukan sendiri sesudahnya. */}
+              {(() => {
+                const aktifSama = katalog?.langganan.find((l) => l.paket_id === paket.id);
+                const aktifLain = katalog?.langganan.filter((l) => l.paket_id !== paket.id) ?? [];
+                if (aktifSama) {
+                  const baru = new Date(new Date(aktifSama.berakhir_pada).getTime() + paket.masa_hari * 86_400_000);
+                  return (
+                    <p className="mt-2 rounded-lg bg-emerald-100 p-2 text-xs leading-5 text-emerald-900">
+                      <b>Ini memperpanjang paket {aktifSama.paket_nama} kamu.</b> Jatahnya ditambahkan ke yang sekarang,
+                      dan masa berlakunya mundur dari {tanggal(aktifSama.berakhir_pada)} jadi{" "}
+                      <b>{tanggal(baru.toISOString())}</b>. Tidak ada jatah lama yang hangus.
+                    </p>
+                  );
+                }
+                if (aktifLain.length) {
+                  return (
+                    <p className="mt-2 rounded-lg bg-amber-100 p-2 text-xs leading-5 text-amber-900">
+                      <b>Kamu masih punya paket {aktifLain[0].paket_nama} aktif</b> sampai {tanggal(aktifLain[0].berakhir_pada)}.
+                      Paket ini <b>ditambahkan</b>, bukan menggantikan — jatah lamamu tetap utuh dan justru dipakai lebih dulu.
+                    </p>
+                  );
+                }
+                return null;
+              })()}
             </div>
           )}
 

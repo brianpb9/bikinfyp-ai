@@ -190,18 +190,76 @@ export function kreditkanTopup(userId: string, paymentId: string): number {
   })();
 }
 
+/**
+ * Mulai atau PERPANJANG langganan.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * PAKET SAMA = PERPANJANG; PAKET BEDA = MENUMPUK
+ * ────────────────────────────────────────────────────────────────────────────
+ * Membeli paket yang SAMA saat paket itu masih aktif dulu melahirkan periode
+ * kedua yang berdampingan. Akibatnya nyata: pembeli dengan sisa 3 video dan 5
+ * hari lagi mendapat 9 video, tapi 3 di antaranya tetap hangus dalam 5 hari.
+ * Sekarang kuotanya ditambahkan ke periode yang ada dan tanggal berakhirnya
+ * DIDORONG dari tanggal lamanya — bukan dari hari ini, karena itulah arti
+ * "perpanjang".
+ *
+ * Paket BERBEDA tetap menumpuk. Di situ tidak ada yang hilang: kuota lama
+ * tetap utuh, kuota baru ditambahkan, dan pemakaian menghabiskan periode yang
+ * paling cepat hangus lebih dulu.
+ *
+ * Yang diperpanjang adalah periode dengan tanggal berakhir TERJAUH. Dengan
+ * aturan ini normalnya cuma ada satu periode aktif per paket; kalau ada
+ * beberapa (data lama), memilih yang terjauh membuat tanggalnya selalu maju,
+ * tidak melompat mundur.
+ */
 export function mulaiLangganan(userId: string, paket: PaketLangganan, paymentId: string | null): string | null {
   const db = getDb();
   return db.transaction(() => {
+    const sekarang = now();
+
+    // Sudah pernah dipakai memperpanjang? Callback gateway datang berkali-kali.
+    if (paymentId && db.prepare("SELECT payment_id FROM langganan_perpanjangan WHERE payment_id = ?").get(paymentId)) {
+      return null;
+    }
     if (paymentId && db.prepare("SELECT id FROM langganan WHERE payment_id = ?").get(paymentId)) return null;
-    const mulai = now();
+
+    const berjalan = db
+      .prepare(
+        `SELECT id, kuota_standard, kuota_premium, kuota_ultra, berakhir_pada
+           FROM langganan
+          WHERE user_id = ? AND paket_id = ? AND status = 'aktif' AND berakhir_pada > ?
+          ORDER BY berakhir_pada DESC LIMIT 1`,
+      )
+      .get(userId, paket.id, sekarang) as
+      | { id: string; kuota_standard: number; kuota_premium: number; kuota_ultra: number; berakhir_pada: string }
+      | undefined;
+
+    if (berjalan) {
+      const berakhirBaru = akhirDari(berjalan.berakhir_pada, paket.masaHari);
+      db.prepare(
+        `UPDATE langganan SET kuota_standard = kuota_standard + ?, kuota_premium = kuota_premium + ?,
+                              kuota_ultra = kuota_ultra + ?, berakhir_pada = ?
+          WHERE id = ?`,
+      ).run(paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra, berakhirBaru, berjalan.id);
+      db.prepare(
+        `INSERT INTO langganan_perpanjangan
+           (payment_id,langganan_id,paket_id,kuota_standard,kuota_premium,kuota_ultra,hari,berakhir_sebelum,berakhir_sesudah,dibuat_pada)
+         VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      ).run(
+        paymentId ?? `manual-${crypto.randomUUID()}`, berjalan.id, paket.id,
+        paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra, paket.masaHari,
+        berjalan.berakhir_pada, berakhirBaru, sekarang,
+      );
+      return berjalan.id;
+    }
+
     const id = crypto.randomUUID();
     db.prepare(
       `INSERT INTO langganan (id,user_id,paket_id,paket_nama,harga_idr,kuota_standard,kuota_premium,kuota_ultra,
                               mulai_pada,berakhir_pada,status,payment_id,dibuat_pada)
        VALUES (?,?,?,?,?,?,?,?,?,?,'aktif',?,?)`,
     ).run(id, userId, paket.id, paket.nama, paket.hargaIdr, paket.kuotaStandard, paket.kuotaPremium, paket.kuotaUltra,
-      mulai, akhirDari(mulai, paket.masaHari), paymentId, mulai);
+      sekarang, akhirDari(sekarang, paket.masaHari), paymentId, sekarang);
     return id;
   })();
 }
