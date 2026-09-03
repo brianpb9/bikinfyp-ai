@@ -23,6 +23,7 @@
 import { z } from "zod";
 import { MAKS_KATA_PER_SHOT, batasKataShot } from "./standar-10";
 import { panduanPerangkatHook } from "./hook-devices";
+import { bersihkanNegasiOrang } from "./bersihkan-negasi";
 import { blokMaster, blokStandar } from "./standar-10-teks";
 import { config } from "../config";
 import {
@@ -482,24 +483,48 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
  * berangkat dari foto produk: model diberi barang yang diperintahkan
  * disembunyikan. Terlihat di jalankan STEP 2, 17 Agu, segmen 0.
  */
-export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
-  return s.map((x) => ({
-    role: x.block === "HOOK" ? "hook" : x.block === "CTA" ? "cta" : "demo",
-    start: x.start,
-    end: x.end,
-    text: x.text,
-    // Gabungan TETAP dibuat — sisa pipeline (perencana shot, QC, L-21)
-    // membacanya. Yang berubah: potongannya ikut disimpan, bukan dibuang.
-    visual_direction: `${x.framing}, ${x.angle}. ${x.camera}. ${x.action}`,
-    framing: x.framing,
-    angle: x.angle,
-    camera: x.camera,
-    action: x.action,
-    expression: x.expression,
-    mode: x.mode,
-    product_state: x.product_state,
-    start_state: x.start_state,
-  })) as SegmentDraft[];
+export function keSegmentDraft(s: SegmenLlm[], namaProduk?: string | null): SegmentDraft[] {
+  // NEGASI TENTANG ORANG DIBUANG DI SINI, sebelum validator menilai.
+  //
+  // Aturannya sudah diberitahukan ke penulis, dengan contoh, dan pagi 3 Sep
+  // 2026 dipertajam sampai menyebut nama field-nya. Sore harinya penulis tetap
+  // menulis "no face", "no hands", "not readable hands", "face not" — dan dua
+  // tier gugur karenanya. Ini masalah mekanis, bukan masalah aturan kurang
+  // keras, jadi perbaikannya juga mekanis. Lihat bersihkan-negasi.ts.
+  const buang = (teks: string, kumpul: string[]) => {
+    const h = bersihkanNegasiOrang(teks, namaProduk);
+    kumpul.push(...h.dibuang);
+    return h.teks;
+  };
+  return s.map((x) => {
+    const dibuang: string[] = [];
+    const action = buang(x.action, dibuang);
+    const startState = buang(x.start_state, dibuang);
+    const camera = buang(x.camera, dibuang);
+    if (dibuang.length) {
+      // Perbaikan diam-diam adalah perbaikan yang tidak bisa diaudit. Kalau
+      // penulis mulai sering melanggar dengan bentuk baru, ini yang
+      // menunjukkannya.
+      console.log(`[naskah] klausa negasi-orang dibuang dari arahan visual: ${dibuang.map((d) => `"${d}"`).join(", ")}`);
+    }
+    return {
+      role: x.block === "HOOK" ? "hook" : x.block === "CTA" ? "cta" : "demo",
+      start: x.start,
+      end: x.end,
+      text: x.text,
+      // Gabungan TETAP dibuat — sisa pipeline (perencana shot, QC, L-21)
+      // membacanya. Yang berubah: potongannya ikut disimpan, bukan dibuang.
+      visual_direction: `${x.framing}, ${x.angle}. ${camera}. ${action}`,
+      framing: x.framing,
+      angle: x.angle,
+      camera,
+      action,
+      expression: x.expression,
+      mode: x.mode,
+      product_state: x.product_state,
+      start_state: startState,
+    };
+  }) as SegmentDraft[];
 }
 
 /**
