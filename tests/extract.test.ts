@@ -220,3 +220,49 @@ test("ensureDirs benar-benar melewati direktori SQLite di runtime Postgres", asy
     fs.rmSync(dirUji, { recursive: true, force: true });
   }
 });
+
+// ── LINK SHOPEE: UA MENENTUKAN, DAN BERANDA BUKAN PRODUK ───────────────────
+//
+// Link pendek Shopee (id.shp.ee) yang dilaporkan Brian 3 Sep 2026 menghasilkan
+// produk bernama "Shopee Indonesia | Situs Belanja Online Terlengkap...".
+// Diuji ke link sungguhan, empat kombinasi header:
+//   UA ponsel  -> HTTP 200 TANPA pengalihan, isinya halaman depan
+//   UA desktop -> HTTP 301 ke shopee.co.id/product/817167067/...
+// Header `accept` tidak berpengaruh; hanya UA.
+
+test("pengambil halaman memakai User-Agent desktop", () => {
+  const src = baca("lib/extract.ts");
+  // Dengan UA ponsel, Shopee menyajikan halaman pembuka aplikasi — tag Open
+  // Graph-nya tag beranda, bukan produk.
+  assert.match(src, /Macintosh; Intel Mac OS X/, "UA bukan desktop — Shopee tidak akan mengalihkan ke produk");
+  assert.ok(!/Android 13; Pixel 7/.test(src), "UA ponsel kembali dipakai");
+});
+
+test("judul halaman depan marketplace DITOLAK, tidak disajikan sebagai produk", async () => {
+  const { extractFromUrl } = await import("../lib/extract");
+  // Tidak memanggil jaringan: yang diuji daftar polanya, lewat fungsi yang
+  // sama yang dipakai extractFromUrl.
+  const src = baca("lib/extract.ts");
+  assert.match(src, /JUDUL_BERANDA\.some\(\(re\) => re\.test\(judul\)\)/, "judul beranda tidak diperiksa");
+  assert.match(src, /halaman depan marketplace, bukan produk/, "penolakan tidak menyebut sebabnya");
+  // Pesannya memberi tahu apa yang harus dilakukan, bukan cuma bahwa gagal.
+  assert.match(src, /Buka produknya lalu salin link dari tombol Bagikan/, "pesan tidak menyarankan tindakan");
+  assert.equal(typeof extractFromUrl, "function");
+});
+
+test("harga boilerplate yang berulang identik tidak dianggap harga produk", async () => {
+  const { parsePriceFromHtml } = await import("../lib/extract");
+  // Halaman produk Shopee tidak memuat harga aslinya di HTML sisi server.
+  // Yang tersisa cuma teks voucher — pada halaman deterjen 5 liter, SELURUH 13
+  // pola "Rp" berbunyi "Rp1.000.000". Mengisinya berarti harga salah masuk ke
+  // hook video: "cuma sejuta!" untuk produk puluhan ribu.
+  const voucher = Array(13).fill("<div>Min. belanja Rp1.000.000,-</div>").join("");
+  assert.equal(parsePriceFromHtml(voucher), null, "ambang voucher diambil sebagai harga produk");
+
+  // Halaman produk sungguhan mengulang harganya bersama harga LAIN (coret,
+  // cicilan, varian) — keseragaman total di banyak kemunculan yang mencurigakan.
+  assert.equal(parsePriceFromHtml("<div>Rp85.000</div><div>Rp120.000</div><div>Rp85.000</div>"), 85_000);
+  assert.equal(parsePriceFromHtml("<div>Harga Rp89.000</div>"), 89_000);
+  // Pengulangan sedikit tetap diterima — ambangnya 5, bukan 2.
+  assert.equal(parsePriceFromHtml(Array(4).fill("<div>Rp50.000</div>").join("")), 50_000);
+});

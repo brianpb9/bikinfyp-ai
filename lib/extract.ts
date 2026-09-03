@@ -29,10 +29,47 @@ export interface ExtractResult {
   message?: string; // pesan user (Bahasa Indonesia)
 }
 
+/**
+ * User-Agent DESKTOP, dan itu keputusan yang diukur — bukan selera.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * SHOPEE MENJAWAB BERBEDA UNTUK PONSEL
+ * ────────────────────────────────────────────────────────────────────────────
+ * Diuji ke link pendek yang sungguhan (id.shp.ee, 3 Sep 2026), empat kombinasi
+ * header:
+ *
+ *   UA ponsel  -> HTTP 200 TANPA pengalihan, isinya halaman depan Shopee
+ *   UA desktop -> HTTP 301 ke shopee.co.id/product/817167067/...
+ *
+ * Header `accept` tidak berpengaruh sama sekali; yang menentukan hanya UA.
+ * Dengan UA ponsel, Shopee menganggap perangkatnya bisa membuka aplikasi dan
+ * menyajikan halaman pembuka aplikasi — yang tag Open Graph-nya adalah tag
+ * halaman depan, bukan produk.
+ *
+ * Itulah kenapa link Tokopedia berhasil sementara Shopee tidak: pengalihan
+ * Tokopedia tidak bergantung UA, Shopee bergantung.
+ */
 const UA =
-  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
 const EXTRACT_RATE_LIMIT = 10; // per 15 menit per user
+
+/**
+ * Judul yang menandakan HALAMAN DEPAN marketplace, bukan halaman produk.
+ *
+ * Sengaja sempit: yang dicocokkan adalah bentuk judul beranda yang stabil,
+ * bukan sekadar mengandung nama marketplace — judul produk yang sah hampir
+ * selalu berakhiran "| Shopee Indonesia", dan menolak semuanya akan membuang
+ * jauh lebih banyak ekstraksi yang benar daripada yang salah.
+ */
+const JUDUL_BERANDA: RegExp[] = [
+  /^Shopee\s+Indonesia\s*\|/i,
+  /Situs Belanja Online Terlengkap/i,
+  /^Tokopedia\s*[|-]\s*Jual Beli Online/i,
+  /^Jual Beli Online Aman dan Nyaman/i,
+  /^TikTok\s*[-|]\s*Make Your Day/i,
+  /^Belanja Online/i,
+];
 
 /** Rate limit ekstraksi per user (pola canRequestOtp di lib/otp.ts). */
 export function canExtract(userId: string): boolean {
@@ -87,12 +124,31 @@ export function parsePriceFromHtml(html: string): number | null {
     const n = parseFloat(mJson[1].replace(/\./g, ""));
     if (Number.isFinite(n) && n >= 1000 && n < 1e10) return Math.round(n);
   }
-  const mRp = html.match(/Rp\s?([0-9]{1,3}(?:\.[0-9]{3})+)/);
-  if (mRp) {
-    const n = parseInt(mRp[1].replace(/\./g, ""), 10);
-    if (Number.isFinite(n) && n >= 1000 && n < 1e10) return n;
-  }
-  return null;
+  // PEMINDAIAN "Rp..." ADALAH JALUR TERAKHIR, DAN IA MUDAH SALAH.
+  //
+  // Halaman produk Shopee tidak memuat harga aslinya di HTML sisi server —
+  // harganya digambar di browser. Yang tersisa di HTML hanyalah teks
+  // boilerplate: syarat voucher, ambang gratis ongkir, batas cicilan. Pada
+  // halaman deterjen 5 liter (3 Sep 2026) SELURUH 13 pola "Rp" berbunyi sama:
+  // "Rp1.000.000" — ambang voucher, bukan harga produk.
+  //
+  // Mengambilnya berarti mengisi kolom harga dengan angka yang salah, PERCAYA
+  // DIRI. Harga itu lalu masuk ke hook video: "cuma sejuta!" untuk produk
+  // seharga puluhan ribu. Kolom kosong yang diisi orang jauh lebih baik
+  // daripada kolom terisi yang salah — apalagi karena harga memang wajib
+  // dikonfirmasi pengguna sebelum render.
+  //
+  // Jadi: nilai yang berulang banyak kali dan SELALU SAMA diperlakukan sebagai
+  // boilerplate. Halaman produk sungguhan memang mengulang harganya, tapi
+  // biasanya bersama harga lain (coret, cicilan, varian) — keseragaman total
+  // di banyak kemunculan justru tanda ia bukan harga produk.
+  const semuaRp = [...html.matchAll(/Rp\s?([0-9]{1,3}(?:\.[0-9]{3})+)/g)]
+    .map((m) => parseInt(m[1].replace(/\./g, ""), 10))
+    .filter((n) => Number.isFinite(n) && n >= 1000 && n < 1e10);
+  if (!semuaRp.length) return null;
+  const unik = new Set(semuaRp);
+  if (unik.size === 1 && semuaRp.length >= 5) return null;
+  return semuaRp[0];
 }
 
 /** Harga dari JSON-LD Schema.org — beberapa blok script boleh ada; ambil harga valid pertama. */
@@ -360,6 +416,27 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   const og = fetched.ok ? parseOpenGraph(html) : {};
   const judul = og.title ?? dariUrl.title;
   const fotoUrl = og.image ?? dariUrl.image;
+
+  // HALAMAN DEPAN MARKETPLACE BUKAN PRODUK.
+  //
+  // Ketika marketplace menyajikan cangkang aplikasi alih-alih halaman produk —
+  // anti-bot, pengalihan yang tidak terjadi, atau tautan yang sudah mati — tag
+  // Open Graph-nya tetap ADA dan tetap terbaca. Isinya judul situs.
+  //
+  // Terjadi 3 Sep 2026: link Shopee menghasilkan produk bernama "Shopee
+  // Indonesia | Situs Belanja Online Terlengkap & Terpercaya", lengkap dengan
+  // foto banner beranda. Itu lebih buruk daripada gagal: form terisi dengan
+  // percaya diri oleh data yang salah, dan orang bisa saja meneruskannya.
+  //
+  // Judul beranda punya bentuk yang khas dan stabil, jadi ia bisa dikenali —
+  // dan menolaknya mengembalikan alur ke pengisian manual, yang benar.
+  if (judul && JUDUL_BERANDA.some((re) => re.test(judul))) {
+    return {
+      extracted: false,
+      reason: `halaman depan marketplace, bukan produk (judul: "${judul.slice(0, 80)}")`,
+      message: "Link-nya mengarah ke halaman depan toko, bukan ke produknya. Buka produknya lalu salin link dari tombol Bagikan ya.",
+    };
+  }
 
   if (!judul && !fotoUrl) {
     if (fetched.error) {
