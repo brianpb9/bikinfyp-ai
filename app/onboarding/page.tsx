@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, ApiFail } from "../_components/api";
+import { apiFetch, ApiFail, pesanUntukPengguna} from "../_components/api";
 import { PrimaryButton, ErrorText } from "../_components/ui";
 import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
@@ -153,7 +153,7 @@ export default function OnboardingPage() {
       setDevHint(res.dev_hint ?? null);
       setStep(3);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal kirim kode. Coba lagi ya.");
+      setError(pesanUntukPengguna(err, "Gagal kirim kode. Coba lagi ya."));
     } finally {
       setLoading(false);
     }

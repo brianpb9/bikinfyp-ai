@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch, ApiFail } from "../../_components/api";
+import { apiFetch, ApiFail, pesanUntukPengguna} from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { HOOK_FAMILY_NAMES, TIER_LABELS, loadFlow, saveFlow, type FlowScript, type FlowSegment } from "../../_components/flow";
 import { type RuleIssue } from "../../../lib/script-engine/validator";
@@ -197,7 +197,7 @@ function SkripInner() {
         // Simpan titik kembali — draft skrip AMAN di sessionStorage (racun.flow)
         saveFlow({ returnTo: `/bikin/skrip${dupScriptId ? `?script=${dupScriptId}` : ""}` });
       }
-      setError(err instanceof Error ? err.message : "Gagal melanjutkan. Coba lagi ya.");
+      setError(pesanUntukPengguna(err, "Gagal melanjutkan. Coba lagi ya."));
       setLoading(false);
     }
   }

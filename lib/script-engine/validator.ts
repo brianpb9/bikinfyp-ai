@@ -249,7 +249,28 @@ const KATA_SATUAN: Record<string, number> = {
   enam: 6, tujuh: 7, delapan: 8, sembilan: 9,
 };
 
-export function hargaTerbilang(text: string): { frasa: string; nilai: number }[] {
+/**
+ * Harga yang disebut dengan kata, beserta BACAAN ALTERNATIFNYA.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * "SATU JUTA LIMA RATUS" AMBIGU, DAN BAHASA INDONESIA MEMANG BEGITU
+ * ────────────────────────────────────────────────────────────────────────────
+ * Harfiah, "satu juta lima ratus" = 1.000.500. Tapi dalam percakapan jual-beli
+ * ia hampir selalu berarti 1.500.000 — "lima ratus" di situ singkatan dari
+ * "lima ratus ribu". Penutur Indonesia membacanya begitu tanpa berpikir.
+ *
+ * Parser lama hanya mengenal bacaan harfiah, jadi naskah yang menyebut harga
+ * dengan BENAR untuk produk Rp1.500.000 ditolak validator sebagai "harga tidak
+ * cocok" — dan ditolak tiga kali berturut-turut, sehingga seluruh permintaan
+ * gagal. Terjadi nyata 3 Sep 2026 pada produk speaker Rp1.500.000.
+ *
+ * Karena frasanya memang ambigu, keputusannya bukan memilih salah satu bacaan
+ * melainkan MENGEMBALIKAN KEDUANYA. Pemeriksa harga lulus bila SALAH SATU
+ * cocok — menolak kalimat yang penutur aslinya baca sebagai benar adalah
+ * penolakan yang salah, dan harganya sendiri tetap terjaga karena bacaan
+ * harfiah tidak dibuang.
+ */
+export function hargaTerbilang(text: string): { frasa: string; nilai: number; alternatif?: number }[] {
   const kata = text.toLowerCase().match(/[a-z]+/g) ?? [];
   const hasil: { frasa: string; nilai: number }[] = [];
   let kelompok = 0;      // ratusan/puluhan yang sudah ditutup
@@ -263,7 +284,15 @@ export function hargaTerbilang(text: string): { frasa: string; nilai: number }[]
   const tutup = (sampai: number) => {
     if (total > 0) {
       const sisa = kelompok + tertunda;
-      hasil.push({ frasa: kata.slice(mulai, sampai).join(" "), nilai: Math.round(total + sisa) });
+      const frasa = kata.slice(mulai, sampai).join(" ");
+      // Sisa tanpa satuan yang mengekor di belakang "juta" dibaca dalam RIBUAN
+      // oleh penutur Indonesia: "satu juta lima ratus" = 1.500.000. Bacaan
+      // harfiah tetap yang utama; yang idiomatis ditawarkan sebagai alternatif.
+      const idiomatis =
+        pengaliTerakhir === 1_000_000 && sisa > 0 && sisa < 1_000
+          ? Math.round(total + sisa * 1_000)
+          : undefined;
+      hasil.push({ frasa, nilai: Math.round(total + sisa), ...(idiomatis ? { alternatif: idiomatis } : {}) });
     }
     reset();
   };
@@ -704,7 +733,13 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   }
   // Harga yang ditulis dengan KATA — jalur yang justru kita perintahkan
   // sendiri ke penulis LLM, dan satu-satunya jalur yang belum diperiksa.
-  const salahTerbilang = hargaTerbilang(fullText).find((h) => !allowedPriceAmounts.has(h.nilai));
+  // Lulus bila SALAH SATU bacaan cocok — lihat catatan ambiguitas di
+  // hargaTerbilang. Menolak kalimat yang penutur aslinya baca sebagai benar
+  // adalah penolakan yang salah, dan tiga penolakan berturut-turut
+  // menggagalkan seluruh permintaan naskah.
+  const salahTerbilang = hargaTerbilang(fullText).find(
+    (h) => !allowedPriceAmounts.has(h.nilai) && !(h.alternatif !== undefined && allowedPriceAmounts.has(h.alternatif)),
+  );
   if (salahTerbilang) {
     push(false, {
       rule: "L-14",

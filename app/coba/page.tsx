@@ -7,7 +7,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { apiFetch } from "../_components/api";
+import { apiFetch, pesanUntukPengguna} from "../_components/api";
 import { CATEGORY_OPTIONS, HOOK_FAMILY_NAMES, rupiah } from "../_components/flow";
 import { track } from "../_components/track";
 import { guessCategory } from "@/lib/category-guess";
@@ -66,7 +66,7 @@ export default function CobaPage() {
       sessionStorage.setItem("racun.try", JSON.stringify({ name: name.trim(), priceIdr: parseInt(price, 10), category }));
       track("try_generated", { category });
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal bikin skrip. Coba lagi ya.");
+      setError(pesanUntukPengguna(err, "Gagal bikin skrip. Coba lagi ya."));
     } finally {
       setLoading(false);
     }

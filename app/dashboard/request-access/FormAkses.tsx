@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Loader2, MessageCircle, Send } from "lucide-react";
+import { pesanUntukPengguna } from "../../_components/api";
 
 /**
  * Form permintaan akses brand.
@@ -42,7 +43,7 @@ export function FormAkses({ email, whatsapp }: { email: string | null; whatsapp:
       setNotified(body.notified === true);
       setSelesai(true);
     } catch (err) {
-      setGalat(err instanceof Error ? err.message : "Gagal mengirim permintaan.");
+      setGalat(pesanUntukPengguna(err, "Gagal mengirim permintaan."));
     } finally {
       setKirim(false);
     }

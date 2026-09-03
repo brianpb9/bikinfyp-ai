@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "../../_components/api";
+import { apiFetch, pesanUntukPengguna} from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, WarnCard } from "../../_components/ui";
 import { CATEGORY_OPTIONS, loadFlow, saveFlow, rupiah } from "../../_components/flow";
 import { guessCategory } from "@/lib/category-guess";
@@ -114,7 +114,7 @@ export default function ProdukPage() {
       setExtractedRels((r) => r.filter((_, j) => j !== i));
       setExtractedPreviews((p) => p.filter((_, j) => j !== i));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal menghapus foto.");
+      setError(pesanUntukPengguna(err, "Gagal menghapus foto."));
     }
   }
 
@@ -193,7 +193,7 @@ export default function ProdukPage() {
           setExtractMsg("Nama produk ketemu. Harga dan foto isi sendiri ya di bawah.");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal membaca link.");
+      setError(pesanUntukPengguna(err, "Gagal membaca link."));
       setShowManual(true);
     } finally {
       setExtractLoading(false);
@@ -273,7 +273,7 @@ export default function ProdukPage() {
         ? "Upload belum selesai karena koneksinya terlalu lama. Coba cek internet lalu upload lagi ya."
         : networkFailure
           ? "Upload terputus. Coba cek internet lalu upload lagi ya."
-          : err instanceof Error ? err.message : "Gagal menyimpan produk.");
+          : pesanUntukPengguna(err, "Gagal menyimpan produk."));
     } finally {
       setLoading(false);
       submitLock.current = false;

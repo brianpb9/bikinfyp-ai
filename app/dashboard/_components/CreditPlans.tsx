@@ -5,6 +5,7 @@ import { Check, Sparkles } from "lucide-react";
 import { rupiah, tokens } from "./format";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 import { PAKET_TOKEN } from "@/lib/paket-token";
+import { pesanUntukPengguna } from "../../_components/api";
 
 // Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
 // Belum ada Duitku untuk organisasi; token org masih diisi manual oleh tim.
@@ -82,7 +83,7 @@ export function CreditPlans() {
         whatsapp: body.whatsapp ?? null,
       });
     } catch (err) {
-      setHasil({ ok: false, pesan: err instanceof Error ? err.message : "Pengajuan gagal dikirim." });
+      setHasil({ ok: false, pesan: pesanUntukPengguna(err, "Pengajuan gagal dikirim.") });
     } finally {
       setKirim(false);
     }

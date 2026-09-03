@@ -26,8 +26,12 @@ export async function POST(req: Request) {
     try {
       page = await fetchBrandHomepage(rawUrl);
     } catch (err) {
+      // Sebab teknisnya ke LOG, bukan ke layar. Pesan galat dari fetch
+      // ("ENOTFOUND", "certificate has expired") tidak berarti apa-apa bagi
+      // pemilik brand dan tidak menyarankan tindakan apa pun.
+      console.error("[analisa-brand] gagal membaca halaman:", err);
       throw ERR.BAD_REQUEST(
-        err instanceof Error ? err.message : "Link-nya belum bisa kami baca.",
+        "Link-nya belum bisa kami baca. Pastikan alamatnya benar dan bisa dibuka dari luar ya.",
         "fetchBrandHomepage failed."
       );
     }
@@ -36,9 +40,12 @@ export async function POST(req: Request) {
     try {
       profile = await analyzeBrandProfile(page);
     } catch (err) {
+      // message_en ikut terkirim ke browser, jadi ia bukan tempat menaruh
+      // sebab teknis — itu hanya memindahkan kebocoran ke bahasa lain.
+      console.error("[analisa-brand] analisa profil gagal:", err);
       throw ERR.BAD_REQUEST(
         "Analisa gagal — coba lagi atau isi profil manual nanti di pengaturan.",
-        err instanceof Error ? err.message : "analyzeBrandProfile failed."
+        "analyzeBrandProfile failed.",
       );
     }
 

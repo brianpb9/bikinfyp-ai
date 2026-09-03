@@ -38,12 +38,22 @@ test("LLM mati -> generateScripts MENOLAK, bukan menyajikan template", async () 
   );
 });
 
-test("penolakan menyebut sebab teknis untuk operator (bukan hanya pesan ramah)", async () => {
-  const err = await generateScripts({ product: PRODUK, register: "netral", qualityTier: "super_hq", durationSec: 15 })
+test("sebab teknis tersedia untuk operator, TAPI tidak di pesan pengguna", async () => {
+  // Dulu sebab teknisnya ditempelkan ke err.message — dan err.message itulah
+  // yang tampil di layar pembeli: "(sebab: penulis LLM gagal setelah percobaan
+  // ulang...)". Permintaan Brian 3 Sep 2026: pesan galat tidak boleh
+  // membocorkan detail teknis.
+  //
+  // Yang dijaga sekarang DUA arah sekaligus: sebabnya harus tetap ADA untuk
+  // operator (tanpa itu kegagalan mustahil didiagnosis), dan harus TIDAK ADA
+  // di kalimat yang dibaca pengguna.
+  const err = (await generateScripts({ product: PRODUK, register: "netral", qualityTier: "super_hq", durationSec: 15 })
     .then(() => null)
-    .catch((e: Error) => e);
+    .catch((e: Error) => e)) as (Error & { sebabTeknis?: string }) | null;
   assert.ok(err, "harus melempar");
-  assert.match(err!.message, /LLM|penulis|kunci|API/i, `sebab teknis hilang: ${err!.message}`);
+  assert.match(err!.sebabTeknis ?? "", /LLM|penulis|kunci|API/i, `sebab teknis hilang: ${err!.sebabTeknis}`);
+  assert.doesNotMatch(err!.message, /LLM|template|API|HTTP/i, `pesan pengguna membocorkan detail teknis: ${err!.message}`);
+  assert.match(err!.message, /coba lagi/i, "pesan pengguna tidak menyarankan tindakan apa pun");
 });
 
 test("jalur anonim (tanpaLlm) TETAP boleh memakai template — ia tidak pernah dirender", async () => {

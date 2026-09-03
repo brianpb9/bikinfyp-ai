@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch, ApiFail } from "../../_components/api";
+import { apiFetch, ApiFail, pesanUntukPengguna} from "../../_components/api";
 import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "../../../lib/avatar-presets";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
@@ -212,7 +212,7 @@ export default function GayaPage() {
         setNoCredits(true);
         saveFlow({ returnTo: "/bikin/gaya" });
       }
-      setError(err instanceof Error ? err.message : "Gagal bikin skrip. Coba lagi ya.");
+      setError(pesanUntukPengguna(err, "Gagal bikin skrip. Coba lagi ya."));
     } finally {
       kunciKirim.current = false;
       setLoading(false);

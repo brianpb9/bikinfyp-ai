@@ -83,13 +83,31 @@ export type SumberNaskah = "llm" | "template" | "degraded";
  * yang dipertaruhkan di sana.
  */
 export class TemplateTidakDisajikan extends Error {
-  /** Sebab teknis untuk operator — dipisah supaya pesan pengguna tetap ramah. */
+  /**
+   * Sebab teknis — UNTUK OPERATOR SAJA.
+   *
+   * ──────────────────────────────────────────────────────────────────────────
+   * KENAPA IA TIDAK IKUT KE LAYAR PENGGUNA
+   * ──────────────────────────────────────────────────────────────────────────
+   * Pesan lama menempelkan sebab teknis ke kalimat pengguna:
+   *
+   *   "...Coba lagi sebentar lagi ya. (sebab: penulis LLM gagal setelah
+   *    percobaan ulang; naskah template tidak disajikan)"
+   *
+   * Bagi pembeli, kalimat dalam kurung itu tidak berarti apa-apa — ia tidak
+   * tahu apa itu "penulis LLM" atau "naskah template", dan tidak ada satu pun
+   * tindakan yang bisa ia ambil karenanya. Yang tersampaikan hanya kesan bahwa
+   * ada sesuatu yang rusak di dalam.
+   *
+   * Ia juga membocorkan bentuk dalaman sistem — penyedia mana yang dipakai,
+   * bagaimana kegagalannya ditangani — kepada siapa pun yang menekan tombol.
+   *
+   * Sebabnya tetap dicatat penuh di log dan audit, tempat operator memang
+   * mencarinya. Yang berubah hanya siapa yang membacanya.
+   */
   readonly sebabTeknis: string;
   constructor(sebabTeknis: string) {
-    super(
-      "Kami belum berhasil menulis naskah yang memenuhi standar untuk produk ini. " +
-        `Coba lagi sebentar lagi ya. (sebab: ${sebabTeknis})`
-    );
+    super("Naskahnya belum bisa kami selesaikan sekarang. Coba lagi sebentar lagi ya.");
     this.name = "TemplateTidakDisajikan";
     this.sebabTeknis = sebabTeknis;
   }

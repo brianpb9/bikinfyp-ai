@@ -173,7 +173,10 @@ export async function POST(req: Request) {
         {
           code: "SCRIPT_WRITER_UNAVAILABLE",
           message_id: err.message,
-          message_en: `Script writer unavailable: ${err.sebabTeknis}`,
+          // TIDAK memuat sebab teknis. message_en ikut terkirim ke browser,
+          // jadi menaruhnya di sini sama saja dengan menampilkannya — hanya
+          // dalam bahasa lain. Sebabnya sudah lengkap di log dan audit.
+          message_en: "We could not finish the script right now. Please try again shortly.",
           retryable: true,
         },
         { status: 503 }

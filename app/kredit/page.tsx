@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { apiFetch, ApiFail } from "../_components/api";
+import { apiFetch, ApiFail, pesanUntukPengguna} from "../_components/api";
 import { ErrorText } from "../_components/ui";
 import { loadFlow, rupiah } from "../_components/flow";
 
@@ -171,7 +171,7 @@ function KreditInner() {
       setMsg("Pesanan dibatalkan.");
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Gagal membatalkan pesanan.");
+      setError(pesanUntukPengguna(err, "Gagal membatalkan pesanan."));
     } finally {
       setBusy(null);
     }
@@ -209,7 +209,7 @@ function KreditInner() {
         setTimeout(() => router.push(target), 1200);
       }
     } catch (err) {
-      if (!diam) setError(err instanceof Error ? err.message : "Gagal cek status.");
+      if (!diam) setError(pesanUntukPengguna(err, "Gagal cek status."));
     } finally {
       if (!diam) setBusy(null);
     }
