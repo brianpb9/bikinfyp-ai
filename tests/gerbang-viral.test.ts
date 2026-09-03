@@ -11,6 +11,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import {
   AMBANG_VIRAL, MAKS_PERCOBAAN_VIRAL, lewatiGerbangViral, memenuhiAmbang, urutkanBerdasarSkor,
 } from "../lib/script-engine/gerbang-viral";
@@ -97,4 +99,22 @@ test("percobaan yang tidak menghasilkan naskah sah menghentikan gerbang", async 
     { nilai: () => 90, layak: (x: Palsu) => (x as Palsu).validation.passed } as never,
   );
   assert.deepEqual(dipanggil, [1], "tidak boleh menulis ulang tiga kali kalau validator yang menolak");
+});
+
+test("tangga nama tidak diulang tiap percobaan — biayanya berlipat tanpa guna", () => {
+  // Terukur di produksi 3 Sep 2026: satu tier menghabiskan lebih dari sembilan
+  // menit di tahap naskah. Sebabnya gerbang mengulang SELURUH tangga nama tiap
+  // percobaan — 3 percobaan x 3 anak tangga = 9 penulisan naskah lengkap,
+  // masing-masing berisi tahap ide plus sampai tiga perbaikan validator.
+  //
+  // Tangga nama menjawab "nama mana yang muat di jendela kata". Jawabannya
+  // tidak berubah di percobaan kedua; yang dicari percobaan kedua adalah SKOR.
+  //
+  // Dijaga di rutenya, karena di sanalah gerbang dan tangga bertemu.
+  const rute = fs.readFileSync(path.join(process.cwd(), "app/api/scripts/generate/route.ts"), "utf8");
+  assert.match(
+    rute, /if \(namaBerhasil !== null\) return jalan\(namaBerhasil\);/,
+    "percobaan berikutnya masih mengulang tangga nama dari awal",
+  );
+  assert.match(rute, /namaBerhasil = j\.shortenedTo \?\? product\.name;/, "nama yang berhasil tidak disimpan");
 });

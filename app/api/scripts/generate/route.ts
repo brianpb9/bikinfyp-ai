@@ -124,10 +124,33 @@ export async function POST(req: Request) {
     // percobaan yang memendekkannya — jadi yang disimpan milik percobaan
     // TERAKHIR yang menghasilkan naskah sah, sama seperti sebelum gerbang ada.
     let shortenedTo: string | null = null;
+    // Nama yang TERBUKTI menghasilkan naskah sah, dipakai ulang di percobaan
+    // berikutnya.
+    //
+    // Tanpa ini, gerbang viral mengulang SELURUH tangga nama tiap percobaan:
+    // 3 percobaan x 3 anak tangga = 9 kali penulisan naskah lengkap, dan tiap
+    // penulisan itu sendiri berisi tahap ide plus sampai tiga perbaikan
+    // validator. Terukur 3 Sep 2026 pada produk bernama panjang: satu tier
+    // menghabiskan lebih dari sembilan menit di tahap naskah.
+    //
+    // Tangga nama menjawab pertanyaan "nama mana yang muat di jendela kata".
+    // Jawabannya tidak berubah di percobaan kedua — yang dicari percobaan
+    // kedua adalah SKOR, bukan nama. Mengulang pencariannya membayar berkali-
+    // kali untuk jawaban yang sudah dipegang.
+    let namaBerhasil: string | null = null;
+    // LAMANYA DIUKUR, supaya perkiraan yang ditampilkan ke pengguna berhenti
+    // jadi tebakan. Indikator tunggu (TungguNaskah) menyebut satu rentang
+    // waktu; rentang yang dikarang akan salah persis pada kasus yang paling
+    // menyiksa — nama produk panjang, gerbang menulis ulang tiga kali.
+    const mulaiNaskah = Date.now();
     const gerbang = await lewatiGerbangViral(
       async () => {
+        if (namaBerhasil !== null) return jalan(namaBerhasil);
         const j = await cobaDenganNamaPendek(jalan, product.name);
-        if (j.adaLolos) shortenedTo = j.shortenedTo;
+        if (j.adaLolos) {
+          shortenedTo = j.shortenedTo;
+          namaBerhasil = j.shortenedTo ?? product.name;
+        }
         return j.variants;
       },
       {
@@ -155,6 +178,7 @@ export async function POST(req: Request) {
       ambang: AMBANG_VIRAL,
       percobaan: gerbang.percobaan,
       lolos: gerbang.lolosAmbang,
+      ms: Date.now() - mulaiNaskah,
       tier,
     });
 
