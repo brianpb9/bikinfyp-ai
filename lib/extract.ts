@@ -395,6 +395,42 @@ export function cleanDescriptionForVisual(desc: string | undefined, title: strin
   return fromTitle.length >= 10 ? fromTitle.slice(0, 160) : null;
 }
 
+/**
+ * Buang embel-embel marketplace dari judul produk.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA INI BUKAN SEKADAR KERAPIAN
+ * ────────────────────────────────────────────────────────────────────────────
+ * Judul Open Graph Shopee berbentuk:
+ *
+ *   "Jual Prokleen Deterjen Cair Ocean Wave 5 liter | Shopee Indonesia"
+ *
+ * Awalan "Jual" dan ekor "| Shopee Indonesia" adalah SEO mereka, bukan bagian
+ * dari nama produk. Dibiarkan, keduanya ikut mengalir ke seluruh sistem:
+ *
+ *   - naskah menyebut produk bernama "Jual ... | Shopee Indonesia";
+ *   - QC-10 mengira MEREKNYA adalah "jual" — terjadi nyata pada job 2f95311f,
+ *     yang melaporkan: OCR tidak membaca merek "jual" di 8 frame;
+ *   - prompt ke model video membawa kata yang bukan produk.
+ *
+ * Pembersihannya sengaja HATI-HATI: hanya bentuk yang jelas milik marketplace
+ * yang dibuang. Nama produk yang kebetulan mengandung kata "jual" di tengah
+ * kalimat tidak disentuh.
+ */
+export function bersihkanJudulProduk(judul: string): string {
+  const bersih = judul
+    // Ekor marketplace: "| Shopee Indonesia", "- Tokopedia", "| Lazada".
+    .replace(/\s*[|\-–]\s*(Shopee|Tokopedia|Lazada|Blibli|TikTok\s*Shop)[^|]*$/i, "")
+    // Awalan SEO: "Jual ", "Beli ", "Promo " — HANYA di awal.
+    .replace(/^\s*(jual|beli|promo|harga)\s+/i, "")
+    // "... di Shopee" / "... di Tokopedia" di ujung.
+    .replace(/\s+di\s+(Shopee|Tokopedia|Lazada|Blibli)(\s+Indonesia)?\s*$/i, "")
+    .trim();
+  // Kalau pembersihan menyisakan terlalu sedikit, judul aslinya lebih berguna
+  // daripada potongan yang tidak berarti.
+  return bersih.length >= 5 ? bersih : judul.trim();
+}
+
 export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   const check = validateMarketplaceUrl(rawUrl);
   if (!check.ok) {
@@ -458,7 +494,7 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   }
 
   const price = parsePriceFromHtml(html);
-  const name = judul?.slice(0, 120) ?? undefined;
+  const name = judul ? bersihkanJudulProduk(judul).slice(0, 120) : undefined;
   // USP (keputusan Brian 2026-08-06): foto dari link harus ikut ter-copy
   // sebanyak mungkin — bukan cuma 1 og:image. Sumber digabung berurutan:
   // og:image (foto utama) -> JSON-LD Product.image -> pindaian state halaman.

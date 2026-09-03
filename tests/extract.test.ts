@@ -266,3 +266,30 @@ test("harga boilerplate yang berulang identik tidak dianggap harga produk", asyn
   // Pengulangan sedikit tetap diterima — ambangnya 5, bukan 2.
   assert.equal(parsePriceFromHtml(Array(4).fill("<div>Rp50.000</div>").join("")), 50_000);
 });
+
+test("embel-embel marketplace dibuang dari nama produk", async () => {
+  const { bersihkanJudulProduk } = await import("../lib/extract");
+  // Bukan sekadar kerapian. Judul Shopee "Jual X | Shopee Indonesia" membuat
+  // QC-10 mengira MEREKNYA adalah "jual" — terjadi nyata pada job 2f95311f,
+  // yang melaporkan: OCR tidak membaca merek "jual" di 8 frame. Kata itu juga
+  // mengalir ke naskah dan ke prompt model video.
+  assert.equal(
+    bersihkanJudulProduk("Jual Prokleen Deterjen Cair Ocean Wave 5 liter | Shopee Indonesia"),
+    "Prokleen Deterjen Cair Ocean Wave 5 liter",
+  );
+  assert.equal(bersihkanJudulProduk("Serum Glow Bright 30ml - Tokopedia"), "Serum Glow Bright 30ml");
+  assert.equal(bersihkanJudulProduk("Beli Kaos Polos Cotton Combed di Shopee Indonesia"), "Kaos Polos Cotton Combed");
+
+  // Judul yang TIDAK mengandung embel-embel tidak boleh disentuh sama sekali.
+  const utuh = "[LIVE ENDUL] Cetaphil Baby with Organic Calendula Wash & Shampoo 400ml";
+  assert.equal(bersihkanJudulProduk(utuh), utuh);
+
+  // Pembersihan yang menyisakan terlalu sedikit dibatalkan — judul asli lebih
+  // berguna daripada potongan yang tidak berarti.
+  assert.equal(bersihkanJudulProduk("Jual | Shopee Indonesia"), "Jual | Shopee Indonesia");
+});
+
+test("nama produk hasil ekstraksi memakai judul yang sudah dibersihkan", () => {
+  const src = baca("lib/extract.ts");
+  assert.match(src, /const name = judul \? bersihkanJudulProduk\(judul\)/, "nama produk masih memakai judul mentah");
+});
