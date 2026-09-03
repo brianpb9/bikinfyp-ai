@@ -128,27 +128,109 @@ function absolutize(url: string, base: string): string {
 }
 
 /** Ambil HTML halaman produk dengan timeout 8 dtk + UA browser. */
-export async function fetchProductHtml(url: string): Promise<{ ok: boolean; status: number; html?: string; error?: string }> {
+/**
+ * Ambil halaman produk, SAMBIL MENCATAT seluruh rantai pengalihan.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA PENGALIHANNYA DIIKUTI SENDIRI, BUKAN OLEH fetch
+ * ────────────────────────────────────────────────────────────────────────────
+ * Dua alasan, dan keduanya ditemukan dari link nyata yang gagal
+ * (vt.tokopedia.com, 3 Sep 2026):
+ *
+ * 1. DATANYA ADA DI URL PENGALIHAN, bukan di halaman tujuan. Link berbagi
+ *    TikTok Shop / Tokopedia mengalihkan ke alamat yang membawa parameter
+ *    `og_info` berisi JUDUL dan FOTO produk — sementara halaman tujuannya
+ *    sendiri menjawab "Security Check" tanpa satu pun tag Open Graph. Dengan
+ *    redirect: "follow", alamat perantara itu hilang sebelum sempat dibaca.
+ *
+ * 2. KEAMANAN. `redirect: "follow"` mengikuti pengalihan ke MANA PUN —
+ *    termasuk keluar dari daftar putih marketplace. Sebuah link marketplace
+ *    yang sah bisa mengalihkan ke alamat internal, dan seluruh penjagaan
+ *    anti-SSRF di validateMarketplaceUrl terlewati begitu saja. Di sini tiap
+ *    lompatan divalidasi ulang.
+ */
+export interface HasilFetchProduk {
+  ok: boolean;
+  status: number;
+  html?: string;
+  error?: string;
+  /** Seluruh alamat yang dilewati, termasuk yang pertama dan yang terakhir. */
+  rantai: string[];
+}
+
+const MAKS_LOMPATAN = 5;
+
+export async function fetchProductHtml(url: string): Promise<HasilFetchProduk> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
+  const rantai: string[] = [url];
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "user-agent": UA,
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "id-ID,id;q=0.9,en;q=0.8",
-      },
-    });
-    const html = await res.text();
-    return { ok: res.ok, status: res.status, html };
+    let sekarang = url;
+    for (let lompat = 0; lompat <= MAKS_LOMPATAN; lompat++) {
+      const res = await fetch(sekarang, {
+        signal: controller.signal,
+        redirect: "manual",
+        headers: {
+          "user-agent": UA,
+          accept: "text/html,application/xhtml+xml",
+          "accept-language": "id-ID,id;q=0.9,en;q=0.8",
+        },
+      });
+
+      const lokasi = res.status >= 300 && res.status < 400 ? res.headers.get("location") : null;
+      if (!lokasi) {
+        const html = await res.text();
+        return { ok: res.ok, status: res.status, html, rantai };
+      }
+
+      const berikut = new URL(lokasi, sekarang).toString();
+      // TIAP LOMPATAN divalidasi ulang. Link marketplace yang sah tetap bisa
+      // mengalihkan ke luar daftar putih, dan tanpa pemeriksaan ini seluruh
+      // penjagaan anti-SSRF hanya berlaku untuk alamat pertama.
+      const sah = validateMarketplaceUrl(berikut);
+      if (!sah.ok) {
+        return { ok: false, status: res.status, error: `pengalihan ke luar daftar putih: ${sah.reason}`, rantai };
+      }
+      rantai.push(berikut);
+      sekarang = berikut;
+    }
+    return { ok: false, status: 0, error: `pengalihan lebih dari ${MAKS_LOMPATAN} kali`, rantai };
   } catch (err) {
     const msg = err instanceof Error && err.name === "AbortError" ? "timeout 8 detik" : String(err);
-    return { ok: false, status: 0, error: msg };
+    return { ok: false, status: 0, error: msg, rantai };
   } finally {
     clearTimeout(timer);
   }
+}
+
+/**
+ * Baca judul dan foto dari PARAMETER URL pengalihan.
+ *
+ * Link berbagi TikTok Shop dan Tokopedia membawa `og_info` — JSON ber-encode
+ * URL berisi {title, image} — persis supaya aplikasi chat bisa menampilkan
+ * pratinjau tanpa membuka halamannya. Kita memanfaatkan hal yang sama, dan
+ * itulah satu-satunya jalan masuk ketika halaman tujuannya dijaga anti-bot.
+ *
+ * Parameter lain yang kadang membawa hal serupa ikut dicoba. Yang tidak
+ * terbaca dilewati diam-diam: ini jalur CADANGAN, bukan sumber utama, dan
+ * kegagalannya tidak boleh menjatuhkan apa pun.
+ */
+export function parseOgInfoDariUrl(daftarUrl: string[]): { title?: string; image?: string } {
+  const hasil: { title?: string; image?: string } = {};
+  for (const u of daftarUrl) {
+    let params: URLSearchParams;
+    try { params = new URL(u).searchParams; } catch { continue; }
+    for (const kunci of ["og_info", "ogInfo", "share_info"]) {
+      const mentah = params.get(kunci);
+      if (!mentah) continue;
+      try {
+        const obj = JSON.parse(mentah) as { title?: unknown; image?: unknown };
+        if (!hasil.title && typeof obj.title === "string" && obj.title.trim()) hasil.title = obj.title.trim();
+        if (!hasil.image && typeof obj.image === "string" && /^https?:\/\//.test(obj.image)) hasil.image = obj.image;
+      } catch { /* bukan JSON — lewati */ }
+    }
+  }
+  return hasil;
 }
 
 /** Ambil URL gambar dari blok JSON-LD (schema.org Product.image: string | string[]
@@ -264,36 +346,48 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   }
 
   const fetched = await fetchProductHtml(rawUrl);
-  if (fetched.error) {
-    return { extracted: false, reason: `fetch gagal: ${fetched.error}`, message: "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok." };
-  }
-  if (!fetched.ok) {
-    // Bot-block (403/429/503) atau halaman error — laporkan status persisnya
-    return {
-      extracted: false,
-      reason: `HTTP ${fetched.status} dari marketplace (kemungkinan proteksi bot)`,
-      message: "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok.",
-    };
-  }
+  // JALUR CADANGAN dari rantai pengalihan — dibaca DULUAN, karena ia tetap
+  // berguna bahkan ketika halaman tujuannya gagal atau dijaga anti-bot.
+  //
+  // Link berbagi TikTok Shop / Tokopedia membawa judul dan foto produk di
+  // parameter `og_info` alamat pengalihannya, sementara halaman tujuannya
+  // menjawab "Security Check" tanpa satu pun tag Open Graph (diverifikasi pada
+  // vt.tokopedia.com, 3 Sep 2026). Tanpa jalur ini, seluruh link berbagi dari
+  // aplikasi — bentuk yang paling sering dipakai orang — selalu gagal.
+  const dariUrl = parseOgInfoDariUrl(fetched.rantai);
 
   const html = fetched.html ?? "";
-  const og = parseOpenGraph(html);
-  if (!og.title && !og.image) {
+  const og = fetched.ok ? parseOpenGraph(html) : {};
+  const judul = og.title ?? dariUrl.title;
+  const fotoUrl = og.image ?? dariUrl.image;
+
+  if (!judul && !fotoUrl) {
+    if (fetched.error) {
+      return { extracted: false, reason: `fetch gagal: ${fetched.error}`, message: "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok." };
+    }
+    if (!fetched.ok) {
+      // Bot-block (403/429/503) atau halaman error — laporkan status persisnya
+      return {
+        extracted: false,
+        reason: `HTTP ${fetched.status} dari marketplace (kemungkinan proteksi bot)`,
+        message: "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok.",
+      };
+    }
     return {
       extracted: false,
-      reason: "tidak ada tag Open Graph di halaman (kemungkinan halaman login/anti-bot)",
+      reason: "tidak ada tag Open Graph di halaman maupun di rantai pengalihan (kemungkinan halaman login/anti-bot)",
       message: "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok.",
     };
   }
 
   const price = parsePriceFromHtml(html);
-  const name = og.title?.slice(0, 120) ?? undefined;
+  const name = judul?.slice(0, 120) ?? undefined;
   // USP (keputusan Brian 2026-08-06): foto dari link harus ikut ter-copy
   // sebanyak mungkin — bukan cuma 1 og:image. Sumber digabung berurutan:
   // og:image (foto utama) -> JSON-LD Product.image -> pindaian state halaman.
   // Dedup per content-hash (og:image dan varian inline = foto yang sama), maks 5.
   const candidates = [
-    ...(og.image ? [og.image] : []),
+    ...(fotoUrl ? [fotoUrl] : []),
     ...parseJsonLdImages(html),
     ...parseInlineProductImages(html),
   ].map((u) => absolutize(u, rawUrl));
@@ -313,7 +407,7 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     categoryGuess: guessCategory(`${name ?? ""} ${og.description ?? ""}`),
     imageUrls,
     originalPriceIdr: parseOriginalPriceFromHtml(html, price),
-    visualDesc: cleanDescriptionForVisual(og.description, og.title),
+    visualDesc: cleanDescriptionForVisual(og.description, judul),
   };
 }
 

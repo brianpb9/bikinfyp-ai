@@ -174,9 +174,23 @@ export default function ProdukPage() {
           setPromoOpen(true);
         }
         setShowManual(true);
+        // KATAKAN APA YANG KETEMU DAN APA YANG BELUM — jangan biarkan orang
+        // menebak kenapa satu kolom kosong.
+        //
+        // Link berbagi dari aplikasi (vt.tokopedia.com, shp.ee) membawa nama
+        // dan foto di alamat pengalihannya, TAPI tidak membawa harga — dan
+        // halaman tujuannya dijaga anti-bot, jadi harganya memang tidak bisa
+        // diambil dari mana pun. Kalimat yang menyebut kekurangannya persis
+        // jauh lebih berguna daripada satu kalimat gagal untuk semua keadaan.
+        const adaFoto = Boolean(res.image_urls?.length);
+        const adaHarga = Boolean(res.price_idr);
         if (res.warning) setExtractMsg(res.warning);
-        else if (!res.image_urls?.length)
+        else if (adaFoto && !adaHarga)
+          setExtractMsg("Nama & foto ketemu. Harganya nggak ada di link — isi manual ya, cuma satu kolom.");
+        else if (!adaFoto && adaHarga)
           setExtractMsg("Nama & harga ketemu, tapi fotonya nggak kebaca dari link. Upload foto sendiri ya di bawah.");
+        else if (!adaFoto && !adaHarga)
+          setExtractMsg("Nama produk ketemu. Harga dan foto isi sendiri ya di bawah.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membaca link.");

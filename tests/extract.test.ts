@@ -8,6 +8,9 @@ process.env.STORAGE_DIR = `/tmp/racun-test-extract-storage-${process.pid}`;
 
 const { parseOpenGraph, parseJsonLdPrice, parsePriceFromHtml, parseJsonLdImages, parseInlineProductImages, parseOriginalPriceFromHtml, cleanDescriptionForVisual, guessCategory, canExtract } = await import("../lib/extract");
 const { getDb } = await import("../lib/db");
+const fs = await import("node:fs");
+const path = await import("node:path");
+const baca = (f: string) => fs.readFileSync(path.join(process.cwd(), f), "utf8");
 const { findOrCreateUserByEmail } = await import("../lib/auth");
 
 const OG_HTML = `<!doctype html><html><head>
@@ -104,4 +107,70 @@ test("cleanDescriptionForVisual: buang judul, boilerplate, kata marketing; fallb
     title
   );
   assert.ok(ok && ok.includes("botol kaca pink") && !/promo/i.test(ok), String(ok));
+});
+
+// ── LINK BERBAGI DARI APLIKASI ─────────────────────────────────────────────
+//
+// Tombol "Bagikan" di aplikasi tidak memberi alamat halaman produk — ia memberi
+// alamat PENDEK dari domain lain, dan itulah bentuk yang paling sering ditempel
+// orang. Link nyata yang gagal 3 Sep 2026:
+// https://vt.tokopedia.com/t/ZS9BvcNsopaBj-mXaUd/
+
+test("domain pendek marketplace diterima, domain lain tetap ditolak", async () => {
+  const { validateMarketplaceUrl } = await import("../lib/url-safety");
+  const boleh = [
+    "https://vt.tokopedia.com/t/ZS9BvcNsopaBj-mXaUd/",
+    "https://shop-id.tokopedia.com/view/product/1737013876776011484",
+    "https://tokopedia.link/abc123",
+    "https://shp.ee/abc123",
+    "https://shope.ee/abc123",
+    "https://vt.tiktok.com/ZSabc/",
+    "https://shopee.co.id/product-i.123.456",
+    "https://shopee.com/product-i.123.456",
+  ];
+  for (const u of boleh) assert.equal(validateMarketplaceUrl(u).ok, true, `${u} ditolak`);
+
+  // Daftar putih tetap daftar putih — dan itu penjagaan anti-SSRF, bukan
+  // formalitas.
+  for (const u of [
+    "https://contoh.com/produk",
+    "http://169.254.169.254/latest/meta-data/",
+    "https://localhost/x",
+    "https://tokopedia.com.jahat.id/x",
+    "file:///etc/passwd",
+  ]) {
+    assert.equal(validateMarketplaceUrl(u).ok, false, `${u} LOLOS daftar putih`);
+  }
+});
+
+test("judul dan foto terbaca dari parameter og_info di alamat pengalihan", async () => {
+  const { parseOgInfoDariUrl } = await import("../lib/extract");
+  // Bentuk aslinya, disalin dari pengalihan vt.tokopedia.com yang sungguhan.
+  const og = encodeURIComponent(JSON.stringify({
+    title: "Cetaphil Baby Wash & Shampoo 400ml",
+    image: "https://p16-oec-sg.ibyteimg.com/tos-alisg/32e3f4da.webp",
+  }));
+  const rantai = [
+    "https://vt.tokopedia.com/t/ZS9BvcNsopaBj-mXaUd/",
+    `https://shop-id.tokopedia.com/view/product/173701?og_info=${og}&utm_source=whatsapp`,
+  ];
+  const hasil = parseOgInfoDariUrl(rantai);
+  assert.equal(hasil.title, "Cetaphil Baby Wash & Shampoo 400ml");
+  assert.match(hasil.image ?? "", /^https:\/\/p16-oec-sg\.ibyteimg\.com\//);
+
+  // Rantai tanpa og_info tidak melempar apa pun — ini jalur CADANGAN, dan
+  // kegagalannya tidak boleh menjatuhkan pengambilan yang lain.
+  assert.deepEqual(parseOgInfoDariUrl(["https://tokopedia.com/x", "bukan-url"]), {});
+  assert.deepEqual(parseOgInfoDariUrl(["https://tokopedia.com/x?og_info=bukan-json"]), {});
+});
+
+test("pengalihan ke luar daftar putih DITOLAK, bukan diikuti", async () => {
+  // redirect: "follow" akan mengikuti pengalihan ke mana pun — termasuk keluar
+  // dari daftar putih. Sebuah link marketplace yang sah bisa mengalihkan ke
+  // alamat internal, dan seluruh penjagaan anti-SSRF terlewati begitu saja.
+  const src = baca("lib/extract.ts");
+  assert.match(src, /redirect: "manual"/, "pengalihan masih diikuti fetch tanpa pemeriksaan");
+  assert.match(src, /const sah = validateMarketplaceUrl\(berikut\)/, "lompatan pengalihan tidak divalidasi ulang");
+  assert.match(src, /pengalihan ke luar daftar putih/, "pengalihan ke luar daftar putih tidak ditolak");
+  assert.match(src, /MAKS_LOMPATAN/, "tidak ada batas jumlah pengalihan");
 });

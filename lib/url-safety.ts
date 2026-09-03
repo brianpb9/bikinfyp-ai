@@ -1,8 +1,33 @@
 // Anti-SSRF (NF-SEC08): whitelist domain marketplace, tolak IP/internal/skema aneh.
 
-// shp.ee: domain resmi Shopee untuk short-link dari tombol "Bagikan" di app —
-// bukan subdomain shopee.co.id, jadi harus didaftarkan terpisah.
-export const WHITELIST_DOMAINS = ["tiktok.com", "shopee.co.id", "tokopedia.com", "shp.ee"];
+/**
+ * Domain marketplace yang boleh diambil datanya.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DOMAIN PENDEK DIDAFTARKAN TERPISAH, DAN ITU BUKAN DETAIL
+ * ────────────────────────────────────────────────────────────────────────────
+ * Tombol "Bagikan" di aplikasi TIDAK memberi alamat halaman produk — ia memberi
+ * alamat pendek dari domain lain. Itulah bentuk yang paling sering ditempel
+ * orang, jadi domain pendek yang tidak terdaftar berarti jalur yang paling
+ * banyak dipakai justru yang paling sering gagal.
+ *
+ *   shp.ee, shope.ee ... Shopee (shope.ee dipakai aplikasi versi baru)
+ *   tokopedia.link ..... Tokopedia
+ *   vt.tokopedia.com ... TikTok Shop Indonesia — subdomain tokopedia.com, jadi
+ *                        sudah tercakup, dan memang ke sinilah link berbagi
+ *                        TikTok Shop ID mendarat (diverifikasi 3 Sep 2026)
+ *
+ * shopee.com didaftarkan di samping shopee.co.id: keduanya domain berbeda.
+ */
+export const WHITELIST_DOMAINS = [
+  "tiktok.com",
+  "shopee.co.id",
+  "shopee.com",
+  "tokopedia.com",
+  "tokopedia.link",
+  "shp.ee",
+  "shope.ee",
+];
 
 export function validateMarketplaceUrl(raw: string): { ok: boolean; reason?: string } {
   let url: URL;
