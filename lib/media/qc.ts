@@ -650,6 +650,12 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
     const duration = await probeDurationSec(filePath);
     const found = new Set<string>();
     const mirip = new Set<string>();
+    // DETIK tempat salah eja itu terbaca — supaya kegagalannya bisa DIPERBAIKI,
+    // bukan cuma dilaporkan. Tanpa ini, satu label rusak di satu shot
+    // menggagalkan seluruh video: biayanya sudah keluar penuh ke penyedia, dan
+    // yang diterima pembeli tidak ada. Lihat QC-11, yang sudah begini sejak
+    // awal — QC-10 tertinggal.
+    const detikGagal: number[] = [];
     let sampled = 0;
     // 8 titik sampel + upscale 2x (label kecil di frame 720p sering di bawah
     // ukuran minimum tesseract — kasus genz-r2: label tajam secara visual tapi
@@ -664,7 +670,10 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
         const norm = normalizeOcr(word.text);
         // Kata yang MIRIP merek tapi tidak cocok = bukti label salah eja.
         // Dibedakan dari "OCR tidak membaca apa pun", yang bukan bukti apa-apa.
-        if (!merekCocok(norm, merekUtama) && miripMerek(norm, merekUtama)) mirip.add(norm);
+        if (!merekCocok(norm, merekUtama) && miripMerek(norm, merekUtama)) {
+          mirip.add(norm);
+          detikGagal.push(Math.floor(duration * frac));
+        }
         for (const token of tokens) {
           // ATURAN SAMA DENGAN QC-F1 (merekCocok): kelebihan huruf boleh,
           // KEKURANGAN tidak.
@@ -697,6 +706,7 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
       return {
         code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
         detail: `label tercetak "${[...mirip].join(", ")}" — bukan "${merekUtama}". Merek salah eja = label rusak (AI slop).`,
+        ...(detikGagal.length ? { detikGagal: [...new Set(detikGagal)] } : {}),
       };
     }
     return {

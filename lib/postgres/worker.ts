@@ -764,10 +764,23 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // Dibatasi 2 shot per job. Kalau lebih dari dua shot cacat, yang salah
     // kemungkinan besar arahannya, bukan satu lemparan dadu yang sial — dan
     // menggenerate ulang terus akan membakar margin tanpa memperbaiki apa pun.
-    const qc11 = qc.checks.find((check) => check.code === "QC-11" && check.status === "fail");
-    if (retry === 0 && qc11?.detikGagal?.length && !usedMockVideo) {
+    // BUKAN HANYA QC-11.
+    //
+    // Perbaikan bersasaran ini semula hanya untuk QC-11 (orang/tangan/fisika).
+    // QC-10 — merek salah eja di label — tertinggal, padahal cacatnya jenis
+    // yang persis sama: hidup di dalam video hasil model, mustahil diperbaiki
+    // dengan menyusun ulang klip yang sama, dan terikat pada SATU shot.
+    //
+    // Akibatnya terlihat 3 Sep 2026: label tercetak "siho" untuk merek
+    // "sihoo", seluruh job digagalkan, jatah pembeli dikembalikan — sementara
+    // Rp23.355 sudah benar-benar dibayarkan ke penyedia. Kerugian penuh untuk
+    // cacat di satu klip.
+    const qcCacat = qc.checks.find(
+      (check) => (check.code === "QC-11" || check.code === "QC-10") && check.status === "fail" && check.detikGagal?.length,
+    );
+    if (retry === 0 && qcCacat?.detikGagal?.length && !usedMockVideo) {
       const durasiShot = specSiap.shots.map((shot) => shot.durationSec);
-      const idxCacat = [...new Set(qc11.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))]
+      const idxCacat = [...new Set(qcCacat.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))]
         .filter((i) => i >= 0)
         .slice(0, 2);
       for (const idx of idxCacat) {
@@ -777,7 +790,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
           const ulang = await generateVideoWithFailover({ ...specSiap, shots: [specSiap.shots[idx]] }, tmpDir);
           await jobs.addCost(row.id, ulang.costIdr);
           fs.copyFileSync(ulang.assets[0].filePath, clipPaths[idx]);
-          console.log(`[job ${row.id.slice(0, 8)}] QC-11 menolak detik ${qc11.detikGagal.join(", ")} -> shot ${idx + 1} digenerate ulang`);
+          console.log(`[job ${row.id.slice(0, 8)}] ${qcCacat.code} menolak detik ${qcCacat.detikGagal!.join(", ")} -> shot ${idx + 1} digenerate ulang`);
         } catch (err) {
           // Gagal memperbaiki bukan alasan menyembunyikan kegagalan aslinya:
           // biarkan QC berikutnya yang memutuskan, dengan klip apa adanya.
