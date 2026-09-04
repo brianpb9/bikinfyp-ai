@@ -183,3 +183,20 @@ test("tarif BROSUR tidak boleh menyamar sebagai angka pasti", async () => {
     assert.doesNotMatch(blok, /tarifTerukur: true/, `${id} bertarif brosur tapi ditandai terukur`);
   }
 });
+
+test("catatan model TIDAK menjanjikan penghematan yang sudah terbukti tidak ada", async () => {
+  // Katalog sempat berbunyi "Taksiran brosur Rp5.868 per 15 dtk 720p" untuk
+  // pro-fast. Dua pengukuran 4 Sep 2026 membatalkannya: model itu tidak sanggup
+  // 15 detik sama sekali, dan pemakaian tokennya 0,954x Seedance 2.0 mini —
+  // praktis sama.
+  //
+  // Catatan yang usang di layar admin lebih berbahaya daripada tidak ada
+  // catatan: ia adalah angka yang terlihat meyakinkan di tempat keputusan
+  // komersial diambil.
+  const { modelDikenal } = await import("../lib/katalog-model");
+  const fast = modelDikenal("seedance-1-0-pro-fast-251015");
+  assert.ok(fast);
+  assert.doesNotMatch(fast?.catatan ?? "", /Rp5\.868/, "angka hemat yang sudah dibantah masih dipajang");
+  assert.match(fast?.catatan ?? "", /12 detik/, "batas durasi tidak disebut di tempat keputusan diambil");
+  assert.match(fast?.catatan ?? "", /tidak terbukti|praktis sama/, "hasil pengukurannya tidak disebut");
+});

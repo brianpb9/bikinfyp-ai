@@ -33,11 +33,13 @@ if (!model.length) throw new Error("Sebutkan id model.");
 const BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
 const PROMPT =
   "close-up of a young Indonesian woman's hands presenting a small product over a clean home table, " +
-  "phone camera look, natural daylight, gentle push in  --resolution 720p  --duration 15";
+  "phone camera look, natural daylight, gentle push in  --resolution 720p  --duration " + (process.env.UJI_DETIK ?? "15");
 
 // Pembanding TERUKUR: 15 dtk 720p tanpa referensi pada keluarga 2.x.
-const TOKEN_ACUAN = 324_900;
-const RUPIAH_ACUAN = 23_355;
+const DETIK = Number(process.env.UJI_DETIK ?? 15);
+// Acuan diskalakan ke durasi uji: 324.900 token untuk 15 dtk.
+const TOKEN_ACUAN = Math.round(324_900 * (DETIK / 15));
+const RUPIAH_ACUAN = Math.round(23_355 * (DETIK / 15));
 
 async function ark(path: string, init?: RequestInit) {
   const r = await fetch(`${BASE}${path}`, {

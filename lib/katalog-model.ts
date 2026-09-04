@@ -54,6 +54,27 @@ export interface ModelKatalog {
 /** Durasi video produksi kita. Model yang tidak sanggup segini tidak bisa dipetakan. */
 export const DETIK_PRODUKSI = 15;
 
+/**
+ * CATATAN 4 Sep 2026 — kenapa dua model Seedance 1.0 ada di sini tapi tidak
+ * dipetakan ke satu paket pun.
+ *
+ * Brian mengaktifkannya dan meminta dipetakan "mulai dari yang termurah".
+ * Dua pengukuran menghentikannya:
+ *
+ *   1. DURASI. Keduanya menerima 3-12 detik dan MENOLAK 13, 14, 15. Video
+ *      produksi kita 15 detik satu klip.
+ *   2. BIAYA. Alasan satu-satunya untuk pindah adalah dugaan hemat 13% dari
+ *      brosur. Diukur pada render 12 detik dengan prompt identik, pemakaian
+ *      tokennya 0,954x Seedance 2.0 mini — praktis sama. Penghematan yang
+ *      diklaim bergantung sepenuhnya pada asumsi bahwa keluarga 1.0 ditagih
+ *      per DETIK dengan tarif jauh lebih murah, dan itu hanya bisa dibuktikan
+ *      dari tagihan bulanan.
+ *
+ * Jadi memakainya menuntut memperpendek video atau membangun perakitan
+ * multi-klip — menukar perubahan produk dengan penghematan 5% yang belum pasti.
+ * Keduanya DIBIARKAN di katalog supaya keputusan ini bisa ditinjau ulang saat
+ * tagihan terbit, tanpa harus mengulang penemuannya dari nol.
+ */
 export const KATALOG_MODEL: ModelKatalog[] = [
   {
     id: "grok-imagine/image-to-video",
@@ -94,7 +115,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
     label: "Seedance 1.0 pro fast",
     mesin: "byteplus",
     tarif: "brosur",
-    catatan: "Ditagih per detik. Taksiran brosur Rp5.868 per 15 dtk 720p — BELUM diukur di akun kita.",
+    catatan: "DIUKUR 4 Sep 2026: maksimal 12 detik (13/14/15 ditolak), dan pemakaian tokennya 0,95x Seedance 2.0 mini — praktis sama. Dugaan hemat 13% dari brosur tidak terbukti.",
   },
   {
     // Diaktifkan Brian 4 Sep 2026, diverifikasi hidup (HTTP 200).
@@ -103,7 +124,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
     label: "Seedance 1.0 pro",
     mesin: "byteplus",
     tarif: "brosur",
-    catatan: "Ditagih per token, tarif brosur $2,5/1M. Tagihan kami sendiri untuk keluarga 2.x adalah $4,41/1M — angka ini belum dicocokkan.",
+    catatan: "DIUKUR 4 Sep 2026: maksimal 12 detik (13/14/15 ditolak). Tarif brosur $2,5/1M belum pernah dicocokkan dengan tagihan kami.",
   },
 ];
 
