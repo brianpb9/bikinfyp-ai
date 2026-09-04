@@ -17,21 +17,15 @@ export const metadata: Metadata = {
   //
   // metadataBase wajib: tanpanya Next merender URL gambar relatif, dan
   // pengurai kartu (WhatsApp) menolaknya.
-  // ALAMAT MASIH DOMAIN LAMA, DAN ITU DISENGAJA.
+  // Alamat kanonik. DIPINDAH ke aiugc.id 5 Sep 2026, sesudah DNS menunjuk
+  // server ini dan sertifikat Let's Encrypt untuk aiugc.id + www.aiugc.id
+  // terbit — bukan sebelumnya. Sehari sebelumnya domain ini belum menjawab
+  // sama sekali, dan alamat kanonik yang menunjuk halaman mati membuat setiap
+  // tautan yang dibagikan pembeli ikut mati.
   //
-  // Nama merek sudah AIUGC.ID di seluruh layar dan email, tapi alamatnya belum
-  // boleh ikut: diperiksa 4 Sep 2026, aiugc.id menunjuk 104.21.0.184 /
-  // 172.67.128.48 (Cloudflare) sementara server ini 187.77.148.89, dan
-  // https://aiugc.id belum menjawab sama sekali.
-  //
-  // metadataBase dan og:url menjadi alamat kanonik yang dibagikan dan
-  // di-crawl. Mengarahkannya ke domain yang belum hidup berarti setiap tautan
-  // yang dibagikan pembeli menuju halaman mati — lebih buruk daripada nama
-  // domain lama yang masih berfungsi.
-  //
-  // Pergantiannya satu baris di sini plus APP_BASE_URL, begitu DNS menunjuk
-  // server ini dan sertifikatnya terbit.
-  metadataBase: new URL("https://bikinfyp.com"),
+  // bikinfyp.com TETAP dilayani nginx, tidak dialihkan: tautan video
+  // bertanda tangan yang sudah dibagikan masih menunjuk ke sana.
+  metadataBase: new URL("https://aiugc.id"),
   openGraph: {
     type: "website",
     siteName: "AIUGC.ID",
@@ -42,7 +36,7 @@ export const metadata: Metadata = {
     // admin tanpa deploy — menuliskannya berarti menyiarkan angka yang cepat
     // atau lambat berbeda dari yang ditagih. Harga hidup ada di /harga.
     description: "Bikin video jualan 15 detik dari foto produk. Bayar per video, tanpa langganan.",
-    url: "https://bikinfyp.com",
+    url: "https://aiugc.id",
     images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "AIUGC.ID" }],
   },
   twitter: {

@@ -55,13 +55,14 @@ test("email dan invoice memakai KONSTANTA, bukan nama yang diketik ulang", () =>
   }
 });
 
-test("ALAMAT TEKNIS masih domain lama — sengaja, sampai DNS pindah", () => {
-  // Bukan yang tertinggal. metadataBase dan og:url menjadi alamat kanonik yang
-  // dibagikan dan di-crawl; mengarahkannya ke domain yang belum hidup membuat
-  // setiap tautan yang dibagikan pembeli menuju halaman mati.
+test("ALAMAT KANONIK sudah pindah ke aiugc.id", () => {
+  // Dipindah 5 Sep 2026, SESUDAH DNS menunjuk server ini dan sertifikat
+  // Let's Encrypt terbit — bukan sebelumnya. Sehari sebelumnya domain itu belum
+  // menjawab sama sekali, dan alamat kanonik yang menunjuk halaman mati membuat
+  // setiap tautan yang dibagikan pembeli ikut mati.
   const layout = baca("app/layout.tsx");
-  assert.match(layout, /metadataBase: new URL\("https:\/\/bikinfyp\.com"\)/);
-  assert.match(layout, /aiugc\.id menunjuk 104\.21/, "alasannya tidak ditulis — akan terlihat seperti kelalaian");
+  assert.match(layout, /metadataBase: new URL\("https:\/\/aiugc\.id"\)/);
+  assert.match(layout, /url: "https:\/\/aiugc\.id"/, "og:url masih domain lama");
 });
 
 test("kunci provenance AIGC TIDAK ikut diganti", () => {

@@ -224,7 +224,10 @@ export async function POST(req: Request) {
         });
       if (lokal) {
         const { periksaFotoProduk } = await import("@/lib/media/foto-produk");
-        const periksa = await periksaFotoProduk(lokal);
+        // OCR dilewati DI SINI: yang memblokir hanya ukuran, dan hitungan
+        // kata cuma jadi peringatan log. Worker memanggilnya lagi dengan OCR
+        // saat memutuskan pemotongan poster — di sana ia memang menentukan.
+        const periksa = await periksaFotoProduk(lokal, { lewatiOcr: true });
         console.log(`[foto-produk] ${product.id}: ${periksa.lebar}x${periksa.tinggi}, ditolak=${periksa.ditolak}`);
         if (periksa.ditolak) {
           throw ERR.BAD_REQUEST(

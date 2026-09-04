@@ -128,7 +128,17 @@ async function hitungKataOcr(berkas: string): Promise<number> {
   }
 }
 
-export async function periksaFotoProduk(berkas: string): Promise<PeriksaFoto> {
+/**
+ * `lewatiOcr` — untuk pemanggil yang tidak butuh hitungan kata.
+ *
+ * OCR memakan waktu, dan di rute pembuatan job ia tidak menentukan apa pun:
+ * keputusan MEMBLOKIR murni soal ukuran, sementara hitungan kata hanya
+ * menghasilkan satu baris peringatan di log. Menjalankannya di sana berarti
+ * menambah tunggu ke permintaan yang sedang dilihat pembeli, demi catatan yang
+ * bisa dibuat belakangan di worker — yang memang memanggilnya lagi untuk
+ * memutuskan pemotongan poster.
+ */
+export async function periksaFotoProduk(berkas: string, opsi: { lewatiOcr?: boolean } = {}): Promise<PeriksaFoto> {
   if (!fs.existsSync(berkas)) {
     return { lebar: 0, tinggi: 0, ditolak: true, alasanTolak: "Foto produknya tidak ditemukan.", peringatan: [], kataTerbaca: 0 };
   }
@@ -154,7 +164,7 @@ export async function periksaFotoProduk(berkas: string): Promise<PeriksaFoto> {
     );
   }
 
-  const kataTerbaca = await hitungKataOcr(berkas);
+  const kataTerbaca = opsi.lewatiOcr ? 0 : await hitungKataOcr(berkas);
   if (kataTerbaca >= AMBANG_KATA_BANNER) {
     peringatan.push(
       `Fotonya banyak tulisan promo (${kataTerbaca} kata terbaca). Tulisan itu bisa ikut tersalin ke video ` +
