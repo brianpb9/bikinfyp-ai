@@ -65,9 +65,11 @@ ssh "$HOST" "cd $TUJUAN && $COMPOSE build web worker"
 # sehat, baru nginx dialihkan, baru warna lama dimatikan. Urutan itu yang
 # penting — menukar nginx sebelum warna baru sehat hanya memindahkan jeda,
 # bukan menghapusnya.
-AKTIF=$(ssh "$HOST" "grep -oE '127.0.0.1:(3000|3001)' /etc/nginx/conf.d/bikinfyp-upstream.conf | head -1 | cut -d: -f2")
+# Port hijau 3002, bukan 3001: mesin ini dipakai bersama aplikasi lain dan
+# 3001 sudah dipegang l10-app.
+AKTIF=$(ssh "$HOST" "grep -oE '127.0.0.1:(3000|3002)' /etc/nginx/conf.d/bikinfyp-upstream.conf | head -1 | cut -d: -f2")
 if [ "$AKTIF" = "3000" ]; then
-  WARNA_BARU="web-green"; PORT_BARU=3001; WARNA_LAMA="web"
+  WARNA_BARU="web-green"; PORT_BARU=3002; WARNA_LAMA="web"
 else
   WARNA_BARU="web";       PORT_BARU=3000; WARNA_LAMA="web-green"
 fi

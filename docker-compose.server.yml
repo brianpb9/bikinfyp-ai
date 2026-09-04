@@ -167,12 +167,19 @@ services:
       retries: 5
       start_period: 40s
 
-  # Kembaran port 3001. `profiles` membuatnya TIDAK ikut hidup pada
+  # Kembaran port 3002. `profiles` membuatnya TIDAK ikut hidup pada
   # `docker compose up` biasa — ia hanya dinyalakan deploy saat menukar warna.
+  #
+  # PORT 3002, BUKAN 3001: mesin ini dipakai bersama aplikasi lain, dan 3001
+  # sudah dipegang `l10-app`. Ketahuan saat percobaan pertama pergantian warna
+  # — deploy gagal dengan "port is already allocated", nginx TIDAK pernah
+  # dialihkan, dan situs tetap dilayani warna lama tanpa satu pun permintaan
+  # jatuh (150 dari 150 tetap HTTP 200). Pengamannya bekerja; portnya yang
+  # salah pilih.
   web-green:
     <<: *web-dasar
     profiles: ["green"]
-    ports: ["127.0.0.1:3001:3000"]
+    ports: ["127.0.0.1:3002:3000"]
 
   worker:
     build:
