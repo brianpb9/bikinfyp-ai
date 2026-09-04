@@ -129,6 +129,18 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.web
+    # SATU IMAGE UNTUK DUA WARNA — ini bukan kosmetik.
+    #
+    # Tanpa baris ini compose menamai image per-service: "bikinfyp-web" untuk
+    # biru dan "bikinfyp-web-green" untuk hijau. deploy.sh membangun `web` saja,
+    # jadi image hijau tidak pernah ikut dibangun — dan setiap deploy yang
+    # kebetulan mendarat di hijau MENYAJIKAN BUILD LAMA tanpa satu pun tanda
+    # gagal. Terjadi sungguhan 5 Sep 2026: selama dua jam situs melayani build
+    # berumur delapan jam, dan yang menyadarinya Brian, bukan deploy-nya.
+    #
+    # Dengan nama image yang dipaku sama, `build web` menghasilkan artefak yang
+    # PERSIS dijalankan kedua warna. Tidak ada lagi dua kebenaran.
+    image: bikinfyp-web:latest
     restart: unless-stopped
     env_file: [.env.server]
     environment:

@@ -94,6 +94,26 @@ for i in $(seq 1 40); do
   sleep 5
 done
 
+# ── PENJAGA ANTI-BUILD-BASI ─────────────────────────────────────────────────
+# Yang dijawab: "apakah yang sekarang berjalan benar-benar yang barusan dibangun?"
+#
+# Sampai 5 Sep 2026 tidak ada yang menanyakannya, dan jawabannya pernah TIDAK —
+# selama dua jam situs melayani build berumur delapan jam karena image hijau
+# tidak pernah ikut dibangun. Deploy melaporkan sukses di setiap langkah;
+# yang menyadarinya Brian, bukan skripnya. Sehat bukan berarti mutakhir.
+log "memastikan $WARNA_BARU menjalankan image yang BARUSAN dibangun"
+IMG_BANGUN=$(ssh "$HOST" "docker image inspect -f '{{.Id}}' bikinfyp-web:latest" 2>/dev/null || true)
+IMG_JALAN=$(ssh "$HOST" "cd $TUJUAN && $COMPOSE --profile green ps -q $WARNA_BARU | xargs -r docker inspect -f '{{.Image}}'" 2>/dev/null || true)
+if [ -z "$IMG_BANGUN" ] || [ "$IMG_BANGUN" != "$IMG_JALAN" ]; then
+  echo "BERHENTI: $WARNA_BARU menjalankan image yang BUKAN hasil build barusan."
+  echo "  dibangun : ${IMG_BANGUN:-(tidak ditemukan)}"
+  echo "  berjalan : ${IMG_JALAN:-(tidak ditemukan)}"
+  echo "  nginx TIDAK dialihkan; situs tetap dilayani warna lama."
+  ssh "$HOST" "cd $TUJUAN && $COMPOSE --profile green stop $WARNA_BARU" || true
+  exit 1
+fi
+log "image cocok (${IMG_BANGUN#sha256:})"
+
 log "mengalihkan nginx ke :$PORT_BARU"
 ssh "$HOST" "sudo tee /etc/nginx/conf.d/bikinfyp-upstream.conf >/dev/null <<UPS
 # WARNA AKTIF — ditulis deploy/deploy.sh, jangan diedit tangan.
@@ -110,7 +130,7 @@ ssh "$HOST" "sudo systemctl reload nginx"
 
 log "memastikan situs menjawab lewat warna baru"
 for i in $(seq 1 10); do
-  kode=$(curl -s -o /dev/null -w '%{http_code}' https://bikinfyp.com/api/health || true)
+  kode=$(curl -s -o /dev/null -w '%{http_code}' https://aiugc.id/api/health || true)
   [ "$kode" = "200" ] && { log "situs sehat (HTTP 200)"; break; }
   [ "$i" = 10 ] && { echo "BERHENTI: situs tidak menjawab 200 setelah pergantian (HTTP $kode)"; exit 1; }
   sleep 2
