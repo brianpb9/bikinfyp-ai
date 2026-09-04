@@ -39,11 +39,11 @@ export default async function RequestAccessPage() {
           <Building2 size={22} />
         </div>
         <p className="text-lg font-bold tracking-tight">
-          BikinFYP <span className="text-amber-400">Brands</span>
+          AIUGC.ID <span className="text-amber-400">Brands</span>
         </p>
         <h1 className="font-display text-xl font-bold">Akun kamu belum terhubung ke organisasi</h1>
         <p className="text-sm text-zinc-400">
-          Dashboard ini khusus brand/agency yang sudah didaftarkan tim BikinFYP.
+          Dashboard ini khusus brand/agency yang sudah didaftarkan tim AIUGC.ID.
           {email ? (
             <> Akunmu (<span className="text-zinc-200">{email}</span>) belum jadi anggota organisasi manapun.</>
           ) : (

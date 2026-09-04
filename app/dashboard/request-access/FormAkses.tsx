@@ -50,7 +50,7 @@ export function FormAkses({ email, whatsapp }: { email: string | null; whatsapp:
   }
 
   const waLink = whatsapp
-    ? `https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}?text=${encodeURIComponent("Halo BikinFYP, saya mau minta akses dashboard Brands.")}`
+    ? `https://wa.me/${whatsapp.replace(/[^0-9]/g, "")}?text=${encodeURIComponent("Halo AIUGC.ID, saya mau minta akses dashboard Brands.")}`
     : null;
 
   if (selesai) {

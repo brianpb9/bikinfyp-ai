@@ -10,11 +10,12 @@
 // Di production tanpa key -> error jelas, kode TIDAK pernah dibocorkan di respons.
 
 import { config } from "./config";
+import { NAMA_PLATFORM_PANJANG } from "./identitas-platform";
 
 export function otpMessage(code: string): string {
   return (
-    `BikinFYP AI\nKode login kamu: *${code}*\n\n` +
-    `Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim BikinFYP AI.`
+    `${NAMA_PLATFORM_PANJANG}\nKode login kamu: *${code}*\n\n` +
+    `Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim ${NAMA_PLATFORM_PANJANG}.`
   );
 }
 

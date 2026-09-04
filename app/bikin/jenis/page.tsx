@@ -41,7 +41,7 @@ export default function PilihJenisPage() {
         >
           {/* Preview khusus Ads (Brian 2026-08-07): presenter pegang HP ber-app —
               bukan produk fisik seperti kartu Affiliate. Render BytePlus sendiri
-              (referensi layar = screenshot UI BikinFYP, bebas hak cipta). */}
+              (referensi layar = screenshot UI AIUGC.ID, bebas hak cipta). */}
           <video src="/previews/format-ads.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
           <div className="p-3">
             <p className="font-display text-base font-bold leading-tight text-zinc-900">AI UGC Ads</p>

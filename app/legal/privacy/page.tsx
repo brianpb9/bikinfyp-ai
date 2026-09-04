@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Kebijakan Privasi — BikinFYP AI" };
+export const metadata = { title: "Kebijakan Privasi — AIUGC.ID" };
 
 // Draf disiapkan tim produk berdasarkan subprocessor & alur data YANG NYATA
 // dipakai sistem (lihat lib/config.ts, lib/storage.ts, lib/providers/registry.ts).

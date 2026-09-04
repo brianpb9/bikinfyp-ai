@@ -152,7 +152,7 @@ export default async function ProfilePage() {
         <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="flex items-start gap-2 text-sm text-zinc-600">
             <Headphones size={16} className="mt-0.5 shrink-0 text-zinc-400" />
-            Ada kendala atau mau top-up? Hubungi tim BikinFYP lewat kontak yang kamu pakai saat pendaftaran.
+            Ada kendala atau mau top-up? Hubungi tim AIUGC.ID lewat kontak yang kamu pakai saat pendaftaran.
           </p>
           <p className="flex items-start gap-2 text-sm text-zinc-600">
             <Shield size={16} className="mt-0.5 shrink-0 text-zinc-400" />

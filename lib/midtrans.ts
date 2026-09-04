@@ -4,6 +4,7 @@
 //  - Webhook signature: sha512(order_id + status_code + gross_amount + SERVER_KEY)
 
 import crypto from "node:crypto";
+import { NAMA_PLATFORM_PANJANG } from "./identitas-platform";
 import { config } from "./config";
 import { TOPUP_PACKAGES } from "./credits";
 
@@ -76,7 +77,7 @@ export async function createSnapTransaction(opts: {
     body: JSON.stringify({
       transaction_details: { order_id: opts.orderId, gross_amount: pkg.priceIdr },
       item_details: [
-        { id: pkg.id, price: pkg.priceIdr, quantity: 1, name: `${pkg.name} BikinFYP AI` },
+        { id: pkg.id, price: pkg.priceIdr, quantity: 1, name: `${pkg.name} ${NAMA_PLATFORM_PANJANG}` },
       ],
       customer_details: { phone: opts.phone },
     }),

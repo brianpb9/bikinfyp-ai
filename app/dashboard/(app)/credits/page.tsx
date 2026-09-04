@@ -16,7 +16,7 @@ const TYPE_LABEL: Record<string, string> = {
   hold: "Token ditahan untuk render",
   capture: "Token terpakai untuk video",
   release: "Dikembalikan (render gagal)",
-  bonus: "Token dari tim BikinFYP",
+  bonus: "Token dari tim AIUGC.ID",
   topup: "Top-up",
 };
 

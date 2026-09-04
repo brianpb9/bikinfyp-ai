@@ -184,8 +184,8 @@ export default function OnboardingPage() {
         <>
           <div className="flex-1 space-y-9">
             <div className="flex items-center justify-between text-xs font-semibold text-zinc-500">
-              {/* Nama produk mengikuti SiteChrome dan <title>: "BikinFYP AI".
-                  Halaman ini sempat tertinggal menulis "BikinFYP.AI". */}
+              {/* Nama produk mengikuti SiteChrome dan <title>: "BikinFYP".
+                  Halaman ini sempat tertinggal menulis "AIUGC.ID.AI". */}
               {/* Pil "● Harga transparan" DICABUT 1 Sep 2026.
                   Lencana kecil bertitik di pojok adalah bahasa visual yang
                   sudah terlalu sering dipakai halaman buatan AI, dan ia juga
@@ -193,7 +193,7 @@ export default function OnboardingPage() {
                   disertai angka cuma stiker. Janjinya sekarang ditepati di
                   section "Harga transparan" di bawah, lengkap dengan harga
                   sebenarnya. */}
-              <span className="font-display text-base font-extrabold text-zinc-900">BikinFYP <span className="text-amber-500">AI</span></span>
+              <span className="font-display text-base font-extrabold text-zinc-900">AIUGC.ID <span className="text-amber-500">AI</span></span>
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
               <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
@@ -251,7 +251,7 @@ export default function OnboardingPage() {
                 Belum yakin? Lihat contoh skripnya dulu — tanpa daftar
               </a>
               {/* MASUK — sebelumnya TIDAK ADA di halaman ini sama sekali.
-                  Pengguna lama yang membuka bikinfyp.com tidak punya satu pun
+                  Pengguna lama yang membuka aiugc.id tidak punya satu pun
                   jalan kembali ke akunnya selain menebak alamat. Formnya sama
                   dengan daftar (OTP email), jadi tombolnya membuka langkah
                   yang sama — yang berbeda cuma kalimatnya, dan itu memang
@@ -319,7 +319,7 @@ export default function OnboardingPage() {
               <div className="mt-5 grid grid-cols-3 gap-2">
                 {TIER_LANDING.map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
               </div>
-              <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>BikinFYP AI</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
+              <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>AIUGC.ID</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
             </section>
 

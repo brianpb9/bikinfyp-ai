@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "BikinFYP AI — Video jualan tanpa syuting",
+  title: "AIUGC.ID — Video jualan tanpa syuting",
   description: "Bikin video jualan 15 detik dari foto produk. Bahasa Indonesia, dengan label AIGC untuk membantu mengikuti aturan konten AI TikTok.",
   manifest: "/manifest.json",
   // KARTU SOSIAL (board review 20 Agu). Sebelumnya tidak ada satu pun tag
@@ -17,23 +17,37 @@ export const metadata: Metadata = {
   //
   // metadataBase wajib: tanpanya Next merender URL gambar relatif, dan
   // pengurai kartu (WhatsApp) menolaknya.
+  // ALAMAT MASIH DOMAIN LAMA, DAN ITU DISENGAJA.
+  //
+  // Nama merek sudah AIUGC.ID di seluruh layar dan email, tapi alamatnya belum
+  // boleh ikut: diperiksa 4 Sep 2026, aiugc.id menunjuk 104.21.0.184 /
+  // 172.67.128.48 (Cloudflare) sementara server ini 187.77.148.89, dan
+  // https://aiugc.id belum menjawab sama sekali.
+  //
+  // metadataBase dan og:url menjadi alamat kanonik yang dibagikan dan
+  // di-crawl. Mengarahkannya ke domain yang belum hidup berarti setiap tautan
+  // yang dibagikan pembeli menuju halaman mati — lebih buruk daripada nama
+  // domain lama yang masih berfungsi.
+  //
+  // Pergantiannya satu baris di sini plus APP_BASE_URL, begitu DNS menunjuk
+  // server ini dan sertifikatnya terbit.
   metadataBase: new URL("https://bikinfyp.com"),
   openGraph: {
     type: "website",
-    siteName: "BikinFYP AI",
+    siteName: "AIUGC.ID",
     locale: "id_ID",
-    title: "BikinFYP AI — Video jualan tanpa syuting",
+    title: "AIUGC.ID — Video jualan tanpa syuting",
     // Angka harga SENGAJA tidak ada di sini. Metadata layout bersifat statis
     // dan berlaku untuk seluruh situs, sementara harga per video kini diatur
     // admin tanpa deploy — menuliskannya berarti menyiarkan angka yang cepat
     // atau lambat berbeda dari yang ditagih. Harga hidup ada di /harga.
     description: "Bikin video jualan 15 detik dari foto produk. Bayar per video, tanpa langganan.",
     url: "https://bikinfyp.com",
-    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "BikinFYP AI" }],
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "AIUGC.ID" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "BikinFYP AI — Video jualan tanpa syuting",
+    title: "AIUGC.ID — Video jualan tanpa syuting",
     // Angka harga SENGAJA tidak ada di sini. Metadata layout bersifat statis
     // dan berlaku untuk seluruh situs, sementara harga per video kini diatur
     // admin tanpa deploy — menuliskannya berarti menyiarkan angka yang cepat

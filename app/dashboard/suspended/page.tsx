@@ -8,7 +8,7 @@
 // halaman dukungan lebih buruk daripada tidak ada nomor sama sekali.
 import { config } from "@/lib/config";
 
-export const metadata = { title: "Organisasi ditangguhkan — BikinFYP AI" };
+export const metadata = { title: "Organisasi ditangguhkan — AIUGC.ID" };
 
 export default function Suspended() {
   const wa = config.supportWhatsapp.replace(/[^0-9]/g, "");
@@ -31,7 +31,7 @@ export default function Suspended() {
         </a>
       ) : (
         <p className="mt-2 text-sm text-zinc-500">
-          Hubungi tim BikinFYP lewat kanal dukungan yang biasa kamu pakai.
+          Hubungi tim AIUGC.ID lewat kanal dukungan yang biasa kamu pakai.
         </p>
       )}
     </main>

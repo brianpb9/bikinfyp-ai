@@ -7,6 +7,7 @@
  * durable cooldown across worker restarts.
  */
 import crypto from "node:crypto";
+import { NAMA_PLATFORM } from "./identitas-platform";
 import { Pool } from "pg";
 import { config } from "./config";
 import { jobIntakeMode } from "./job-intake";
@@ -91,13 +92,13 @@ export async function collectOperationalAlerts(
   }, {});
   if (stuck.length) alerts.push({
     fingerprint: "stuck-jobs",
-    subject: `[BikinFYP] ALERT: ${stuck.length} job melewati ambang state`,
+    subject: `[${NAMA_PLATFORM}] ALERT: ${stuck.length} job melewati ambang state`,
     text: `Ada ${stuck.length} job aktif melewati ambang per-state. Rincian state: ${JSON.stringify(stuckStateCounts)}. Worker tetap menjalankan timeout/refund normal.`,
     meta: { kind: "stuck_jobs", count: stuck.length, state_counts: stuckStateCounts, thresholds_min: thresholds },
   });
   if (total >= settings.errorMinJobs && errorRate >= settings.errorRatePercent) alerts.push({
     fingerprint: "error-rate",
-    subject: `[BikinFYP] ALERT: error rate job ${errorRate}%`,
+    subject: `[${NAMA_PLATFORM}] ALERT: error rate job ${errorRate}%`,
     text: `Dalam ${settings.errorWindowMin} menit terakhir, ${failed}/${total} job terminal berakhir REFUNDED (${errorRate}%). Periksa worker dan provider sebelum membuka intake.`,
     meta: { kind: "error_rate", window_min: settings.errorWindowMin, total, failed, error_rate_percent: errorRate },
   });
@@ -115,7 +116,7 @@ export async function collectOperationalAlerts(
   const gagalNaskah = Number(penulisMati.rows[0]?.count ?? 0);
   if (gagalNaskah >= 3) alerts.push({
     fingerprint: "penulis-naskah-mati",
-    subject: `[BikinFYP] ALERT: ${gagalNaskah} permintaan naskah ditolak (penulis LLM tidak tersedia)`,
+    subject: `[${NAMA_PLATFORM}] ALERT: ${gagalNaskah} permintaan naskah ditolak (penulis LLM tidak tersedia)`,
     text:
       `Dalam ${settings.errorWindowMin} menit terakhir, ${gagalNaskah} permintaan naskah dijawab 503 karena penulis LLM gagal ` +
       `dan naskah template SENGAJA tidak disajikan. Sebab terakhir: ${penulisMati.rows[0]?.sebab ?? "tidak tercatat"}. ` +
@@ -135,7 +136,7 @@ export async function collectOperationalAlerts(
     if (umurJam >= settings.senyapJam) {
       alerts.push({
         fingerprint: "tidak-ada-job",
-        subject: `[BikinFYP] ALERT: tidak ada job baru ${Math.round(umurJam)} jam padahal intake TERBUKA`,
+        subject: `[${NAMA_PLATFORM}] ALERT: tidak ada job baru ${Math.round(umurJam)} jam padahal intake TERBUKA`,
         text:
           `Job terakhir ${t ? `${Math.round(umurJam)} jam lalu` : "tidak pernah ada"}, sementara JOB_INTAKE_MODE=open. ` +
           "Periksa jalur checkout, penulis naskah, dan halaman bikin — sunyi yang tidak dijelaskan biasanya bukan sepi, tapi rusak.",

@@ -9,6 +9,7 @@
 //    signature = md5(merchantCode + merchantOrderId + apiKey)
 
 import crypto from "node:crypto";
+import { NAMA_PLATFORM_PANJANG } from "./identitas-platform";
 import { config } from "./config";
 import { TOPUP_PACKAGES } from "./credits";
 
@@ -146,8 +147,8 @@ function rincianPaket(packageId: string): RincianTagihan {
   if (!pkg) throw new Error(`Paket tidak dikenal: ${packageId}`);
   return {
     amountIdr: pkg.priceIdr,
-    label: `${pkg.name} BikinFYP AI`,
-    items: [{ name: `${pkg.name} BikinFYP AI`, price: pkg.priceIdr, quantity: 1 }],
+    label: `${pkg.name} ${NAMA_PLATFORM_PANJANG}`,
+    items: [{ name: `${pkg.name} ${NAMA_PLATFORM_PANJANG}`, price: pkg.priceIdr, quantity: 1 }],
   };
 }
 
@@ -219,7 +220,7 @@ export async function createDuitkuTransaction(opts: {
       email: opts.email || "hdrvstudio@gmail.com",
       phoneNumber: opts.phone,
       // Nama pemilik VA yang tampil di aplikasi bank pembeli.
-      customerVaName: opts.customerName?.slice(0, 20) || "BikinFYP AI",
+      customerVaName: opts.customerName?.slice(0, 20) || NAMA_PLATFORM_PANJANG,
       itemDetails: tagihan.items,
       callbackUrl,
       returnUrl,

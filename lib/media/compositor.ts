@@ -12,6 +12,7 @@
 // Metadata provenance (tag AIGC + comment). C2PA penuh: TODO (c2pa-rs).
 
 import fs from "node:fs";
+import { NAMA_PLATFORM_PANJANG } from "../identitas-platform";
 import path from "node:path";
 import { AUDIO_TARGET, audioEncoderArgs, loudnormFilter, masterAudioFile } from "./audio-master";
 import { runFfmpeg, runFf, escDrawtext, detectFont } from "./ffmpeg";
@@ -380,7 +381,7 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     "-pix_fmt", "yuv420p",
     ...audioEncoderArgs(),
     "-movflags", "faststart+use_metadata_tags",
-    "-metadata", `comment=BikinFYP AI AIGC v0.2 | provider_video=${input.providerVideo} | mode=${input.mode} | ${new Date().toISOString()}`,
+    "-metadata", `comment=${NAMA_PLATFORM_PANJANG} AIGC v0.2 | provider_video=${input.providerVideo} | mode=${input.mode} | ${new Date().toISOString()}`,
     "-metadata", "racun_aigc=true",
     "-metadata", `aigc_watermark=${watermarkText}`,
     // TODO(produksi): sisipkan manifest C2PA penuh (c2pa-rs / c2patool) — BR-07.2.

@@ -1,4 +1,5 @@
 import { getAuthUser } from "@/lib/auth";
+import { NAMA_PLATFORM_PANJANG } from "@/lib/identitas-platform";
 import { ERR, errorResponse } from "@/lib/errors";
 // `now` dan `uuid` murni penghasil nilai — aman di kedua runtime.
 // `audit` TIDAK: ia menulis ke SQLite, yang dimatikan di production.
@@ -234,7 +235,7 @@ export async function POST(req: Request) {
       // `price` berisi TOTAL BARIS dan quantity selalu 1 — Duitku menjumlahkan
       // price saja dan menolak (409) kalau hasilnya tidak sama dengan
       // paymentAmount. Diverifikasi ke sandbox mereka 3 Sep 2026.
-      bagianItem.push({ name: `Paket ${paket.nama} BikinFYP AI`, price: paket.hargaIdr, quantity: 1 });
+      bagianItem.push({ name: `Paket ${paket.nama} ${NAMA_PLATFORM_PANJANG}`, price: paket.hargaIdr, quantity: 1 });
     }
 
     if (mintaSatuan) {
@@ -256,7 +257,7 @@ export async function POST(req: Request) {
     const namaPesanan = bagianNama.join(" + ");
     const rincian: RincianTagihan = {
       amountIdr: total,
-      label: mintaPaket && mintaSatuan ? "Paket + kredit video BikinFYP AI" : `${namaPesanan} BikinFYP AI`,
+      label: mintaPaket && mintaSatuan ? `Paket + kredit video ${NAMA_PLATFORM_PANJANG}` : `${namaPesanan} ${NAMA_PLATFORM_PANJANG}`,
       items: bagianItem,
     };
 

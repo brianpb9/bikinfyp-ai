@@ -128,7 +128,7 @@ export function DashboardChrome({
       >
         <div className="flex h-16 items-center gap-2 border-b border-white/10 px-5">
           <span className="text-base font-bold tracking-tight">
-            BikinFYP <span className="text-amber-400">Brands</span>
+            AIUGC.ID <span className="text-amber-400">Brands</span>
           </span>
         </div>
         <div className="border-b border-white/10 px-5 py-4">
@@ -226,7 +226,7 @@ export function DashboardChrome({
             <Menu size={18} />
           </button>
           <span className="truncate text-sm font-bold">
-            BikinFYP <span className="text-amber-500">Brands</span>
+            AIUGC.ID <span className="text-amber-500">Brands</span>
           </span>
           <Link href="/dashboard/credits" className="ml-auto text-xs font-semibold text-amber-600">
             {tokens(balanceIdr)}

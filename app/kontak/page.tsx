@@ -10,7 +10,7 @@ import { SiteFooter } from "../_components/SiteFooter";
 // Server Component murni bacaan, sama seperti /harga.
 
 export const metadata = {
-  title: "Kontak — BikinFYP AI",
+  title: "Kontak — AIUGC.ID",
   description: `Hubungi tim ${KONTAK.produk}: email ${KONTAK.email}, telepon/WhatsApp ${KONTAK.teleponTampil}.`,
 };
 

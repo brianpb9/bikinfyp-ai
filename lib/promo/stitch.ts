@@ -6,6 +6,7 @@
  * much simpler concat + mandatory AIGC watermark only — prototype scope.
  */
 import path from "node:path";
+import { NAMA_PLATFORM_PANJANG } from "../identitas-platform";
 import { runFfmpeg, detectFont, escDrawtext } from "../media/ffmpeg";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 
@@ -107,7 +108,7 @@ export async function stitchClips(input: { jobId: string; workDir: string; clips
     "-c:a", "aac",
     "-b:a", "128k",
     "-movflags", "faststart+use_metadata_tags",
-    "-metadata", `comment=BikinFYP AI AIGC prototype-promo | ${new Date().toISOString()}`,
+    "-metadata", `comment=${NAMA_PLATFORM_PANJANG} AIGC prototype-promo | ${new Date().toISOString()}`,
     "-metadata", "racun_aigc=true",
     "-metadata", `aigc_watermark=${AIGC_WATERMARK_TEXT}`,
     outPath

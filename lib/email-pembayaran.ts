@@ -19,6 +19,7 @@
  */
 
 import { config } from "./config";
+import { NAMA_PLATFORM_PANJANG } from "./identitas-platform";
 import { hasEmailKey, isProduction } from "./email-otp";
 
 const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
@@ -27,7 +28,7 @@ const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
 function bungkus(judul: string, isi: string): string {
   return `
   <div style="font-family:system-ui,-apple-system,sans-serif;max-width:520px;margin:auto;padding:24px;color:#18181b">
-    <h2 style="margin:0 0 4px;font-size:18px">BikinFYP AI</h2>
+    <h2 style="margin:0 0 4px;font-size:18px">${NAMA_PLATFORM_PANJANG}</h2>
     <h3 style="margin:0 0 16px;font-size:15px;color:#52525b;font-weight:500">${judul}</h3>
     ${isi}
     <hr style="border:0;border-top:1px solid #e4e4e7;margin:24px 0" />
@@ -107,7 +108,7 @@ export async function emailOrderDibuat(opts: {
       sebutkan ini kalau kamu menghubungi kami.
     </p>`,
   );
-  await kirim(opts.ke, `Selesaikan pembayaran ${rupiah(opts.jumlahIdr)} — BikinFYP AI`, html, "order-dibuat");
+  await kirim(opts.ke, `Selesaikan pembayaran ${rupiah(opts.jumlahIdr)} — ${NAMA_PLATFORM_PANJANG}`, html, "order-dibuat");
 }
 
 export async function emailPembayaranLunas(opts: {
@@ -126,5 +127,5 @@ export async function emailPembayaranLunas(opts: {
     <p style="margin:16px 0"><a href="${config.appBaseUrl}/kredit" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;font-weight:700">Mulai bikin video</a></p>
     <p style="font-size:13px;color:#71717a;margin:8px 0 0">Nomor pesanan <code>${opts.orderId}</code>.</p>`,
   );
-  await kirim(opts.ke, `Pembayaran diterima — BikinFYP AI`, html, "pembayaran-lunas");
+  await kirim(opts.ke, `Pembayaran diterima — ${NAMA_PLATFORM_PANJANG}`, html, "pembayaran-lunas");
 }

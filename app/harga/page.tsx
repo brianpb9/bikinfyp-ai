@@ -47,7 +47,7 @@ async function hargaPerVideo(): Promise<{ id: string; nama: string; hargaIdr: nu
 export async function generateMetadata() {
   const harga = await hargaPerVideo();
   return {
-    title: "Harga — BikinFYP AI",
+    title: "Harga — AIUGC.ID",
     description:
       // Angka TIDAK diketik di sini. "Mulai Rp5.000" sempat bertahan
       // berbulan-bulan sesudah tier itu pensiun, jadi halaman publik
@@ -64,7 +64,7 @@ export default async function HargaPage() {
   return (
     <main className="mx-auto min-h-dvh max-w-md space-y-6 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-24 pt-6">
       <header className="space-y-1">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">BikinFYP AI</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">AIUGC.ID</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Harga</h1>
         <p className="text-sm leading-6 text-zinc-600">
           Semua harga dalam Rupiah dan sudah final. Tidak ada langganan otomatis, tidak ada biaya

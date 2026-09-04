@@ -4,7 +4,7 @@ import {
 } from "lucide-react";
 
 export const metadata = {
-  title: "BikinFYP Brands — Video iklan AI untuk brand Indonesia",
+  title: "AIUGC.ID Brands — Video iklan AI untuk brand Indonesia",
   description:
     "Satu produk jadi 2–6 variasi video siap ditinjau. Tinjau tiap adegan sebelum digabung, bayar pakai token, unduh sekaligus.",
 };
@@ -42,7 +42,7 @@ export default function BrandsLandingPage() {
     <div className="min-h-dvh bg-white text-zinc-900">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
         <span className="font-display text-lg font-bold tracking-tight">
-          BikinFYP <span className="text-amber-500">Brands</span>
+          AIUGC.ID <span className="text-amber-500">Brands</span>
         </span>
         <Link
           href="/onboarding?audience=brand&next=%2Fdashboard"
@@ -204,7 +204,7 @@ export default function BrandsLandingPage() {
 
       <footer className="border-t border-zinc-200 py-10">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-6 text-sm text-zinc-500">
-          <span>© {new Date().getFullYear()} BikinFYP AI</span>
+          <span>© {new Date().getFullYear()} AIUGC.ID</span>
           <span className="flex gap-5">
             <Link href="/legal/terms" className="hover:text-zinc-800">Ketentuan</Link>
             <Link href="/legal/privacy" className="hover:text-zinc-800">Privasi</Link>

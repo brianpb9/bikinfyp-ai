@@ -130,7 +130,7 @@ export default function OnboardingPage() {
       <div className="flex min-h-0 flex-col overflow-y-auto px-8 py-10 sm:px-14 lg:px-16">
         <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
           <p className="font-display text-sm font-extrabold text-white">
-            BikinFYP <span className="text-amber-400">AI</span>
+            AIUGC.ID <span className="text-amber-400">AI</span>
           </p>
 
           <div className="mt-10 flex items-center gap-3">

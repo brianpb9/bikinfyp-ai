@@ -151,7 +151,7 @@ export default async function HalamanProfil() {
         </dl>
 
         {/* TIDAK ADA "RESET PASSWORD", dan itu bukan fitur yang terlupa.
-            Masuk ke BikinFYP memakai kode sekali-pakai yang dikirim ke email —
+            Masuk ke AIUGC.ID memakai kode sekali-pakai yang dikirim ke email —
             tidak ada password yang disimpan, jadi tidak ada yang bisa direset,
             bocor, atau dipakai ulang. Menaruh tombol "reset password" di sini
             akan menjanjikan pengamanan yang tidak ada bendanya. */}
