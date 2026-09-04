@@ -81,7 +81,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "Chinese-Indonesian woman, fair warm ivory skin, soft V-shaped face, almond eyes, delicate nose bridge, glossy straight black hair, K-beauty inspired natural makeup, youthful influencer look, phone selfie lighting",
     handsPrompt:
-      "close-up of a Chinese-Indonesian woman's hands with fair warm ivory skin tone, minimal pastel sleeve, neat glossy nails, holding a skincare product, bright clean background, phone camera look",
+      "close-up of a Chinese-Indonesian woman's hands with fair warm ivory skin tone, minimal pastel sleeve, neat glossy nails, holding and working the product, bright clean background, phone camera look",
     deliveryPrompt:
       "polished beauty-influencer delivery, light confident energy, playful expressive eyes, snappy but smooth pace",
     voiceName: "Zephyr",
