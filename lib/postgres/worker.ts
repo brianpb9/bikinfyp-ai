@@ -146,9 +146,41 @@ export function bolehFrameTurunan(input: {
  * Ditaruh di sini, bukan di dalam provider, supaya kedua mesin mendapat
  * perlakuan yang sama tanpa masing-masing perlu mengingatnya.
  */
-async function tegakkanAcuan(spec: VisualSpec, workDir: string): Promise<VisualSpec> {
+async function tegakkanAcuan(spec: VisualSpec, workDir: string, namaProduk?: string | null): Promise<VisualSpec> {
+  // POTONG DULU KE PRODUKNYA kalau fotonya poster.
+  //
+  // Permintaan Brian 4 Sep 2026: kebanyakan foto marketplace adalah poster
+  // penuh tulisan dan logo, dan model video menyalin tulisan itu ke video
+  // sebagai bayangan. Membuangnya dari acuan jauh lebih pasti daripada memohon
+  // lewat kalimat prompt.
+  //
+  // HANYA kalau fotonya memang poster: OCR menghitung kata dulu. Foto produk
+  // polos tidak perlu dipotong, dan memanggil model penglihatan untuknya cuma
+  // membakar waktu dan kuota.
+  //
+  // Dipotong SEBELUM ditegakkan, bukan sesudah: menegakkan poster utuh lalu
+  // memotongnya berarti isian buram dihitung dari tulisan yang akan dibuang.
+  const potongDulu = async (berkas: string): Promise<string> => {
+    if (!namaProduk) return berkas;
+    try {
+      const { periksaFotoProduk, AMBANG_KATA_BANNER } = await import("../media/foto-produk");
+      const periksa = await periksaFotoProduk(berkas);
+      if (periksa.kataTerbaca < AMBANG_KATA_BANNER) return berkas;
+      const { potongKeProduk } = await import("../media/potong-produk");
+      const hasil = await potongKeProduk(berkas, namaProduk, `${workDir}/potong`);
+      console.log(`[potong] ${periksa.kataTerbaca} kata terbaca di foto — ${hasil.alasan}`);
+      return hasil.path;
+    } catch (err) {
+      console.error("[potong] gagal, dipakai foto apa adanya:", (err as Error).message);
+      return berkas;
+    }
+  };
+
   const shots = await Promise.all(
-    spec.shots.map(async (sh) => ({ ...sh, imageRefPath: await acuanTegak(sh.imageRefPath, `${workDir}/acuan`) })),
+    spec.shots.map(async (sh) => ({
+      ...sh,
+      imageRefPath: await acuanTegak(await potongDulu(sh.imageRefPath), `${workDir}/acuan`),
+    })),
   );
   return { ...spec, shots };
 }
@@ -241,7 +273,7 @@ async function siapkanFrameTurunan(
     if (paket.biayaIdr > 0) console.log(`[castref] job ${jobId}: paket "${identitas.kunci}" dibuat (Rp${paket.biayaIdr})`);
   } catch (err) {
     console.error(`[castref] job ${jobId}: paket gagal dibuat, pakai jalur frame lama —`, err instanceof Error ? err.message : err);
-    return { spec: await tegakkanAcuan(await siapkanFramePertama(spec, workDir, jobId), workDir), qcF1, biayaIdr: biaya };
+    return { spec: await tegakkanAcuan(await siapkanFramePertama(spec, workDir, jobId), workDir, identitas.productName), qcF1, biayaIdr: biaya };
   }
 
   // BERURUTAN, bukan Promise.all. Tiap frame bisa memicu sampai tiga panggilan
@@ -557,7 +589,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qcF1 = turunan.qcF1;
     if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
   } else {
-    specSiap = await tegakkanAcuan(await siapkanFramePertama(spec, workDir, row.id), workDir);
+    specSiap = await tegakkanAcuan(await siapkanFramePertama(spec, workDir, row.id), workDir, row.product_name);
   }
   // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
   // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih
