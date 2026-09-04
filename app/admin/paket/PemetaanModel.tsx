@@ -25,6 +25,14 @@ import { useState } from "react";
  * sudah mengubah sesuatu padahal belum adalah cara termahal kehilangan sore.
  */
 
+interface OpsiModel {
+  id: string;
+  label: string;
+  mesin: string;
+  tarif: "terukur" | "brosur";
+  catatan: string;
+}
+
 interface Baris {
   kualitas: string;
   label: string;
@@ -36,11 +44,11 @@ interface Baris {
 }
 
 const MESIN = [
-  { id: "byteplus", label: "BytePlus (Seedance)", contoh: "dreamina-seedance-2-0-mini-260615" },
-  { id: "kie-grok", label: "kie.ai (Grok Imagine)", contoh: "grok-imagine/image-to-video" },
+  { id: "byteplus", label: "BytePlus (Seedance)" },
+  { id: "kie-grok", label: "kie.ai (Grok Imagine)" },
 ];
 
-export function PemetaanModel({ awal }: { awal: Baris[] }) {
+export function PemetaanModel({ awal, katalog }: { awal: Baris[]; katalog: OpsiModel[] }) {
   const [baris, setBaris] = useState<Baris[]>(awal);
   const [sibuk, setSibuk] = useState<string | null>(null);
   const [pesan, setPesan] = useState<{ kualitas: string; teks: string; galat: boolean } | null>(null);
@@ -117,7 +125,14 @@ export function PemetaanModel({ awal }: { awal: Baris[] }) {
                 <span className="mb-1 block text-xs font-semibold text-zinc-500">Mesin</span>
                 <select
                   value={b.mesin}
-                  onChange={(e) => ubah(b.kualitas, { mesin: e.target.value })}
+                  onChange={(e) => {
+                    const mesin = e.target.value;
+                    // Model ikut pindah: pasangan silang ditolak server, dan
+                    // membiarkan layar menampilkan kombinasi mustahil hanya
+                    // membuat orang menekan Simpan lalu menerima galat.
+                    const pertama = katalog.find((m) => m.mesin === mesin);
+                    ubah(b.kualitas, { mesin, model: pertama?.id ?? "" });
+                  }}
                   className="w-full rounded-lg border border-zinc-300 px-3 py-2"
                 >
                   {MESIN.map((m) => (
@@ -126,14 +141,24 @@ export function PemetaanModel({ awal }: { awal: Baris[] }) {
                 </select>
               </label>
 
+              {/* PILIHAN, BUKAN KETIKAN BEBAS.
+                  Penghitung biaya memakai daftar tarif; model di luar daftar
+                  jatuh ke tarif cadangan $0,01/dtk — sepersepuluh biaya
+                  sebenarnya, cacat yang sudah pernah dibayar repo ini. Kolom
+                  bebas membuat cacat itu cuma butuh satu salah ketik. */}
               <label className="text-sm">
-                <span className="mb-1 block text-xs font-semibold text-zinc-500">Id model</span>
-                <input
+                <span className="mb-1 block text-xs font-semibold text-zinc-500">Model</span>
+                <select
                   value={b.model}
                   onChange={(e) => ubah(b.kualitas, { model: e.target.value })}
-                  placeholder={MESIN.find((m) => m.id === b.mesin)?.contoh}
-                  className="w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono text-xs"
-                />
+                  className="w-full rounded-lg border border-zinc-300 px-3 py-2"
+                >
+                  {katalog.filter((m) => m.mesin === b.mesin).map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}{m.tarif === "brosur" ? " — tarif belum terukur" : ""}
+                    </option>
+                  ))}
+                </select>
               </label>
 
               <button
@@ -146,6 +171,16 @@ export function PemetaanModel({ awal }: { awal: Baris[] }) {
               </button>
             </div>
 
+            {(() => {
+              const m = katalog.find((x) => x.id === b.model);
+              if (!m) return null;
+              return (
+                <p className={`mt-2 rounded-lg px-3 py-2 text-[11px] leading-4 ${m.tarif === "brosur" ? "bg-amber-50 text-amber-800" : "bg-zinc-50 text-zinc-600"}`}>
+                  {m.tarif === "brosur" && <strong>Tarif belum terukur di akun kita. </strong>}
+                  {m.catatan}
+                </p>
+              );
+            })()}
             <p className="mt-2 font-mono text-[11px] text-zinc-400">
               bawaan: {b.mesin_bawaan} · {b.model_bawaan}
             </p>

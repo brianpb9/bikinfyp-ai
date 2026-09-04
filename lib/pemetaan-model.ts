@@ -37,6 +37,7 @@
 
 import { KUALITAS, type Kualitas, type Mesin } from "./kualitas-video";
 import { config } from "./config";
+import { modelDikenal } from "./katalog-model";
 
 export interface BarisPemetaan {
   kualitas: Kualitas;
@@ -87,17 +88,23 @@ export function periksaPemetaan(input: { kualitas: string; mesin: string; model:
   const model = input.model.trim();
   if (!model) return "Nama modelnya belum diisi.";
   if (model.length > 120) return "Nama modelnya terlalu panjang.";
-  // BENTUK MODEL HARUS COCOK DENGAN MESINNYA.
+  // MODEL HARUS ADA DI KATALOG.
   //
-  // Ini penjagaan yang benar-benar pernah dibutuhkan: BytePlus menolak model
-  // tanpa awalan yang benar dengan HTTP 404 di ujung render, dan kie.ai
-  // memakai bentuk "<keluarga>/<tugas>". Memasangkan keduanya secara silang
-  // menghasilkan job yang gagal SESUDAH naskah ditulis dan gambar disiapkan.
-  if (input.mesin === "byteplus" && !/^(dreamina-|seedance-)/.test(model)) {
-    return 'Model BytePlus harus diawali "dreamina-" atau "seedance-".';
+  // Bukan sekadar "bentuknya benar". Penghitung biaya memakai
+  // `MODEL_RATES[model] ?? {}`, jadi model yang tidak dikenal jatuh ke tarif
+  // cadangan $0,01/detik — sepersepuluh biaya sebenarnya. Repo ini sudah
+  // membayar cacat itu sekali (Seedance 2.5 sempat tidak terdaftar, dan tier
+  // TERMAHAL jadi yang biayanya paling salah dihitung).
+  //
+  // Selama model hanya bisa diganti lewat rilis, cacat itu butuh seorang
+  // programmer yang lupa. Sejak bisa diganti dari layar admin, ia cukup butuh
+  // satu salah ketik. Daftar tertutup adalah yang menutupnya.
+  const dikenal = modelDikenal(model);
+  if (!dikenal) {
+    return `Model "${model}" belum terdaftar. Tarifnya tidak diketahui, jadi biayanya akan salah dihitung — tambahkan dulu ke lib/katalog-model.ts.`;
   }
-  if (input.mesin === "kie-grok" && !model.includes("/")) {
-    return 'Model kie.ai berbentuk "<keluarga>/<tugas>", contoh "grok-imagine/image-to-video".';
+  if (dikenal.mesin !== input.mesin) {
+    return `Model "${model}" milik mesin ${dikenal.mesin}, bukan ${input.mesin}.`;
   }
   return null;
 }

@@ -35,7 +35,7 @@ import { teksPromptShot } from "../teks-prompt";
  */
 const TARIF_TAGIHAN_USD_PER_1M = 4.41;
 
-const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<string, number> }> = {
+const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<string, number>; tarifTerukur?: boolean }> = {
   "seedance-1-0-lite-i2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring — jangan dipakai
   "seedance-1-0-lite-t2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring
   "seedance-1-0-pro-fast-251015": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
@@ -63,10 +63,14 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
   // dan BytePlus MEMANG mengirimkannya (diverifikasi). perSecUsd tinggal
   // sebagai cadangan kalau usage hilang, diturunkan dari pengukuran yang sama.
   "dreamina-seedance-2-0-mini-260615": {
+    // Tarif dari TAGIHAN kami sendiri ($1.300 / 295.026.776 token).
+    tarifTerukur: true,
     tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
     perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
   },
   "dreamina-seedance-2-0-260128": {
+    // Tarif dari TAGIHAN kami sendiri ($1.300 / 295.026.776 token).
+    tarifTerukur: true,
     tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
     perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
   },
@@ -74,6 +78,8 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
   // tarif cadangan $0,01/dtk, yaitu 1/10 biaya sebenarnya. Tier termahal kita
   // adalah tier yang biayanya paling salah dihitung.
   "dreamina-seedance-2-5-260628": {
+    // Tarif dari TAGIHAN kami sendiri ($1.300 / 295.026.776 token).
+    tarifTerukur: true,
     tokenUsdPerM: TARIF_TAGIHAN_USD_PER_1M,
     perSecUsd: { "480p": 0.0448, "720p": 0.0963 },
   },
@@ -139,11 +145,33 @@ interface TaskResponse {
 }
 
 function estimateCostIdr(model: string, totalTokens: number | undefined, durationSec: number, resolution: string): { idr: number; estimated: boolean } {
-  const rate = MODEL_RATES[model] ?? {};
-  if (totalTokens && rate.tokenUsdPerM) {
-    return { idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr), estimated: false };
+  const rate = MODEL_RATES[model];
+  // MODEL TIDAK DIKENAL DILAPORKAN KERAS, bukan ditaksir diam-diam.
+  //
+  // Baris ini dulu berbunyi `MODEL_RATES[model] ?? {}`, dan akibatnya model
+  // asing jatuh ke tarif cadangan $0,01/detik — sepersepuluh biaya sebenarnya.
+  // Itu persis cara tier Ultra sempat dihitung 1/10 harga selama berminggu-
+  // minggu. Sekarang pemetaan admin menolak model di luar katalog, tapi jalur
+  // ini tetap dijaga: config bisa memasang model lewat env, dan diam adalah
+  // hal terakhir yang boleh dilakukan penghitung biaya.
+  if (!rate) {
+    console.error(
+      `[byteplus] TARIF TIDAK DIKENAL untuk model "${model}" — biaya ditaksir dengan tarif cadangan ` +
+        `dan hampir pasti SALAH. Tambahkan ke MODEL_RATES sebelum memakainya untuk produksi.`,
+    );
   }
-  const perSec = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"] ?? 0.01;
+  // `estimated: false` berarti "angka ini bisa dipertanggungjawabkan", dan itu
+  // menuntut DUA hal: jumlah token yang nyata DAN tarif yang pernah dicocokkan
+  // dengan tagihan kami. Tarif brosur dengan token nyata tetap taksiran —
+  // menyebutnya pasti adalah cara taksiran yang meleset 2,8x bertahan tanpa
+  // ada yang curiga.
+  if (totalTokens && rate?.tokenUsdPerM) {
+    return {
+      idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr),
+      estimated: rate.tarifTerukur !== true,
+    };
+  }
+  const perSec = rate?.perSecUsd?.[resolution] ?? rate?.perSecUsd?.["480p"] ?? 0.01;
   return { idr: Math.round(durationSec * perSec * config.usdIdr), estimated: true };
 }
 

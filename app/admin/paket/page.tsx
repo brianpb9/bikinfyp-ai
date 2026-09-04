@@ -6,6 +6,7 @@ import { KUALITAS } from "@/lib/kualitas-video";
 import { PengaturPaket } from "./PengaturPaket";
 import { PemetaanModel } from "./PemetaanModel";
 import { mesinBerlaku, modelBerlaku, muatPemetaan, pemetaanTersimpan } from "@/lib/pemetaan-model";
+import { KATALOG_MODEL } from "@/lib/katalog-model";
 import type { Kualitas } from "@/lib/kualitas-video";
 
 // PAKET & HARGA — layar tempat model bisnis diatur tanpa menyentuh kode.
@@ -81,6 +82,7 @@ export default async function HalamanPaket() {
           mesin_bawaan: KUALITAS[k].mesin,
           model_bawaan: KUALITAS[k].model,
         }))}
+        katalog={KATALOG_MODEL.map((m) => ({ id: m.id, label: m.label, mesin: m.mesin, tarif: m.tarif, catatan: m.catatan }))}
       />
 
       <PengaturPaket

@@ -41,14 +41,18 @@ test("pemetaan admin menang atas bawaan, dan hanya untuk paket yang diatur", () 
 test("bentuk model diperiksa terhadap mesinnya — ditolak SEBELUM render", () => {
   // Pemetaan silang menghasilkan HTTP 404 di ujung render: sesudah naskah
   // ditulis, gambar disiapkan, dan pembeli menunggu. Ditolak di sini.
+  // Pasangan silang: model ADA di katalog, tapi milik mesin yang lain.
+  // Bentuk ini penting dibedakan dari "model tidak dikenal" — alasan tolaknya
+  // berbeda, dan orang yang membacanya perlu tahu mana yang salah: mesinnya
+  // atau modelnya.
   assert.match(
     periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: "grok-imagine/image-to-video" }) ?? "",
-    /dreamina-|seedance-/,
+    /milik mesin kie-grok/,
     "model kie.ai diterima untuk mesin BytePlus",
   );
   assert.match(
     periksaPemetaan({ kualitas: "standard", mesin: "kie-grok", model: "seedance-1-0-pro-250528" }) ?? "",
-    /keluarga.*tugas|\//,
+    /milik mesin byteplus/,
     "model BytePlus diterima untuk mesin kie.ai",
   );
   assert.ok(periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: "  " }), "model kosong harus ditolak");
@@ -96,4 +100,61 @@ test("migrasi memasang pagar di database, bukan cuma di aplikasi", () => {
   assert.match(sql, /CHECK \(kualitas IN \('standard', 'premium', 'ultra'\)\)/);
   assert.match(sql, /CHECK \(mesin IN \('kie-grok', 'byteplus'\)\)/);
   assert.match(sql, /length\(trim\(model\)\) > 0/);
+});
+
+// ---------------------------------------------------------------------------
+// KATALOG MODEL — daftar tertutup, dan kenapa itu penting
+// ---------------------------------------------------------------------------
+// Penghitung biaya memakai MODEL_RATES[model]. Model yang tidak terdaftar
+// jatuh ke tarif cadangan $0,01/detik — sepersepuluh biaya sebenarnya. Repo ini
+// sudah membayar cacat itu sekali: Seedance 2.5 sempat tidak ada di daftar, dan
+// tier TERMAHAL jadi tier yang biayanya paling salah dihitung.
+//
+// Selama model hanya bisa diganti lewat rilis, cacat itu butuh seorang
+// programmer yang lupa. Sejak bisa diganti dari layar admin, ia cukup butuh
+// satu salah ketik.
+
+test("setiap model di katalog punya tarif — tanpa itu biayanya pasti salah", async () => {
+  const { KATALOG_MODEL } = await import("../lib/katalog-model");
+  const src = baca("lib/providers/stubs/byteplus.ts");
+  for (const m of KATALOG_MODEL) {
+    if (m.mesin !== "byteplus") continue;
+    assert.ok(
+      src.includes(`"${m.id}"`),
+      `model "${m.id}" bisa dipilih dari admin tapi tidak ada di MODEL_RATES — biayanya akan jatuh ke tarif cadangan $0,01/dtk`,
+    );
+  }
+});
+
+test("model di luar katalog DITOLAK, dengan alasan yang menyebut biayanya", async () => {
+  const alasan = periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: "seedance-karangan-999" });
+  assert.ok(alasan, "model asing diterima");
+  assert.match(alasan ?? "", /tarif|biaya/i, "alasannya tidak menjelaskan kenapa berbahaya");
+});
+
+test("model kedua yang Brian aktifkan bisa dipilih untuk BytePlus", async () => {
+  const { modelDikenal } = await import("../lib/katalog-model");
+  for (const id of ["seedance-1-0-pro-fast-251015", "seedance-1-0-pro-250528"]) {
+    const m = modelDikenal(id);
+    assert.ok(m, `${id} tidak ada di katalog`);
+    assert.equal(m?.mesin, "byteplus");
+    assert.equal(periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: id }), null, `${id} ditolak`);
+  }
+});
+
+test("tarif BROSUR tidak boleh menyamar sebagai angka pasti", async () => {
+  // "estimated: false" berarti angkanya bisa dipertanggungjawabkan, dan itu
+  // menuntut DUA hal: token nyata DAN tarif yang pernah dicocokkan dengan
+  // tagihan kami. Tarif brosur dengan token nyata tetap taksiran — menyebutnya
+  // pasti adalah cara taksiran yang meleset 2,8x bertahan tanpa dicurigai.
+  const src = baca("lib/providers/stubs/byteplus.ts");
+  assert.match(src, /estimated: rate\.tarifTerukur !== true/, "tarif brosur masih dilaporkan sebagai angka pasti");
+  assert.match(src, /TARIF TIDAK DIKENAL untuk model/, "model tanpa tarif tidak dilaporkan keras");
+  // Model yang tarifnya dari tagihan sendiri ditandai; yang brosur tidak.
+  const { KATALOG_MODEL } = await import("../lib/katalog-model");
+  const brosur = KATALOG_MODEL.filter((m) => m.tarif === "brosur").map((m) => m.id);
+  for (const id of brosur) {
+    const blok = src.slice(src.indexOf(`"${id}"`), src.indexOf(`"${id}"`) + 220);
+    assert.doesNotMatch(blok, /tarifTerukur: true/, `${id} bertarif brosur tapi ditandai terukur`);
+  }
 });
