@@ -3,6 +3,7 @@
 // Mode "light": hanya L-10/L-11 yang keras (edit pengguna, FSD BR-03.2); sisanya jadi warning.
 
 import { memakaiPerangkat } from "./hook-devices";
+import { genreTempo, jendelaDariPita } from "./pita-tempo";
 import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
 import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
@@ -135,9 +136,40 @@ export function jendelaKata(script: {
   durationSec?: number | null;
   wordBudget?: number | null;
   productName?: string | null;
+  contentType?: string | null;
+  format?: string | null;
 }): { minWc: number; maxWc: number } {
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
+  // ── TIER BERSUARA: pita tempo per genre, bukan satu angka untuk semua ────
+  //
+  // Batas lama 1,5 kata/detik (15 dtk -> 22 kata) TIDAK menjaga mutu; ia
+  // memproduksi video yang diam lebih dari separuh durasinya. Diukur 4 Sep
+  // 2026 pada tiga render Grok 15 detik dengan adegan identik:
+  //   17 kata -> 8,48 dtk sunyi (56%) · 49 kata -> 2,85 dtk · 49 + arahan
+  //   aktif -> 0,40 dtk (3%).
+  // Rinciannya, berikut kenapa satu sampel cukup untuk ukuran ini, ada di
+  // lib/script-engine/pita-tempo.ts.
+  if (tier !== "silent_caption") {
+    const durasi = script.durationSec ?? 15;
+    const pita = jendelaDariPita(durasi, genreTempo(script));
+    // wordBudget dari snapshot admisi tetap menang, sama seperti sebelumnya:
+    // ia dihitung untuk naskah tertentu, dan mengabaikannya membuat naskah
+    // template yang sah ditolak oleh jendela yang bukan miliknya.
+    if (script.wordBudget) {
+      return { minWc: Math.max(1, Math.round(script.wordBudget * 0.85)), maxWc: Math.round(script.wordBudget * 1.15) };
+    }
+    // KELONGGARAN NAMA PRODUK MENURUNKAN BATAS BAWAH, bukan menaikkan batas
+    // atas — dan arah ini bukan detail.
+    //
+    // Nama SKU panjang memakan jatah kata tanpa menambah satu pun kalimat yang
+    // didengar penonton, jadi wajar batas bawahnya melunak. Batas ATAS tetap
+    // ketat: kelebihan kata memotong VO di tengah kalimat (r19), cacat yang
+    // sudah terukur. Versi pertama perubahan ini menambahkannya ke batas atas —
+    // persis kebalikannya — dan tes nama-produk-panjang yang menangkapnya.
+    const kelonggaran = Math.min(6, wordCount(script.productName ?? ""));
+    return { minWc: Math.max(1, pita.minWc - kelonggaran), maxWc: pita.maxWc };
+  }
   // BATAS BRIAN: 1,5 kata per detik (temuan reviewer A3). 15 dtk -> 22 kata.
   //
   // Angka lama [25,30] lahir dari kalibrasi Gemini TTS (~1,93 kata/detik) dan
@@ -947,7 +979,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // silent_caption teksnya dibaca, bukan diucapkan, dan batas 1,5 kata/detik
   // tidak berlaku di sana.
   if (tier !== "silent_caption") {
-    const b9 = kataPerShot(script.segments as never);
+    const b9 = kataPerShot(script.segments as never, genreTempo(script));
     if (!b9.lolos) push(false, { rule: "S-09", message_id: b9.sebab! });
   }
 

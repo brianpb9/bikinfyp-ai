@@ -158,13 +158,31 @@ test("baris 4: kalimat shot 2 adalah alasan, bukan katalog", () => {
   assert.equal(payoffBukanKatalog({ teksShot2: "Teksturnya lumer pelan", mechanic: "transformation" }).lolos, true);
 });
 
-test("baris 9: batas kata per shot mengikuti durasi shot-nya", () => {
-  assert.equal(batasKataShot(5), 10, "shot 5 detik: 10 kata (angka §B)");
-  assert.equal(batasKataShot(20), 30, "shot 20 detik: 1,5 kata/detik");
-  const panjang = [{ role: "hook", start: 0, end: 5, text: "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh sebelas" }];
-  assert.equal(kataPerShot(panjang as never).lolos, false);
-  const pas = [{ role: "hook", start: 0, end: 5, text: "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh" }];
-  assert.equal(kataPerShot(pas as never).lolos, true);
+test("baris 9: batas kata per shot mengikuti PITA TEMPO video, bukan angka mati", () => {
+  // DIPERBARUI 4 Sep 2026. Angka 10 kata per shot dibatalkan bersama batas 1,5
+  // kata/detik: tiga shot x 10 = 30 kata, sementara jendela total video 15
+  // detik kini 33-63. Dua aturan yang mustahil dipenuhi bersamaan.
+  //
+  // Pitanya dipilih dari durasi VIDEO, bukan durasi shot — tabel LAYER2 §5.1
+  // diindeks oleh panjang klip. Segmen 5 detik di dalam video 15 detik memakai
+  // pita 8-20 dtk (maks 4,2 k/dtk -> 21 kata), bukan pita klip-pendek
+  // (5,5 k/dtk -> 28 kata) yang akan membuat tiga segmen menembus jendela total.
+  assert.equal(batasKataShot(5, "haul", 15), 21, "segmen 5 dtk di video 15 dtk");
+  assert.equal(batasKataShot(5, "haul"), 28, "klip 5 dtk yang berdiri sendiri memakai pita klip-pendek");
+  assert.equal(batasKataShot(20, "haul", 20), 84, "video 20 detik penuh");
+  // Ads tetap tenang: ruang sunyi bagian dari bentuknya.
+  assert.equal(batasKataShot(5, "ads_tenang", 15), 10, "Ads jatuh ke batas dasar 10 kata");
+
+  // Naskah UTUH 15 detik — durasi video diturunkan dari segmennya sendiri,
+  // jadi fixture harus benar-benar berbentuk video, bukan satu shot lepas.
+  const duaPuluhDua = "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh sebelas dua belas tiga belas empat belas lima belas enam belas tujuh belas delapan belas sembilan belas dua puluh dua";
+  const isi = (teks: string) => [
+    { role: "hook", start: 0, end: 5, text: teks },
+    { role: "demo", start: 5, end: 10, text: "satu dua tiga empat lima" },
+    { role: "cta", start: 10, end: 15, text: "satu dua tiga empat lima" },
+  ];
+  assert.equal(kataPerShot(isi(duaPuluhDua) as never).lolos, false, "22 kata untuk segmen 5 dtk di video 15 dtk harus ditolak");
+  assert.equal(kataPerShot(isi("satu dua tiga empat lima enam tujuh delapan sembilan sepuluh") as never).lolos, true);
 });
 
 test("baris 1: frame pertama harus punya start_state DAN product_state", () => {
@@ -219,7 +237,7 @@ test("L-22: karakter non-Latin di dialog DITOLAK — temuan canary 19 Agu", asyn
     segments: [
       { role: "hook", text: "Nah, kenapa kusam banget sih?" },
       { role: "demo", text: demo },
-      { role: "cta", text: "cek keranjang kuning ya" },
+      { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
     ],
     productName: "Serum Glow", priceIdr: 85000, qualityTier: "high_quality",
     durationSec: 15, cartLabel: "keranjang kuning",

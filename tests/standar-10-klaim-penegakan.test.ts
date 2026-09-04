@@ -60,8 +60,13 @@ const BUKTI: Record<number, () => boolean> = {
   // bahasa 4 lapis di prompt akhir (gerbang, 19 Agu). Dulu hanya bagian
   // pertama yang ada, tapi barisnya sudah mengaku "kode".
   9: () => {
+    // Naskah UTUH 15 detik: sejak 4 Sep 2026 pita tempo dipilih dari durasi
+    // VIDEO, bukan durasi segmen. Satu segmen 6 detik yang berdiri sendiri
+    // dianggap klip pendek — dan di sana 12 kata memang sah.
     const batasKata = !S.kataPerShot([
-      { role: "demo", start: 0, end: 6, text: "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh sebelas dua belas", visual_direction: "x" },
+      { role: "hook", start: 0, end: 5, text: "satu dua tiga empat lima", visual_direction: "x" },
+      { role: "demo", start: 5, end: 10, text: "satu dua tiga empat lima enam tujuh delapan sembilan sepuluh sebelas dua belas tiga belas empat belas lima belas enam belas tujuh belas delapan belas sembilan belas dua puluh satu dua", visual_direction: "x" },
+      { role: "cta", start: 10, end: 15, text: "satu dua tiga empat lima", visual_direction: "x" },
     ] as never).lolos;
     const kunciBahasa = periksaPromptAkhir({
       shots: [{ index: 0, prompt: "A woman speaks to camera. true small size, about the width of a hand, normal conversational distance." }],

@@ -39,7 +39,7 @@ const hijaber = getCreatorCategory("hijaber")!;
 const segments = [
   { role: "hook" as const, start: 0, end: 3, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
   { role: "demo" as const, start: 3, end: 10, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
-  { role: "cta" as const, start: 10, end: 15, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+  { role: "cta" as const, start: 10, end: 15, text: "jadi kalau penasaran juga, cek keranjang kuning ya deh", visual_direction: "x" },
 ];
 
 function spec(hookLevel: "normal" | "berani" | "gila", format: "hands_only" | "talking_head" | "vo_broll" = "hands_only") {

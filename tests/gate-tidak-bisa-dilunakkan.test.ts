@@ -26,10 +26,14 @@ const arg = (segments: { role: string; text: string; visual_direction?: string }
 
 test("aturan gerbang keras di KEDUA mode, bukan hanya strict", () => {
   // Kepanjangan (L-05) — kasus persis yang dipakai reviewer.
+  // DIPANJANGKAN 4 Sep 2026. Naskah 36 kata dulu KEPANJANGAN (jendela lama
+  // 16-22); sejak jendela mengikuti pita tempo (33-63 untuk 15 detik) angka itu
+  // justru sehat. Yang diuji tes ini adalah gerbangnya, bukan angkanya — jadi
+  // naskahnya dibuat benar-benar melewati batas atas yang berlaku sekarang.
   const panjang = arg([
-    { role: "hook", text: "Say, delapan puluh lima ribu dapet kualitas segini? sumpah sih beneran" },
-    { role: "demo", text: "nah, ini Serum Glow, teksturnya niat banget, beneran kerasa bedanya pas dipake tiap hari" },
-    { role: "cta", text: "Cek keranjang kuning ya deh, jangan sampai nyesel" },
+    { role: "hook", text: "Say, delapan puluh lima ribu dapet kualitas segini? sumpah sih beneran aku sampai ngecek dua kali karena nggak percaya harganya semurah itu" },
+    { role: "demo", text: "nah, ini Serum Glow, teksturnya niat banget, beneran kerasa bedanya pas dipake tiap hari, ringan di kulit, cepat meresap, nggak lengket sama sekali, dan wanginya lembut banget nggak bikin pusing" },
+    { role: "cta", text: "Cek keranjang kuning ya deh, jangan sampai nyesel karena stoknya cepat habis dan harga segini nggak akan lama, buruan sebelum kehabisan ya" },
   ]);
   for (const mode of ["strict", "light"] as const) {
     const r = validateScript(panjang as never, mode);
@@ -41,8 +45,8 @@ test("aturan gerbang keras di KEDUA mode, bukan hanya strict", () => {
 test("L-19 dan L-21 juga keras di light", () => {
   const datar = arg([
     { role: "hook", text: "Botol kaca kecil berisi cairan bening" },
-    { role: "demo", text: "aku pakai ini tiap malam deh", visual_direction: "no other residents visible" },
-    { role: "cta", text: "cek keranjang kuning ya" },
+    { role: "demo", text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap", visual_direction: "no other residents visible" },
+    { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
   ]);
   const light = validateScript(datar as never, "light");
   assert.ok(light.errors.some((e) => e.rule === "L-19"), "L-19 harus keras di light");
@@ -91,7 +95,7 @@ test("aturan FAKTA (L-13 urgensi palsu, L-14 angka tanpa data) keras di light", 
   const urgensiPalsu = arg([
     { role: "hook", text: "Say, delapan puluh lima ribu segini sih?" },
     { role: "demo", text: "nah, stok terakhir nih, teksturnya niat banget" },
-    { role: "cta", text: "cek keranjang kuning ya" },
+    { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
   ]);
   const a = validateScript(urgensiPalsu as never, "light");
   assert.ok(a.errors.some((e) => e.rule === "L-13"), `L-13 harus keras: ${JSON.stringify(a.errors)}`);
@@ -101,7 +105,7 @@ test("aturan FAKTA (L-13 urgensi palsu, L-14 angka tanpa data) keras di light", 
     // angka, karena versi kata ("sembilan puluh") memang bukan sasarannya.
     { role: "hook", text: "Say, dipakai 90 persen orang?" },
     { role: "demo", text: "nah, teksturnya niat banget deh" },
-    { role: "cta", text: "cek keranjang kuning ya" },
+    { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
   ]);
   const b = validateScript(angkaKarangan as never, "light");
   assert.ok(b.errors.some((e) => e.rule === "L-14"), `L-14 harus keras: ${JSON.stringify(b.errors)}`);

@@ -18,7 +18,7 @@ Proporsi: 10 dtk = HOOK 3 · FRICTION+SPIKE 4 · BUTTON 3 · 20 dtk = 4 · 7 · 
 - **Saksi wajib** di spike (suara cukup). Tanpa saksi = pelampiasan pribadi = lemah.
 - **Bridging ≥2 dari 3**: (a) aksi jujur dengan produk di friction (sikat gigi di meja rias/dapur/parkiran; cek gigi di cermin kecil "udah bersih"; tube dimasukkan saku seperti jimat); (b) produk di frame pertama tanpa dijelaskan; (c) pengakuan ringan di button sebelum CTA. Penonton yang menyimpulkan manfaat; kita tidak mengucapkannya.
 - **Bahan bakar**: vanity (ingin dilihat/dihormati) default untuk personal care; greed/lust hati-hati. Mekanik ide tetap dari bank 12(+audio_shift); Story OS mengatur *bentuk*, mekanik mengatur *kenapa berhenti*.
-- **Dialog**: kalimat orang beneran, ≤8 kata per baris, total ≤1.5 kata/detik, boleh berhenti di tengah (hitungan, napas). Bahasa 4 lapis.
+- **Dialog**: kalimat orang beneran, ≤8 kata per baris, tempo dialog mengikuti pita genre & durasi (aturan lama 1,5 kata/detik DIBATALKAN 4 Sep 2026 — pita tempo per genre & durasi berlaku (lib/script-engine/pita-tempo.ts). Diukur: 17 kata/15 dtk meninggalkan 8,48 dtk sunyi (56% video diam); 49 kata + arahan aktif menyisakan 0,40 dtk), boleh berhenti di tengah (hitungan, napas). Bahasa 4 lapis.
 - **Scene card** per shot: FUNGSI (beat) · KONFLIK · GESER · DORONG · TES 3 DTK. Shot tanpa geser = hapus.
 
 ## 3. Gate Story OS Ads (SA1–SA8) — gagal satu = naskah tidak dirender

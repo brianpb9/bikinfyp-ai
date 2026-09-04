@@ -40,9 +40,12 @@ const scriptId = uuid();
 // P0 yang ditutup 18 Agu. Sekarang aturan gerbang keras di kedua mode, jadi
 // fixture-nya harus benar-benar sah, bukan cuma lolos di jalur yang longgar.
 const segments = [
-  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu segini sih?", visual_direction: "x" },
-  { role: "demo", start: 3, end: 10, text: "nah, teksturnya niat banget deh", visual_direction: "x" },
-  { role: "cta", start: 10, end: 15, text: "linknya di keranjang kuning ya", visual_direction: "x" },
+  // DIPANJANGKAN 4 Sep 2026 ke dalam pita tempo (33-63 kata untuk 15 detik).
+  // Fixture lama 17 kata mewakili naskah yang lolos gate lama tapi terukur
+  // meninggalkan 56% video dalam keadaan diam.
+  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu segini sih? aku sampai ngecek dua kali", visual_direction: "x" },
+  { role: "demo", start: 3, end: 10, text: "nah, teksturnya niat banget deh, ringan di kulit dan cepat meresap, nggak lengket sama sekali", visual_direction: "x" },
+  { role: "cta", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, linknya di keranjang kuning ya", visual_direction: "x" },
 ];
 db.prepare(
   `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, approved_by_user_at, edited_by_user, created_at)

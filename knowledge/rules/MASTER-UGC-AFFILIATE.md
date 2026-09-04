@@ -27,7 +27,7 @@ Boleh 20 detik kalau body butuh dua beat (alasan + bukti). Tetap kausal: body me
 Lebih ringan dari Ads karena affiliator boleh bicara soal beli/pakai: tunjuk isi/netto, pegang dua bar, buka kotak, tepuk kantong belanja, struk kelihatan. Tetap tanpa klaim manfaat; harga boleh ditulis kata; promo hanya di caption.
 
 ## 5. Bahasa & CTA
-Sehari-hari, aku-kamu (beauty/fashion), gue-lo (gadget/food), Bun (home/kids). ≤10 kata per shot, total ≤1.5 kata/detik. CTA lisan wajib "keranjang kuning" (Shopee: keranjang oren; Tokopedia: keranjang), buffer "linknya **ada** di", didahului klausa cerita: "Sekarang dijaga. Kalau mau, keranjang kuning ya." Caption penuh + ≤8 hashtag, promo/harga di caption.
+Sehari-hari, aku-kamu (beauty/fashion), gue-lo (gadget/food), Bun (home/kids). ≤10 kata per shot, tempo dialog mengikuti pita genre & durasi (aturan lama 1,5 kata/detik DIBATALKAN 4 Sep 2026 — pita tempo per genre & durasi berlaku (lib/script-engine/pita-tempo.ts). Diukur: 17 kata/15 dtk meninggalkan 8,48 dtk sunyi (56% video diam); 49 kata + arahan aktif menyisakan 0,40 dtk). CTA lisan wajib "keranjang kuning" (Shopee: keranjang oren; Tokopedia: keranjang), buffer "linknya **ada** di", didahului klausa cerita: "Sekarang dijaga. Kalau mau, keranjang kuning ya." Caption penuh + ≤8 hashtag, promo/harga di caption.
 
 ## 6. Klaim & filter
 Standar: nol medis/whitening/instan; angka hanya harga (kata) dan isi ("isi lima"). Kosakata pemicu, tubuh, kamar mandi, negasi: STANDARD v2 §B.8 dan §E. Teks overlay boleh, default OFF, ≤9 kata, post-production. Musik: default tanpa; boleh untuk no-face; ditambah saat upload.

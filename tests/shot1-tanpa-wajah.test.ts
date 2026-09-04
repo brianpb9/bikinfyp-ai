@@ -17,8 +17,8 @@ const { getCreatorCategory } = await import("../lib/personas");
 
 const segments = [
   { role: "hook" as const, start: 0, end: 8, text: "Nah, jerawat masih bandel juga sih?", visual_direction: "x" },
-  { role: "demo" as const, start: 8, end: 20, text: "aku pakai ini tiap malam deh", visual_direction: "x" },
-  { role: "cta" as const, start: 20, end: 30, text: "cek keranjang kuning ya", visual_direction: "x" },
+  { role: "demo" as const, start: 8, end: 20, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap", visual_direction: "x" },
+  { role: "cta" as const, start: 20, end: 30, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
 ];
 
 function rencana(o: Partial<Record<string, unknown>> = {}) {
@@ -54,8 +54,8 @@ test("talking_head multi-shot: shot 1 tanpa wajah, shot 2+ tetap presenter", () 
 test("pengecualian sadar #1: talking_head 15 dtk (satu shot) tetap berwajah", () => {
   const spec = rencana({ durationSec: 15, segments: [
     { role: "hook", start: 0, end: 4, text: "Nah, jerawat masih bandel juga sih?", visual_direction: "x" },
-    { role: "demo", start: 4, end: 10, text: "aku pakai ini tiap malam deh", visual_direction: "x" },
-    { role: "cta", start: 10, end: 15, text: "cek keranjang kuning ya", visual_direction: "x" },
+    { role: "demo", start: 4, end: 10, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap", visual_direction: "x" },
+    { role: "cta", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
   ] });
   assert.equal(spec.shots.length, 1, "talking_head 15 dtk sengaja satu shot (kontinuitas wajah)");
   assert.doesNotMatch(spec.shots[0].prompt, FRASA_TANPA_WAJAH, "satu-shot tidak boleh kehilangan wajah — ia bukan talking_head lagi");

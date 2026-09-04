@@ -51,7 +51,7 @@ test("L-21 memeriksa ARAHAN VISUAL, bukan dialog, dan MENJATUHKAN naskah", () =>
     segments: [
       { role: "hook", text: "Nah, jerawat aku dulu bandel banget sih", visual_direction: visual },
       { role: "demo", text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap", visual_direction: "medium shot, hands only" },
-      { role: "cta", text: "cek keranjang kuning ya", visual_direction: "static hero" },
+      { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "static hero" },
     ],
   } as never, "strict");
 

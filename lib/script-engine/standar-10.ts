@@ -16,6 +16,7 @@
  * paling cepat membuat standar ini terlihat berjalan padahal tidak.
  */
 import { hookLevelRank, type HookLevel } from "../config/hooks";
+import { batasKataPerDetik, type GenreTempo } from "./pita-tempo";
 import { tutupiNama } from "../media/pemicu-filter";
 import type { SegmentDraft } from "./templates";
 
@@ -228,14 +229,63 @@ export const MAKS_KATA_PER_SHOT = 10;
  * Jadi batasnya yang LEBIH LONGGAR di antara keduanya: 10 kata untuk shot
  * pendek, dan 1,5 kata/detik begitu shotnya lebih panjang dari itu.
  */
-export function batasKataShot(durasiDetik: number): number {
-  return Math.max(MAKS_KATA_PER_SHOT, Math.round(1.5 * Math.max(0, durasiDetik)));
+/**
+ * DIPERBARUI 4 Sep 2026 — batasnya ikut PITA TEMPO, bukan angka 1,5 yang mati.
+ *
+ * Ini bukan pelonggaran kosmetik; tanpa perubahan ini jendela kata yang baru
+ * MUSTAHIL dipenuhi. Pita haul untuk 15 detik meminta 47-63 kata total,
+ * sementara batas lama memberi 10 kata per shot x 3 shot = 30. Penulis akan
+ * dihadapkan pada dua aturan yang tidak bisa dipenuhi bersamaan, lalu gagal
+ * tiga kali dan menyerah — persis kegagalan yang baru saja kita bayar hari ini
+ * dengan sebab yang berbeda.
+ *
+ * Dua aturan yang bertentangan lebih buruk daripada satu aturan yang salah:
+ * yang pertama tidak punya jalan keluar sama sekali.
+ */
+export function batasKataShot(
+  durasiShotDetik: number,
+  genre: GenreTempo = "haul",
+  /** Durasi VIDEO utuh — yang memilih pita. Bawaannya durasi shot itu sendiri,
+   *  yaitu kasus satu shot = satu video. */
+  durasiVideoDetik?: number,
+): number {
+  // PITA DIPILIH DARI DURASI VIDEO, BUKAN DURASI SHOT.
+  //
+  // Tabel LAYER2 §5.1 diindeks oleh panjang KLIP: pita "≤7 detik" ditulis untuk
+  // klip Grok 5 detik yang berdiri sendiri, di mana seluruh klip adalah satu
+  // tarikan bicara dan kepadatannya memang tinggi (4,4-5,5 kata/detik).
+  //
+  // Memakainya untuk SEGMEN 5 detik di dalam video 15 detik salah alamat: ia
+  // memberi 28 kata per segmen, tiga segmen jadi 84 kata, sementara jendela
+  // total video itu 63. Dua aturan yang tidak bisa dipenuhi bersamaan — bentuk
+  // kegagalan yang paling mahal, dan yang paling mudah tidak disadari.
+  const pitaDari = durasiVideoDetik ?? durasiShotDetik;
+  const [, maksPerDetik] = batasKataPerDetik(Math.max(0, pitaDari), genre);
+  return Math.max(MAKS_KATA_PER_SHOT, Math.round(maksPerDetik * Math.max(0, durasiShotDetik)));
 }
 
-export function kataPerShot(segments: SegmentDraft[]): { lolos: boolean; sebab?: string } {
+export function kataPerShot(segments: SegmentDraft[], genre: GenreTempo = "haul"): { lolos: boolean; sebab?: string } {
+  // Durasi video diturunkan dari segmennya sendiri — itu satu-satunya sumber
+  // yang pasti konsisten dengan naskah yang sedang dinilai.
+  const akhir = segments.reduce((m, s) => Math.max(m, Number(s.end) || 0), 0);
+  const awal = segments.reduce((m, s) => Math.min(m, Number(s.start) || 0), Number.POSITIVE_INFINITY);
+  const durasiVideo = Number.isFinite(awal) ? Math.max(0, akhir - awal) : akhir;
   for (const s of segments) {
     const n = s.text.replace(/\[[^\]]*\]/g, " ").split(/\s+/).filter(Boolean).length;
-    const batas = batasKataShot((Number(s.end) || 0) - (Number(s.start) || 0));
+    const durasi = (Number(s.end) || 0) - (Number(s.start) || 0);
+    // SEGMEN TANPA TIMING TIDAK DIVONIS DI SINI.
+    //
+    // Aturan ini berbunyi "sekian kata untuk shot sekian detik". Tanpa
+    // detiknya, tidak ada yang bisa dinilai — dan versi sebelumnya diam-diam
+    // memakai durasi 0, yang menjatuhkan batasnya ke 10 kata. Sejak jendela
+    // total mengikuti pita tempo (33-63 kata untuk 15 detik), batas 10 itu
+    // menjadi aturan kedua yang MUSTAHIL dipenuhi bersamaan dengan yang
+    // pertama — persis bentuk kegagalan yang paling mahal: penulis mencoba,
+    // ditolak, mencoba lagi, menyerah.
+    //
+    // Jendela total tetap menjaga naskah tanpa timing, jadi tidak ada lubang.
+    if (durasi <= 0) continue;
+    const batas = batasKataShot(durasi, genre, durasiVideo);
     if (n > batas) {
       return { lolos: false, sebab: `segmen "${s.role}" ${n} kata — maksimal ${batas} kata untuk shot ${Math.round((Number(s.end)||0)-(Number(s.start)||0))} detik (§B baris 9)` };
     }

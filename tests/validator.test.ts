@@ -124,7 +124,7 @@ test("L-05: terlalu pendek dan terlalu panjang -> gagal", () => {
       segments: [
         { role: "hook", text: "Say, 85 ribu sih" },
         { role: "demo", text: "ini Serum Glow Bright bagus" },
-        { role: "cta", text: "cek keranjang kuning ya" },
+        { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
       ],
     },
     "strict"
@@ -224,23 +224,37 @@ test("mode light: pelanggaran non-L-10/L-11 hanya jadi warning", () => {
   assert.ok(res.warnings.length > 0);
 });
 
-test("L-05 tier bersuara: maks 22 kata (batas Brian 1,5 kata/dtk); skrip panjang ditolak", () => {
-  const audioTier = { ...base, qualityTier: "high_quality" as const };
-  const res = validateScript(audioTier, "strict");
-  assert.ok(rules(res).includes("L-05"));
+test("L-05 tier bersuara mengikuti PITA TEMPO — naskah yang KEPENDEKAN ditolak", () => {
+  // Naskah yang KEPENDEKAN untuk tier bersuara. Dulu yang diuji di sini naskah
+  // KEPANJANGAN — arah bahayanya sudah berbalik: sejak jendela mengikuti pita
+  // tempo, yang merusak video justru naskah yang terlalu sepi.
+  const kependekan = {
+    ...base,
+    qualityTier: "high_quality" as const,
+    segments: [
+      { role: "hook", text: "Say, 85 ribu segini?" },
+      { role: "demo", text: "teksturnya ringan banget" },
+      { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
+    ],
+  };
+  const res = validateScript(kependekan, "strict");
+  assert.ok(rules(res).includes("L-05"), `naskah 12 kata harus ditolak: ${JSON.stringify(res.errors)}`);
 
-  // Dipendekkan ke jendela BARU (16-22 untuk 15 dtk). Versi lama naskah ini 30
-  // kata — 2,0 kata/detik, di atas batas Brian, dan itu justru cacat yang
-  // ditemukan reviewer A3 pada naskah produksi nyata (24/26/26 kata).
-  const pendek = {
+  // DIPANJANGKAN 4 Sep 2026. Versi sebelumnya duduk di 22 kata — jendela lama
+  // 1,5 kata/detik — dan render nyata membuktikan naskah sependek itu
+  // meninggalkan 56% video dalam keadaan diam (17 kata -> 8,48 dtk sunyi dari
+  // 15,04). Jendela sekarang 33-63 kata untuk 15 detik; batas bawahnya diambil
+  // dari render 34 kata yang terukur menyisakan 18% sunyi.
+  const sehat = {
     ...base,
     qualityTier: "super_hq" as const,
     segments: [
-      { role: "hook", text: "Say, 85 ribu segini? sumpah sih" },
-      { role: "demo", text: "nah, ini Serum Glow Bright, teksturnya niat banget" },
-      { role: "cta", text: "Cek keranjang kuning ya deh" },
+      { role: "hook", text: "Say, 85 ribu segini? sumpah sih aku kira bakal jauh lebih mahal" },
+      { role: "demo", text: "nah, ini Serum Glow Bright, teksturnya niat banget, ringan dan cepat meresap, nggak lengket sama sekali di kulit" },
+      { role: "cta", text: "jadi kalau kamu penasaran juga, cek keranjang kuning ya deh" },
     ],
   };
+  const pendek = sehat;
   const res2 = validateScript(pendek, "strict");
   assert.deepEqual(res2.errors, [], JSON.stringify(res2.errors));
 });
@@ -250,9 +264,9 @@ test("L-17: tanda kurung instruksi ditolak untuk tier bersuara, diizinkan untuk 
     ...base,
     qualityTier: "high_quality" as const,
     segments: [
-      { role: "hook", text: "Say, 85 ribu segini? sumpah sih" },
+      { role: "hook", text: "Say, 85 ribu segini? sumpah sih aku kira bakal jauh lebih mahal" },
       { role: "demo", text: "nah, ini Serum Glow Bright (jeda sebentar) teksturnya niat" },
-      { role: "cta", text: "Cek keranjang kuning ya deh" },
+      { role: "cta", text: "jadi kalau penasaran juga, cek keranjang kuning ya deh" },
     ],
   };
   assert.ok(rules(validateScript(denganKurung, "strict")).includes("L-17"));

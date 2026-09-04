@@ -17,11 +17,20 @@ process.env.STORAGE_DIR = `/tmp/racun-test-adm-storage-${process.pid}`;
 const { periksaAdmisi, konteksAdmisi, durasiDariSegmen } = await import("../lib/script-engine/admisi");
 const { validateScript } = await import("../lib/script-engine/validator");
 
-/** Naskah 30 detik, ~18 kata — jauh di bawah jendela 30 detik (32-44). */
+/**
+ * Naskah 30 detik yang KEPENDEKAN untuk durasinya, tapi SAH untuk 15 detik.
+ *
+ * Bentuk ini penting: yang dibuktikan tes ini adalah durasi diturunkan dari
+ * segmen, bukan ditebak 15. Kalau naskahnya kependekan di KEDUA durasi, ia
+ * ditolak apa pun konteksnya dan tesnya berhenti membuktikan apa-apa.
+ *
+ * Jendela 15 detik (pita haul): 30-63 kata. Jendela 30 detik: 66-120.
+ * Naskah di bawah ~48 kata: lolos sebagai 15 detik, ditolak sebagai 30 detik.
+ */
 const naskah30 = [
-  { role: "hook", start: 0, end: 6, text: "Nah, jerawat masih bandel juga sih?", visual_direction: "x" },
-  { role: "demo", start: 6, end: 20, text: "aku pakai ini tiap malam deh", visual_direction: "x" },
-  { role: "cta", start: 20, end: 30, text: "cek keranjang kuning ya", visual_direction: "x" },
+  { role: "hook", start: 0, end: 6, text: "Nah, jerawat masih bandel juga sih tiap bangun pagi begini?", visual_direction: "x" },
+  { role: "demo", start: 6, end: 20, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap, nggak lengket sama sekali", visual_direction: "x" },
+  { role: "cta", start: 20, end: 30, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
 ] as never[];
 
 test("durasi diturunkan dari SEGMEN, bukan ditebak 15 detik", () => {
@@ -38,7 +47,7 @@ test("(a) naskah 30 detik yang kependekan DITOLAK — dulu lolos", () => {
     productName: "Serum Glow", productPriceIdr: 85000,
     productSourceUrl: "https://www.tiktok.com/@x/video/1", qualityTier: "high_quality",
   });
-  assert.equal(hasil.passed, false, "naskah 18 kata untuk 30 detik harus ditolak");
+  assert.equal(hasil.passed, false, "naskah sependek ini untuk 30 detik harus ditolak");
   assert.ok(hasil.errors.some((e) => e.rule === "L-05"), JSON.stringify(hasil.errors));
 
   // Bukti bahwa konteks lamalah sebabnya: tanpa durationSec, naskah yang sama lolos.

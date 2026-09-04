@@ -41,12 +41,15 @@ function stub(segments: unknown[]) {
   return dikirim;
 }
 
+// DIPANJANGKAN 4 Sep 2026 ke dalam pita tempo (33-63 kata untuk 15 detik).
+// Fixture lama 17 kata mewakili naskah yang lolos gate lama tapi terukur
+// meninggalkan 56% video dalam keadaan diam.
 const segmenSah = [
-  { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, kulitku dulu gitu juga",
+  { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, kulitku dulu gitu juga sih, kusam banget tiap bangun pagi",
     start_state: "she is already touching her cheek", framing: "medium", angle: "eye level",
     camera: "static", action: "she leans in, then points", product_state: "hidden",
     expression: "worried", audio_note: "", why: "setup — names the pain", mode: "SELFIE" },
-  { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam",
+  { block: "BODY", label: "DEMO", start: 4, end: 10, text: "terus aku pakai ini tiap malam, teksturnya ringan dan cepat meresap, nggak bikin lengket",
     start_state: "the bottle is already in her hand", framing: "medium", angle: "eye level",
     camera: "push in", action: "she turns it, then tilts the label", product_state: "partial",
     expression: "warm", audio_note: "", why: "tension — shows the fix", mode: "SELLING" },
@@ -197,16 +200,16 @@ test("keberhasilan jalur LLM meninggalkan baris log POSITIF", async () => {
   globalThis.fetch = (async () => ({
     ok: true,
     json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
-      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih",
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih, tiap bangun tidur muncul lagi",
         start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
       { block: "BODY", label: "DEMO", start: 4, end: 10,
-        text: "aku pakai serum ini tiap malam deh, ringan banget",
+        text: "terus aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },
-      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya",
         start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
         action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
         audio_note: "", why: "payoff", mode: "SELLING" },
@@ -262,7 +265,9 @@ test("prompt menyampaikan L-19, batas kata per segmen, dan larangan negasi di fi
 
     // §B baris 9 — angkanya dari batasKataShot(), sumber yang sama dengan yang
     // menolak. Kalau ini disalin jadi angka mati, ia akan hanyut diam-diam.
-    const batas = batasKataShot(15 / 3);
+    // Pita dipilih dari durasi VIDEO (15 dtk), bukan durasi segmen (5 dtk) —
+    // kalau tidak, tiga segmen akan menembus jendela total.
+    const batas = batasKataShot(15 / 3, "haul", 15);
     assert.ok(
       p.includes(`may exceed ${batas} spoken words`),
       `batas keras per segmen (${batas}) tidak dikirim:\n${p}`,

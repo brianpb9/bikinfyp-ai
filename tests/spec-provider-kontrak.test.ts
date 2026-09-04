@@ -24,8 +24,8 @@ const { TVC_ROUTES } = await import("../lib/templates");
 
 const segments = [
   { role: "hook" as const, start: 0, end: 4, text: "Nah, jerawat masih bandel juga sih?", visual_direction: "x" },
-  { role: "demo" as const, start: 4, end: 10, text: "aku pakai ini tiap malam deh", visual_direction: "x" },
-  { role: "cta" as const, start: 10, end: 15, text: "cek keranjang kuning ya", visual_direction: "x" },
+  { role: "demo" as const, start: 4, end: 10, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap", visual_direction: "x" },
+  { role: "cta" as const, start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
 ];
 
 function rencana(o: { format: string; tier?: string; durationSec?: number; tvcRoute?: string; noModel?: boolean }) {

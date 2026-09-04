@@ -29,7 +29,7 @@ Cerita bagus tanpa jembatan = penonton tidak tahu kenapa produknya ini. Tiga jem
 Penonton yang menyimpulkan manfaat; kita tidak pernah mengucapkannya.
 
 ## 5. Aturan bahasa
-Kalimat orang beneran, pendek, ≤8 kata per baris: "Ih, jangan sekarang dong." / "Udah. Masuk aja." / "Ya udah deh." / "Iya, iya. Aku baru bangun. Kenapa?" Dilarang: copy iklan, kalimat penjelasan, "aslinya…" sebagai pembuka body, superlatif. Dialog boleh berhenti di tengah (hitungan, napas). Total ≤1.5 kata/detik.
+Kalimat orang beneran, pendek, ≤8 kata per baris: "Ih, jangan sekarang dong." / "Udah. Masuk aja." / "Ya udah deh." / "Iya, iya. Aku baru bangun. Kenapa?" Dilarang: copy iklan, kalimat penjelasan, "aslinya…" sebagai pembuka body, superlatif. Dialog boleh berhenti di tengah (hitungan, napas). Tempo dialog mengikuti pita genre & durasi (aturan lama 1,5 kata/detik DIBATALKAN 4 Sep 2026 — pita tempo per genre & durasi berlaku (lib/script-engine/pita-tempo.ts). Diukur: 17 kata/15 dtk meninggalkan 8,48 dtk sunyi (56% video diam); 49 kata + arahan aktif menyisakan 0,40 dtk).
 CTA wajib: "Detailnya **ada** di bawah ya" (buffer "ada"), didahului satu klausa cerita.
 
 ## 6. Klaim & filter (ketat)

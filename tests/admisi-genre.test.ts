@@ -117,7 +117,7 @@ test("(3b) L-14 membaca harga yang ditulis dengan KATA", () => {
   const naskah = (harga: string) => [
     { role: "hook", start: 0, end: 5, text: "Nah, kenapa wajah kelihatan kusam banget pas siang begini sih?", visual_direction: "x" },
     { role: "demo", start: 5, end: 11, text: `Serum Glow cuma ${harga} deh`, visual_direction: "x" },
-    { role: "cta", start: 11, end: 15, text: "cek keranjang kuning ya", visual_direction: "x" },
+    { role: "cta", start: 11, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
   ] as never[];
   const dasar = {
     ...produk, register: "bestie", qualityTier: "high_quality" as const,
@@ -133,7 +133,7 @@ test("(3c) angka DI NAMA PRODUK bukan klaim — tidak lagi false-reject", () => 
   const segs = [
     { role: "hook", start: 0, end: 5, text: "Nah, kenapa wajah kelihatan kusam banget pas siang begini sih?", visual_direction: "x" },
     { role: "demo", start: 5, end: 11, text: "SPF Serum 50 aku pakai tiap pagi deh", visual_direction: "x" },
-    { role: "cta", start: 11, end: 15, text: "cek keranjang kuning ya", visual_direction: "x" },
+    { role: "cta", start: 11, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya", visual_direction: "x" },
   ] as never[];
   const hasil = periksaAdmisi({
     ...produk, register: "bestie", productName: "SPF Serum 50", qualityTier: "high_quality",

@@ -21,26 +21,62 @@ const nilai = (segs: Seg[], extra: Record<string, unknown> = {}) =>
 
 /** Naskah dasar yang LOLOS semuanya — pembanding, supaya tiap tes hanya
  *  mengubah satu hal dan kegagalannya bisa ditunjuk sebabnya. */
+// Naskah acuan DIPANJANGKAN 4 Sep 2026 dari 19 ke dalam pita tempo baru.
+//
+// Yang berubah bukan standarnya, melainkan apa yang dianggap sehat. Diukur:
+// naskah 17 kata untuk 15 detik meninggalkan 8,48 detik sunyi — 56% videonya
+// diam. Fixture lama mewakili naskah yang lolos gate tapi menghasilkan video
+// mati, dan menahannya sebagai "acuan sehat" berarti menguji sistem terhadap
+// cacat yang baru saja dibuang.
 const dasar: Seg[] = [
-  { role: "hook", text: "Nah, jerawat kamu masih bandel juga sih?" },
-  { role: "demo", text: "aku pakai ini tiap malam deh, ringan banget" },
-  { role: "cta", text: "cek keranjang kuning ya" },
+  { role: "hook", text: "Nah, jerawat kamu masih bandel juga sih tiap bangun tidur begini?" },
+  { role: "demo", text: "aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap, nggak lengket sama sekali" },
+  { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
 ];
 
-test("A3: 15 detik dibatasi 22 kata — 1,5 kata/detik", () => {
-  const { minWc, maxWc } = jendelaKata({ qualityTier: "high_quality", durationSec: 15, productName: "Scarlett Acne Serum" });
-  assert.equal(maxWc, 22, "batas Brian 1,5 kata/detik");
+test("A3: jendela kata mengikuti PITA TEMPO, bukan 1,5 kata/detik untuk semua", () => {
+  // ────────────────────────────────────────────────────────────────────────
+  // KENAPA ANGKA 22 DIBATALKAN — diukur, bukan didebatkan
+  // ────────────────────────────────────────────────────────────────────────
+  // Empat render Grok 15 detik, adegan identik, hanya dialog & arahan bicara
+  // yang berbeda. Sunyi diukur silencedetect -30dB:
+  //   17 kata + "natural pauses" -> 8,48 dtk sunyi = 56% VIDEO DIAM
+  //   34 kata + arahan aktif     -> 2,64 dtk       = 18%
+  //   49 kata + "natural pauses" -> 2,85 dtk       = 19%
+  //   49 kata + arahan aktif     -> 0,40 dtk       =  3%
+  //
+  // Batas 22 kata tidak menjaga mutu; ia memproduksi video yang diam separuh
+  // durasinya. Batas bawah 2,2 kata/detik diambil dari render 34 kata, batas
+  // atas 4,2 dari LAYER2 §5.1.
+  const { minWc, maxWc } = jendelaKata({
+    qualityTier: "high_quality", durationSec: 15, productName: "Scarlett Acne Serum",
+    contentType: "affiliate", format: "talking_head",
+  });
+  // 33 dari pita, dikurangi kelonggaran nama produk (maks 6 kata) — nama SKU
+  // panjang memakan jatah tanpa menambah kalimat yang didengar penonton.
+  assert.ok(minWc >= 27, `batas bawah ${minWc} terlalu rendah — video akan banyak diam`);
+  assert.ok(maxWc >= 63, `batas atas ${maxWc} terlalu sempit untuk pita haul`);
   assert.ok(minWc < maxWc, `jendela tidak boleh terbalik: ${minWc}-${maxWc}`);
 
-  // 24 kata: persis kasus yang lolos sebelum perbaikan (1,60 kata/detik).
-  const panjang: Seg[] = [
-    { role: "hook", text: "Nah, jerawat kamu masih bandel juga sih setiap hari begini" },
-    { role: "demo", text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap" },
-    { role: "cta", text: "cek keranjang kuning ya sekarang" },
+  // 19 kata — naskah yang DULU dianggap sehat, dan terukur menghasilkan video
+  // yang diam lebih dari separuh durasinya. Sekarang ditolak.
+  // SENGAJA PENDEK — ini kasus TOLAK, bukan fixture sehat. Jangan
+  // "dipanjangkan" bersama fixture lain: justru panjang inilah yang diuji.
+  const kependekan: Seg[] = [
+    { role: "hook", text: "Nah, jerawat kamu masih bandel?" },
+    { role: "demo", text: "aku pakai ini tiap malam" },
+    { role: "cta", text: "cek keranjang kuning" },
   ];
-  const h = nilai(panjang);
-  assert.equal(h.passed, false, "24 kata untuk 15 detik harus DITOLAK");
+  const h = nilai(kependekan);
+  assert.equal(h.passed, false, "19 kata untuk 15 detik harus DITOLAK — 56% videonya akan diam");
   assert.ok(h.errors.some((e) => e.rule === "L-05"), JSON.stringify(h.errors));
+
+  // Ads TETAP di pita tenang: di sana ruang sunyi bagian dari bentuknya.
+  const ads = jendelaKata({
+    qualityTier: "high_quality", durationSec: 15, productName: "Scarlett Acne Serum",
+    contentType: "ads", format: "talking_head",
+  });
+  assert.ok(ads.maxWc < minWc, `Ads (${ads.maxWc}) harus jauh lebih sempit daripada haul (${minWc}-${maxWc})`);
 });
 
 test("A4: L-19 menjatuhkan naskah, bukan sekadar memperingatkan", () => {

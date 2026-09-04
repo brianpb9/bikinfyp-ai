@@ -80,7 +80,7 @@ test("kelonggaran hanya menyerap kekurangan kata, bukan kelebihan", async () => 
     { role: "hook", text: teks }, { role: "demo", text: "nah" }, { role: "cta", text: "cek keranjang ya" },
   ];
   const kepanjangan = validateScript(
-    { hook_family: "H1", register: "bunda", segments: seg("kata ".repeat(60)), productName: "Nama Produk Sangat Panjang Sekali Ya", priceIdr: 24620, qualityTier: "high_quality", durationSec: 15 },
+    { hook_family: "H1", register: "bunda", segments: seg("kata ".repeat(100)), productName: "Nama Produk Sangat Panjang Sekali Ya", priceIdr: 24620, qualityTier: "high_quality", durationSec: 15 },
     "strict"
   );
   assert.ok(kepanjangan.errors.some((e) => e.rule === "L-05"), "naskah kepanjangan harus tetap ditolak");

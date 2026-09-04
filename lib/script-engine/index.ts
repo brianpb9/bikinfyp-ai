@@ -457,7 +457,11 @@ async function generateOne(
   };
 
   const { minWc, maxWc } = jendelaKata({
+    // contentType & format IKUT: pita tempo berbeda per genre, dan tanpa
+    // keduanya penulis akan diberi jendela haul untuk naskah Ads yang justru
+    // hidup dari ruang sunyi.
     qualityTier: tier, durationSec, wordBudget, productName: product.name,
+    contentType, format,
   });
 
   // ---- LINGKAR PERBAIKAN LLM ----

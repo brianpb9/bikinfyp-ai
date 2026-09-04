@@ -40,7 +40,7 @@ const base: ScriptToValidate = {
   segments: [
     { role: "hook", text: "Bestie, 85 ribu doang, kaget sih ya" },
     { role: "demo", text: "nah, ini Serum Glow, teksturnya enak banget kok" },
-    { role: "cta", text: "Cek keranjang kuning ya deh" },
+    { role: "cta", text: "jadi kalau penasaran juga, cek keranjang kuning ya deh" },
   ],
 };
 

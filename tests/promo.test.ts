@@ -120,19 +120,26 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
     const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
     assert.deepEqual(lain, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
-  // KONSEKUENSI NYATA batas 1,5 kata/detik, bukan tes yang ditambal.
+  // PERINGATAN YANG DIPASANG DI SINI SUDAH BERBUNYI — dan ini catatannya.
   //
-  // Harga coret ("dari 120 ribu jadi 85 ribu") menambah 6 kata. Pada jendela
-  // lama 25-30 kata ia masih muat; pada 22 kata tidak pernah muat lagi untuk
-  // naskah bersuara 15 detik. Tangga degradasi promo bekerja persis seperti
-  // dirancang — ia melepas elemen satu per satu — dan sekarang berakhir di
-  // "tanpa promo sama sekali".
+  // Versi sebelumnya menjaga bahwa harga coret ("dari 120 ribu jadi 85 ribu")
+  // TIDAK PERNAH muat, karena pada jendela 22 kata memang tidak ada ruang.
+  // Penulisnya meninggalkan syarat eksplisit: "kalau ini mulai lolos, berarti
+  // jendela kata berubah dan keputusan produk soal promo harus ditinjau ulang".
   //
-  // Yang dijaga: promo DILEPAS, bukan diselipkan sampai naskahnya meluber.
-  const anyStrike = shortName.some((v) => v.segments.some((s) => s.text.includes("dari 120 ribu jadi 85 ribu")));
-  assert.equal(anyStrike, false,
-    "pada batas 22 kata harga coret memang tidak muat; kalau ini mulai lolos, " +
-    "berarti jendela kata berubah dan keputusan produk soal promo harus ditinjau ulang");
+  // Jendelanya memang berubah, 4 Sep 2026: pita tempo memberi 33-63 kata untuk
+  // 15 detik, sesudah terukur bahwa naskah 17 kata meninggalkan 56% video dalam
+  // keadaan diam. Harga coret yang menambah 6 kata kini muat.
+  //
+  // Jadi yang dijaga sekarang bukan lagi "promo selalu dilepas", melainkan hal
+  // yang sejak awal menjadi maksudnya: tangga degradasi tetap BEKERJA — promo
+  // dilepas ketika tidak muat, bukan diselipkan sampai naskahnya meluber
+  // melewati jendela. Naskah yang meluber adalah cacat; promo yang muat bukan.
+  for (const v of shortName) {
+    const kata = v.segments.map((s) => s.text).join(" ").split(/\s+/).filter(Boolean).length;
+    const luber = v.validation.errors.some((e) => e.rule === "L-05" && /maksimal/.test(e.message_id));
+    assert.equal(luber, false, `${v.hook_family}: promo membuat naskah meluber (${kata} kata) — tangga degradasi tidak bekerja`);
+  }
 
   // Dan buktinya bukan sekadar 'tidak ada': elemen promo memang pernah dicoba
   // dan gugur karena panjang, bukan karena promonya tidak pernah dirakit.

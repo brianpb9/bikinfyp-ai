@@ -165,7 +165,7 @@ test("L-19 GATE KERAS di validator, dan menunjuk segmen hook", async () => {
   const segmen = (hook: string) => [
     { role: "hook", text: hook },
     { role: "demo", text: "Nah, aku pakai ini tiap malam deh soalnya teksturnya ringan banget di kulit" },
-    { role: "cta", text: "cek keranjang kuning ya" },
+    { role: "cta", text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya" },
   ];
   const nilai = (hook: string) => validateScript({
     hook_family: "H1", register: "bestie", segments: segmen(hook),
@@ -257,15 +257,15 @@ test("ide sampai ke prompt penulis naskah, dan tiap varian dapat sudut berbeda",
     // Penulis adegan: rekam promptnya, balas naskah apa adanya.
     promptNaskah.push(body.messages[0].content);
     return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
-      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih",
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih, tiap pagi ngaca terus ngeluh sendiri",
         start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup — menamai masalahnya", mode: "SELFIE" },
-      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam deh",
+      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan labelnya", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension — menunjukkan jalan keluarnya", mode: "SELLING" },
-      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya",
         start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
         action: "dia menahannya diam, lalu menunjuk ke bawah", product_state: "hero", expression: "bright",
         audio_note: "", why: "payoff — labelnya akhirnya terbaca", mode: "SELLING" },
@@ -337,15 +337,15 @@ test("gate GAGAL: naskah TIDAK ditulis dari ide gagal, dan tiga terbaik dikembal
     }
     promptNaskah.push(body.messages[0].content);
     return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
-      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih",
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih, tiap pagi ngaca terus ngeluh sendiri",
         start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
-      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam deh",
+      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan labelnya", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },
-      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya",
         start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
         action: "dia menahannya diam, lalu menunjuk ke bawah", product_state: "hero", expression: "bright",
         audio_note: "", why: "payoff", mode: "SELLING" },
@@ -412,15 +412,15 @@ test("high_quality tetap memakai penulis LLM, hanya tanpa Idea Stage", async () 
     }
     promptNaskah.push(body.messages[0].content);
     return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
-      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih",
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih, tiap pagi ngaca terus ngeluh sendiri",
         start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
-      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam deh",
+      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "terus aku pakai ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },
-      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya",
         start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
         action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
         audio_note: "", why: "payoff", mode: "SELLING" },
@@ -509,7 +509,7 @@ test("ide yang lulus TIPIS tetap menulis naskah, dan naskahnya ditandai", async 
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ ideas: daftar }) }] }) };
     promptNaskah.push(body.messages[0].content);
     return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
-      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih",
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih, tiap bangun pagi muncul lagi",
         start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
@@ -520,11 +520,11 @@ test("ide yang lulus TIPIS tetap menulis naskah, dan naskahnya ditandai", async 
         // lagi disajikan, stub yang melanggar gate membuat tes ini gagal —
         // dan itu benar: yang diuji di sini ide borderline menulis naskah,
         // bukan jalur cadangan.
-        text: "aku pakai tiap malam deh, enak banget",
+        text: "terus aku pakai tiap malam deh, enak banget, ringan dan cepat meresap di kulit",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },
-      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, cek keranjang kuning ya",
         start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
         action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
         audio_note: "", why: "payoff", mode: "SELLING" },

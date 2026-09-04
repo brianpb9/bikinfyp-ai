@@ -23,6 +23,7 @@
 import { z } from "zod";
 import { MAKS_KATA_PER_SHOT, batasKataShot } from "./standar-10";
 import { panduanPerangkatHook } from "./hook-devices";
+import { genreTempo } from "./pita-tempo";
 import { bersihkanNegasiOrang } from "./bersihkan-negasi";
 import { blokMaster, blokStandar } from "./standar-10-teks";
 import { config } from "../config";
@@ -330,7 +331,7 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
     // SEGMEN, dan keduanya tidak sama. Terukur 3 Sep 2026: naskah yang totalnya
     // sah tetap ditolak karena satu segmen 11 kata. Batasnya diambil dari
     // batasKataShot() — sumber yang sama dengan yang menolaknya.
-    `PER-SEGMENT HARD CAP — no single segment may exceed ${batasKataShot(r.durationSec / Math.max(1, jumlahSegmen))} spoken words.`,
+    `PER-SEGMENT HARD CAP — no single segment may exceed ${batasKataShot(r.durationSec / Math.max(1, jumlahSegmen), genreTempo({ contentType: r.contentType, format: r.format }), r.durationSec)} spoken words.`,
     `  This is a SEPARATE, harder rule than the total window: a script inside the total is still rejected here.`,
   ].join("\n");
 }

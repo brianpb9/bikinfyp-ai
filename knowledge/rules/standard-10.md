@@ -64,7 +64,7 @@ sebagian, tidak ada "hampir".
    **Baris ini menurunkan peluang ditolak, tidak menghilangkannya — lihat §E.**
 9. **Bahasa dikunci 4 lapis.** "Every spoken word is Indonesian" di header; "She speaks
    Indonesian (Bahasa Indonesia)" di tiap shot bicara; label dialog; "no English speech"
-   sekali. Total dialog ≤1.5 kata/detik (15 detik ≤22 kata), ≤10 kata per shot; kamus
+   sekali. Total dialog mengikuti PITA TEMPO per genre & durasi — bukan lagi 1,5 kata/detik untuk semua (dibatalkan 4 Sep 2026: 17 kata per 15 detik terukur meninggalkan 8,48 detik sunyi, 56% video diam). Batas per shot tetap; kamus
    salah ucap bersih; buffer "**ada** di".
 10. **Struktur produksi jujur.** 15 detik = 3 shot ±5 detik; **shot 1 tanpa wajah** (lihat
     §E — ini yang paling menentukan lolos filter); shot 2–3 dari satu MASTER frame; CTA

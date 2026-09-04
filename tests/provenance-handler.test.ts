@@ -35,9 +35,10 @@ db.prepare(
 ).run(productId, user.id, "https://www.tiktok.com/@x/video/1", "Serum Glow Bright", 85000, "beauty", JSON.stringify([]), null, now());
 
 const segments = [
-  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu segini sih?", visual_direction: "x" },
-  { role: "demo", start: 3, end: 10, text: "nah, teksturnya niat banget deh", visual_direction: "x" },
-  { role: "cta", start: 10, end: 15, text: "linknya di keranjang kuning ya", visual_direction: "x" },
+  // DIPANJANGKAN 4 Sep 2026 ke dalam pita tempo (30-63 kata untuk 15 detik).
+  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu segini sih? aku sampai ngecek dua kali", visual_direction: "x" },
+  { role: "demo", start: 3, end: 10, text: "nah, teksturnya niat banget deh, ringan di kulit dan cepat meresap, nggak lengket sama sekali", visual_direction: "x" },
+  { role: "cta", start: 10, end: 15, text: "jadi kalau kamu mau coba juga, linknya di keranjang kuning ya", visual_direction: "x" },
 ];
 
 /** Baris seperti yang DITULIS rute generate: vonis + jejak dalam satu amplop. */

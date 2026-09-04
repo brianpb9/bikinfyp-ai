@@ -16,7 +16,7 @@ const hijaber = getCreatorCategory("hijaber")!;
 const segments = [
   { role: "hook" as const, start: 0, end: 3, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
   { role: "demo" as const, start: 3, end: 10, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
-  { role: "cta" as const, start: 10, end: 15, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+  { role: "cta" as const, start: 10, end: 15, text: "jadi kalau penasaran juga, cek keranjang kuning ya deh", visual_direction: "x" },
 ];
 
 function spec(format: "hands_only" | "vo_broll" = "hands_only") {
@@ -241,7 +241,7 @@ test("durasi 30 dtk: modul pendek, durasi bulat, total tetap 30 dtk", () => {
   const segments30 = [
     { role: "hook" as const, start: 0, end: 6, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
     { role: "demo" as const, start: 6, end: 20, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
-    { role: "cta" as const, start: 20, end: 30, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+    { role: "cta" as const, start: 20, end: 30, text: "jadi kalau penasaran juga, cek keranjang kuning ya deh", visual_direction: "x" },
   ];
   const s = planShots({
     jobId: "t2",
@@ -271,7 +271,7 @@ test("durasi 45 dtk: jumlah shot diturunkan agar durasinya membagi habis", () =>
   const segments45 = [
     { role: "hook" as const, start: 0, end: 9, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
     { role: "demo" as const, start: 9, end: 30, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
-    { role: "cta" as const, start: 30, end: 45, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+    { role: "cta" as const, start: 30, end: 45, text: "jadi kalau penasaran juga, cek keranjang kuning ya deh", visual_direction: "x" },
   ];
   const s = planShots({
     jobId: "t3",
