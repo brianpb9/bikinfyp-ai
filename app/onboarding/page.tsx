@@ -184,8 +184,10 @@ export default function OnboardingPage() {
         <>
           <div className="flex-1 space-y-9">
             <div className="flex items-center justify-between text-xs font-semibold text-zinc-500">
-              {/* Nama produk mengikuti SiteChrome dan <title>: "BikinFYP".
-                  Halaman ini sempat tertinggal menulis "AIUGC.ID.AI". */}
+              {/* Nama produk TIDAK ditulis ulang di sini — dibaca dari
+                  lib/identitas-platform.ts, sama dengan SiteChrome dan
+                  <title>. Halaman ini pernah dua kali tertinggal saat namanya
+                  berubah; satu sumber menutup itu untuk seterusnya. */}
               {/* Pil "● Harga transparan" DICABUT 1 Sep 2026.
                   Lencana kecil bertitik di pojok adalah bahasa visual yang
                   sudah terlalu sering dipakai halaman buatan AI, dan ia juga
