@@ -108,7 +108,24 @@ services:
     entrypoint: ["sh", "-c", "mc alias set lokal http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" && mc mb --ignore-existing \"lokal/$$BUCKET\" && mc ls lokal && echo 'bucket siap'"]
 
 
-  web:
+  # ── BLUE/GREEN ──────────────────────────────────────────────────────────
+  #
+  # KENAPA ADA DUA LAYANAN WEB YANG SAMA
+  #
+  # nginx menembak satu port, dan sampai 4 Sep 2026 deploy berarti membuat
+  # ulang kontainer di port itu. Ada jeda ~6 detik tanpa backend, dan siapa pun
+  # yang sedang memakai aplikasi menerima 502. Hari itu saja tiga kali terjadi:
+  # dua kali memutus uji yang sedang berjalan, dan sekali menimpa Brian yang
+  # sedang menunggu videonya (job be16d8f3).
+  #
+  # Sekarang warna yang TIDAK aktif dihidupkan lebih dulu, ditunggu sampai
+  # sehat, baru nginx dialihkan dan warna lama dimatikan. nginx reload bersifat
+  # anggun: permintaan yang sedang berjalan diselesaikan pekerja lama.
+  #
+  # Definisinya dibagi lewat anchor YAML, bukan disalin. Dua salinan konfigurasi
+  # yang harus identik pasti menyimpang — dan menyimpangnya baru terlihat saat
+  # warna cadangan dipakai, yaitu justru saat keadaan sedang genting.
+  web: &web-dasar
     build:
       context: .
       dockerfile: Dockerfile.web
@@ -149,6 +166,13 @@ services:
       timeout: 10s
       retries: 5
       start_period: 40s
+
+  # Kembaran port 3001. `profiles` membuatnya TIDAK ikut hidup pada
+  # `docker compose up` biasa — ia hanya dinyalakan deploy saat menukar warna.
+  web-green:
+    <<: *web-dasar
+    profiles: ["green"]
+    ports: ["127.0.0.1:3001:3000"]
 
   worker:
     build:
