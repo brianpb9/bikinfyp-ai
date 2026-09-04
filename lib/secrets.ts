@@ -90,6 +90,25 @@ function cached(purpose: string): Buffer {
   return k;
 }
 
+/* ───────────────────────────────────────────────────────────────────────────
+ * JANGAN GANTI STRING "bikinfyp/..." DI BAWAH INI SAAT MENGGANTI MEREK.
+ *
+ * Ia bukan label. Ia adalah `purpose` HKDF — bahan yang menurunkan kuncinya.
+ * Menggantinya menghasilkan KUNCI YANG BERBEDA, dan akibatnya seketika:
+ *
+ *   media-url    -> setiap URL video bertanda tangan yang beredar jadi tidak
+ *                   sah; pembeli menerima 403 atas video yang sudah dibayar.
+ *   otp-hash     -> setiap kode OTP yang sedang berjalan gagal diverifikasi.
+ *   kredensial   -> kredensial partner yang tersimpan TIDAK BISA DIDEKRIPSI
+ *                   lagi. Kunci Anthropic, BytePlus, kie.ai, dan Duitku hilang
+ *                   dari sistem sekaligus.
+ *
+ * Merek platform berpindah ke AIUGC.ID pada 5 Sep 2026; nama di sini
+ * DIBIARKAN dengan sengaja. Rotasi kunci yang sesungguhnya dilakukan dengan
+ * menaikkan versinya (v1 -> v2) berikut jalur migrasi datanya — bukan dengan
+ * mengganti namanya.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
 /** Kunci HMAC untuk URL media bertanda tangan (lib/signed-url.ts). */
 export function mediaUrlKey(): Buffer {
   return cached("bikinfyp/media-url/v1");

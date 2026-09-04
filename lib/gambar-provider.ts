@@ -82,6 +82,10 @@ function kunci(): Buffer {
       "sha256",
       Buffer.from(process.env.AUTH_SECRET || "dev-secret-racun-ai-jangan-dipakai-produksi", "utf8"),
       Buffer.alloc(0),
+      // NAMA INI BUKAN LABEL — ia bahan penurun kunci HKDF. Menggantinya saat
+      // mengganti merek membuat setiap URL gambar yang sudah diterbitkan tidak
+      // sah, dan kie.ai gagal mengunduh acuan di tengah render yang sudah
+      // dibayar. Lihat catatan lengkap di lib/secrets.ts.
       Buffer.from("bikinfyp/gambar-provider/v1", "utf8"),
       32,
     ),

@@ -474,7 +474,7 @@ export default function PromoPage() {
           </WarnCard>
           <a
             href={videoUrl}
-            download="bikinfyp-promosi.mp4"
+            download="aiugc-promosi.mp4"
             className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-lg font-bold text-white shadow-md shadow-amber-500/20 active:from-amber-500 active:to-amber-600"
           >
             Unduh Videonya
