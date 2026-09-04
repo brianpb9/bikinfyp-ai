@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { wajibAdmin } from "@/lib/admin-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { daftarKredensial, redirectUriGoogle } from "@/lib/kredensial";
+import { daftarKredensial, redirectUriGoogleTerdaftar } from "@/lib/kredensial";
 import type { BarisTampilan } from "@/lib/kredensial-tipe";
 import { FormKredensial } from "./FormKredensial";
 
@@ -73,10 +73,13 @@ export default async function HalamanKredensial() {
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-600">
                 <p>
                   <b>Google Cloud Console → Credentials → OAuth client → Authorized redirect URIs</b> wajib
-                  memuat alamat ini <b>persis</b>, tanpa <code>www</code> dan tanpa garis miring di akhir:
+                  memuat <b>setiap</b> alamat di bawah ini <b>persis</b>, tanpa garis miring di akhir. Satu baris =
+                    satu entri. Semuanya wajib ada: redirect_uri mengikuti domain yang sedang dibuka
+                    pengunjung, jadi domain yang alamatnya belum didaftarkan tidak bisa dipakai login Google.
                 </p>
-                <p className="mt-1.5 select-all break-all rounded-lg border border-zinc-300 bg-white p-2 font-mono text-[11px] text-zinc-900">
-                  {redirectUriGoogle() || "APP_BASE_URL belum diisi di server — alamatnya belum bisa dipastikan."}
+                <p className="mt-1.5 select-all whitespace-pre-line break-all rounded-lg border border-zinc-300 bg-white p-2 font-mono text-[11px] text-zinc-900">
+                  {redirectUriGoogleTerdaftar().join("\n") ||
+                    "APP_BASE_URL belum diisi di server — alamatnya belum bisa dipastikan."}
                 </p>
                 <p className="mt-1.5">
                   Beda satu karakter pun ditolak Google dengan <code>Error 400: redirect_uri_mismatch</code>,

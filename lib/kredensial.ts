@@ -42,6 +42,7 @@ import { config } from "./config";
 import { kredensialKey } from "./secrets";
 import { getPool } from "./postgres/pool";
 import type { BarisTampilan, KelompokKredensial } from "./kredensial-tipe";
+import { asalDiizinkan } from "@/lib/asal-oauth";
 
 export type { BarisTampilan, KelompokKredensial } from "./kredensial-tipe";
 
@@ -254,24 +255,29 @@ export function statusKredensial() {
 }
 
 /**
- * Redirect URI yang HARUS terdaftar di Google Cloud Console, apa adanya.
+ * SEMUA redirect URI yang harus terdaftar di Google Cloud Console, apa adanya.
  *
  * Ada di sini karena redirect_uri_mismatch adalah kegagalan yang paling mudah
  * dibuat dan paling sulit didiagnosis: Google menolak SEBELUM callback kita
  * tersentuh, jadi tidak ada satu pun log di sisi kita yang menunjukkan
  * penyebabnya. Operator lalu menebak-nebak — dengan atau tanpa www, dengan
- * atau tanpa garis miring — sementara nilai yang benar sebenarnya sudah pasti
- * dan bisa dibaca dari APP_BASE_URL.
+ * atau tanpa garis miring.
+ *
+ * JAMAK, bukan tunggal. redirect_uri mengikuti domain yang sedang dibuka
+ * pengunjung (lihat lib/asal-oauth.ts), jadi selama satu sistem melayani lebih
+ * dari satu domain, SETIAP domain punya URI-nya sendiri dan semuanya harus
+ * terdaftar. Menampilkan satu saja persis mengulang kegagalan 5 Sep 2026:
+ * APP_BASE_URL pindah ke aiugc.id, halaman ini menampilkan satu alamat baru,
+ * dan login Google mati di dua domain sekaligus.
  *
  * Ditampilkan di halaman kredensial supaya jadi tempelan yang disalin, bukan
  * tebakan.
  */
-export function redirectUriGoogle(): string {
-  const base = config.appBaseUrl.replace(/\/+$/, "");
-  // APP_BASE_URL kosong -> kembalikan kosong, JANGAN path relatif.
-  // "/api/auth/google/callback" terlihat masuk akal dan akan disalin operator
-  // ke Google Console, lalu ditolak dengan galat yang sama sekali tidak
-  // menunjuk ke penyebabnya. Kosong memaksa halaman mengatakan apa adanya.
-  if (!base) return "";
-  return `${base}/api/auth/google/callback`;
+export function redirectUriGoogleTerdaftar(): string[] {
+  // Sumbernya SATU dengan yang dipakai rute — bukan rumus kembar yang bisa
+  // menyimpang diam-diam. APP_BASE_URL kosong -> daftar kosong, JANGAN path
+  // relatif: "/api/auth/google/callback" terlihat masuk akal, akan disalin
+  // operator ke Google Console, lalu ditolak dengan galat yang tidak menunjuk
+  // ke penyebabnya. Kosong memaksa halaman mengatakan apa adanya.
+  return asalDiizinkan().map((asal) => `${asal}/api/auth/google/callback`);
 }

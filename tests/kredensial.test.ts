@@ -143,30 +143,36 @@ test("redirect URI Google diturunkan dari APP_BASE_URL, bukan diketik", () => {
   const pasang = (v: string) => { (config as unknown as Record<string, string>).appBaseUrl = v; };
 
   pasang("https://bikinfyp.com");
-  assert.equal(K.redirectUriGoogle(), "https://bikinfyp.com/api/auth/google/callback");
+  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://bikinfyp.com/api/auth/google/callback"]);
 
   // Garis miring berlebih tidak boleh bocor jadi "//callback".
   pasang("https://bikinfyp.com/");
-  assert.equal(K.redirectUriGoogle(), "https://bikinfyp.com/api/auth/google/callback");
+  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://bikinfyp.com/api/auth/google/callback"]);
 
   // KOSONG HARUS KOSONG, bukan path relatif. "/api/auth/google/callback"
   // terlihat masuk akal dan akan disalin operator ke Google Console, lalu
   // ditolak dengan galat yang tidak menunjuk penyebabnya sama sekali.
   pasang("");
-  assert.equal(K.redirectUriGoogle(), "", "APP_BASE_URL kosong menghasilkan alamat yang menyesatkan");
+  assert.deepEqual(K.redirectUriGoogleTerdaftar(), [], "APP_BASE_URL kosong menghasilkan alamat yang menyesatkan");
 
   pasang(semula);
 
   // Dan nilainya benar-benar ditampilkan di halaman kredensial, bukan cuma ada.
-  assert.match(baca("app/admin/kredensial/page.tsx"), /redirectUriGoogle\(\)/, "halaman tidak menampilkan alamatnya");
+  assert.match(baca("app/admin/kredensial/page.tsx"), /redirectUriGoogleTerdaftar\(\)/, "halaman tidak menampilkan alamatnya");
 });
 
 test("yang dikirim ke Google SAMA dengan yang ditampilkan ke operator", () => {
   // Kalau rute memakai rumus berbeda dari yang dipamerkan halaman admin,
   // operator akan memasang alamat yang benar untuk halaman tapi salah untuk
   // Google — dan tetap ditolak.
-  const rute = baca("app/api/auth/google/route.ts");
-  assert.match(rute, /\$\{config\.appBaseUrl\}\/api\/auth\/google\/callback/);
-  const cb = baca("app/api/auth/google/callback/route.ts");
-  assert.match(cb, /\$\{config\.appBaseUrl\}\/api\/auth\/google\/callback/);
+  // Dijaga lewat SUMBER yang sama, bukan lewat dua rumus kembar: kedua rute dan
+  // halaman admin sama-sama berpangkal pada asalDiizinkan(). Rumus kembar itulah
+  // yang membuat login Google mati 5 Sep 2026 — APP_BASE_URL pindah, rute ikut,
+  // dan daftar di Google Console tidak.
+  for (const f of ["app/api/auth/google/route.ts", "app/api/auth/google/callback/route.ts"]) {
+    const isi = baca(f);
+    assert.match(isi, /redirectUriGoogle\(req\)/, `${f} tidak memakai helper bersama`);
+    assert.doesNotMatch(isi, /\$\{config\.appBaseUrl\}\/api\/auth\/google\/callback/, `${f} kembali memakai rumus sendiri`);
+  }
+  assert.match(baca("lib/kredensial.ts"), /asalDiizinkan\(\)/, "halaman admin tidak berpangkal pada daftar yang sama");
 });

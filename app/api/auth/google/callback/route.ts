@@ -5,6 +5,7 @@ import { audit } from "@/lib/db";
 import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieSesi, cookieHapus } from "@/lib/cookies";
+import { redirectUriGoogle } from "@/lib/asal-oauth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,7 +48,8 @@ export async function GET(req: Request) {
     if (!expectedState || expectedState !== state) return loginFailedRedirect("state_mismatch", req);
 
     if (!config.googleOauthClientId || !config.googleOauthClientSecret) return loginFailedRedirect("not_configured", req);
-    const redirectUri = `${config.appBaseUrl}/api/auth/google/callback`;
+    // HARUS sama persis dengan yang dikirim di jalur berangkat — satu helper untuk dua tempat.
+    const redirectUri = redirectUriGoogle(req);
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
       method: "POST",

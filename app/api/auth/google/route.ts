@@ -4,6 +4,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieState } from "@/lib/cookies";
 import { tujuanAman } from "@/lib/tujuan-login";
+import { redirectUriGoogle } from "@/lib/asal-oauth";
 
 import { pastikanSegar } from "@/lib/kredensial";
 export const runtime = "nodejs";
@@ -34,7 +35,8 @@ export async function GET(req: Request) {
     if (!config.appBaseUrl) return kembaliDenganGalat("not_configured");
 
     const state = crypto.randomBytes(24).toString("base64url");
-    const redirectUri = `${config.appBaseUrl}/api/auth/google/callback`;
+    // Ikut domain yang sedang dibuka pengunjung, bukan APP_BASE_URL. Lihat lib/asal-oauth.ts.
+    const redirectUri = redirectUriGoogle(req);
     const authUrl = new URL("https://accounts.google.com/o/oauth2/v2/auth");
     authUrl.searchParams.set("client_id", config.googleOauthClientId);
     authUrl.searchParams.set("redirect_uri", redirectUri);
