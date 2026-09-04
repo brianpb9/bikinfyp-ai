@@ -19,6 +19,7 @@ import { planShots } from "../media/shot-planner";
 import { ringkasParams, ringkasSpec } from "../arsip-prompt";
 import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
+import { acuanTegak } from "../media/acuan-tegak";
 import { kunciCastRef } from "../media/cast-ref";
 import { periksaPromptAkhir, ringkasTemuanPrompt } from "../media/gerbang-prompt";
 import { bolehJadiReferensi } from "../media/qc-frame";
@@ -134,6 +135,24 @@ export function bolehFrameTurunan(input: {
 
 /** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
  *  frame pertama buatan. Shot lain dibiarkan memakai foto produk asli. */
+/**
+ * Pastikan SETIAP acuan yang dikirim ke mesin sudah tegak 9:16.
+ *
+ * Dijalankan SESUDAH frame buatan disiapkan, jadi ia menangkap dua-duanya:
+ * frame buatan (yang memang sudah tegak, dan dilewati tanpa diproses) dan foto
+ * produk asli yang dipakai shot di luar jatah frame — yang justru jalur yang
+ * menghasilkan video persegi pada job be16d8f3.
+ *
+ * Ditaruh di sini, bukan di dalam provider, supaya kedua mesin mendapat
+ * perlakuan yang sama tanpa masing-masing perlu mengingatnya.
+ */
+async function tegakkanAcuan(spec: VisualSpec, workDir: string): Promise<VisualSpec> {
+  const shots = await Promise.all(
+    spec.shots.map(async (sh) => ({ ...sh, imageRefPath: await acuanTegak(sh.imageRefPath, `${workDir}/acuan`) })),
+  );
+  return { ...spec, shots };
+}
+
 async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
   // Jatahnya dibatasi MARGIN, bukan kebutuhan: frame ~Rp600 sedangkan margin
   // tier bersuara cuma Rp3.198. Yang dapat jatah lebih dulu adalah shot yang
@@ -222,7 +241,7 @@ async function siapkanFrameTurunan(
     if (paket.biayaIdr > 0) console.log(`[castref] job ${jobId}: paket "${identitas.kunci}" dibuat (Rp${paket.biayaIdr})`);
   } catch (err) {
     console.error(`[castref] job ${jobId}: paket gagal dibuat, pakai jalur frame lama —`, err instanceof Error ? err.message : err);
-    return { spec: await siapkanFramePertama(spec, workDir, jobId), qcF1, biayaIdr: biaya };
+    return { spec: await tegakkanAcuan(await siapkanFramePertama(spec, workDir, jobId), workDir), qcF1, biayaIdr: biaya };
   }
 
   // BERURUTAN, bukan Promise.all. Tiap frame bisa memicu sampai tiga panggilan
@@ -538,7 +557,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qcF1 = turunan.qcF1;
     if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
   } else {
-    specSiap = await siapkanFramePertama(spec, workDir, row.id);
+    specSiap = await tegakkanAcuan(await siapkanFramePertama(spec, workDir, row.id), workDir);
   }
   // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
   // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih

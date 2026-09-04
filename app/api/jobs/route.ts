@@ -181,6 +181,39 @@ export async function POST(req: Request) {
     // — ia jadi keterangan nilai, bukan alat bayar.
     const jenis = jenisUntukTier(tier);
 
+    // ── FOTO PRODUK DIPERIKSA SEBELUM JATAH TERPOTONG ───────────────────────
+    //
+    // Job be16d8f3 (4 Sep 2026) memakai banner promosi 320x320 sebagai foto
+    // produk. Model menyalin tulisan bannernya jadi bayangan di sepanjang
+    // video, dan videonya keluar persegi karena mesin mengikuti rasio acuan.
+    // Rp13.500 keluar untuk tiga percobaan yang semuanya ditolak QC.
+    //
+    // Sampai hari itu tidak ada satu pun pemeriksaan foto di seluruh alur.
+    // Ditaruh DI SINI, tepat sebelum smokeCreateJob memotong jatah kredit di
+    // dalam transaksinya: memeriksanya sesudah itu berarti mengembalikan
+    // kredit untuk sesuatu yang sudah bisa kita tolak lebih dulu.
+    const fotoUtama = (() => {
+      try {
+        const daftar = JSON.parse(product.images ?? "[]") as string[];
+        return daftar[0] ?? null;
+      } catch { return null; }
+    })();
+    if (fotoUtama) {
+      const { materialize } = await import("@/lib/storage").then((m) => ({ materialize: m.mediaStorage().materialize }));
+      const lokal = await materialize(fotoUtama).catch(() => null);
+      if (lokal) {
+        const { periksaFotoProduk } = await import("@/lib/media/foto-produk");
+        const periksa = await periksaFotoProduk(lokal);
+        if (periksa.ditolak) {
+          throw ERR.BAD_REQUEST(
+            periksa.alasanTolak ?? "Foto produknya belum bisa dipakai.",
+            `Product photo rejected: ${periksa.lebar}x${periksa.tinggi}`,
+          );
+        }
+        for (const p of periksa.peringatan) console.warn(`[foto-produk] ${product.id}: ${p}`);
+      }
+    }
+
     // Checkpoint 1E only: compose the parity-tested PG repositories behind
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.

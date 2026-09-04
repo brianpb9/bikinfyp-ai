@@ -2,6 +2,7 @@
 // bila approved_by_user_at IS NULL — ditegakkan di API, bukan hanya UI.
 
 import { test } from "node:test";
+import sharp from "sharp";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
@@ -19,15 +20,22 @@ const db = getDb();
 const user = findOrCreateUserByPhone("087777000111"); // bonus 1 kredit
 const token = await issueToken(user.id, user.phone ?? "");
 
-// Produk dengan 1 foto dummy (PNG 1x1 valid)
+// Produk dengan 1 foto dummy.
+//
+// DIPERBESAR 4 Sep 2026 dari PNG 1x1 menjadi 800x800. Sejak rute job memeriksa
+// kelayakan foto sebelum memotong jatah kredit, foto 1 piksel DITOLAK — dan
+// itu benar: job be16d8f3 memakai banner 320x320 dan menghasilkan video
+// persegi bertuliskan bayangan promo, seharga Rp13.500 untuk tiga percobaan
+// yang semuanya gagal.
+//
+// Yang perlu diperbaiki fixture-nya, bukan gerbangnya: PNG 1x1 tidak pernah
+// mewakili foto produk yang sungguhan.
 const productId = uuid();
 const storageDir = process.env.STORAGE_DIR!;
 fs.mkdirSync(path.join(storageDir, "uploads", productId), { recursive: true });
-const png1x1 = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
-  "base64"
-);
-fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png"), png1x1);
+await sharp({ create: { width: 800, height: 800, channels: 3, background: { r: 210, g: 210, b: 215 } } })
+  .png()
+  .toFile(path.join(storageDir, "uploads", productId, "0.png"));
 db.prepare(
   "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
 ).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify([`uploads/${productId}/0.png`]), null, now());
