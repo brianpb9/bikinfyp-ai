@@ -37,7 +37,7 @@
 
 import { KUALITAS, type Kualitas, type Mesin } from "./kualitas-video";
 import { config } from "./config";
-import { modelDikenal } from "./katalog-model";
+import { DETIK_PRODUKSI, modelDikenal } from "./katalog-model";
 
 export interface BarisPemetaan {
   kualitas: Kualitas;
@@ -105,6 +105,13 @@ export function periksaPemetaan(input: { kualitas: string; mesin: string; model:
   }
   if (dikenal.mesin !== input.mesin) {
     return `Model "${model}" milik mesin ${dikenal.mesin}, bukan ${input.mesin}.`;
+  }
+  // DURASI. Model yang tidak sanggup 15 detik akan menolak SETIAP job kita —
+  // dengan HTTP 400 di ujung render, sesudah naskah ditulis, gambar disiapkan,
+  // dan jatah kredit pembeli terpotong. Diukur 4 Sep 2026: keluarga Seedance
+  // 1.0 menerima 3-12 detik dan menolak 13/14/15.
+  if (dikenal.maksDetik < DETIK_PRODUKSI) {
+    return `Model "${model}" hanya menerima klip sampai ${dikenal.maksDetik} detik, sedangkan video kita ${DETIK_PRODUKSI} detik. Setiap job akan ditolak di render.`;
   }
   return null;
 }

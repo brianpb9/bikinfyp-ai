@@ -16,6 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { KUALITAS } from "../lib/kualitas-video";
 import { mesinBerlaku, modelBerlaku, periksaPemetaan, setPemetaanUntukUji } from "../lib/pemetaan-model";
+import { modelDikenal } from "../lib/katalog-model";
 
 const baca = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
 
@@ -51,7 +52,7 @@ test("bentuk model diperiksa terhadap mesinnya — ditolak SEBELUM render", () =
     "model kie.ai diterima untuk mesin BytePlus",
   );
   assert.match(
-    periksaPemetaan({ kualitas: "standard", mesin: "kie-grok", model: "seedance-1-0-pro-250528" }) ?? "",
+    periksaPemetaan({ kualitas: "standard", mesin: "kie-grok", model: "dreamina-seedance-2-5-260628" }) ?? "",
     /milik mesin byteplus/,
     "model BytePlus diterima untuk mesin kie.ai",
   );
@@ -59,7 +60,7 @@ test("bentuk model diperiksa terhadap mesinnya — ditolak SEBELUM render", () =
   assert.ok(periksaPemetaan({ kualitas: "tidak-ada", mesin: "byteplus", model: "seedance-x" }), "paket asing harus ditolak");
   assert.ok(periksaPemetaan({ kualitas: "premium", mesin: "mesin-karangan", model: "seedance-x" }), "mesin asing harus ditolak");
   // Yang SAH lolos — gerbang tidak boleh asal ketat.
-  assert.equal(periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: "seedance-1-0-pro-250528" }), null);
+  assert.equal(periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: "dreamina-seedance-2-0-mini-260615" }), null);
   assert.equal(periksaPemetaan({ kualitas: "standard", mesin: "kie-grok", model: "grok-imagine/image-to-video" }), null);
 });
 
@@ -132,14 +133,38 @@ test("model di luar katalog DITOLAK, dengan alasan yang menyebut biayanya", asyn
   assert.match(alasan ?? "", /tarif|biaya/i, "alasannya tidak menjelaskan kenapa berbahaya");
 });
 
-test("model kedua yang Brian aktifkan bisa dipilih untuk BytePlus", async () => {
-  const { modelDikenal } = await import("../lib/katalog-model");
+test("Seedance 1.0 ADA di katalog tapi DITOLAK — 12 detik, video kita 15", () => {
+  // ────────────────────────────────────────────────────────────────────────
+  // DIUKUR 4 Sep 2026, dengan menembak API-nya
+  // ────────────────────────────────────────────────────────────────────────
+  // Brian mengaktifkan seedance-1-0-pro-fast dan seedance-1-0-pro, lalu minta
+  // keduanya dipetakan ke paket. Keduanya hidup (HTTP 200) — tapi durasi 3-12
+  // detik diterima dan 13, 14, 15 DITOLAK. Video produksi kita 15 detik satu
+  // klip.
+  //
+  // Tanpa pagar ini, memetakannya berarti SETIAP job gagal dengan HTTP 400 di
+  // ujung render — sesudah naskah ditulis, gambar disiapkan, dan jatah kredit
+  // pembeli terpotong. Kegagalan yang bisa ditolak di layar admin dalam satu
+  // detik akan berubah jadi kegagalan yang dibayar berkali-kali.
+  //
+  // Keduanya TETAP di katalog: begitu pipeline sanggup merakit klip pendek,
+  // batas ini tinggal dinaikkan — dan sampai saat itu, alasan tolaknya
+  // menjelaskan apa yang harus berubah.
   for (const id of ["seedance-1-0-pro-fast-251015", "seedance-1-0-pro-250528"]) {
     const m = modelDikenal(id);
     assert.ok(m, `${id} tidak ada di katalog`);
-    assert.equal(m?.mesin, "byteplus");
+    assert.equal(m?.maksDetik, 12, `${id}: batas durasinya bukan 12`);
+    const alasan = periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: id });
+    assert.ok(alasan, `${id} diterima padahal cuma sanggup 12 detik`);
+    assert.match(alasan ?? "", /12 detik.*15 detik|ditolak di render/, `alasan tolak tidak menjelaskan: ${alasan}`);
+  }
+});
+
+test("model yang sanggup 15 detik tetap diterima — pagar tidak boleh asal ketat", () => {
+  for (const id of ["dreamina-seedance-2-0-mini-260615", "dreamina-seedance-2-5-260628"]) {
     assert.equal(periksaPemetaan({ kualitas: "premium", mesin: "byteplus", model: id }), null, `${id} ditolak`);
   }
+  assert.equal(periksaPemetaan({ kualitas: "standard", mesin: "kie-grok", model: "grok-imagine/image-to-video" }), null);
 });
 
 test("tarif BROSUR tidak boleh menyamar sebagai angka pasti", async () => {

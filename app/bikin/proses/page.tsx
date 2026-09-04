@@ -7,11 +7,16 @@ import { ProgressDots, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow } from "../../_components/flow";
 import { track } from "../../_components/track";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
+import { hitungProgres, teksSisa } from "@/lib/estimasi-render";
 
 interface JobStatus {
   id: string;
   state: string;
   message: string;
+  /** Dipakai perkiraan waktu — durasi render berbeda jauh antar paket
+   *  (premium 352 dtk vs ultra 962 dtk, terukur di produksi). */
+  quality_tier?: string | null;
+  created_at?: string | null;
 }
 
 // Progress theater (adopsi 2026-08-06, riset teardown kompetitor): bahasa kru
@@ -49,12 +54,35 @@ function ProsesInner() {
   const [failed, setFailed] = useState(false);
   const [connectionIssue, setConnectionIssue] = useState(false);
   const [estimateText, setEstimateText] = useState(`Sekitar ${JANJI_WAKTU.sisaKlip} lagi`);
+  // Progres DISIMPAN supaya tidak pernah mundur. Bar yang turun membuat orang
+  // mengira ada yang gagal dan diulang dari awal.
+  const [rasio, setRasio] = useState(0);
+  const [detik, setDetik] = useState(0);
 
   useEffect(() => {
     apiFetch<{ estimate_text: string }>("/api/meta")
       .then((m) => setEstimateText(m.estimate_text))
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!job?.created_at) return;
+    const mulai = new Date(job.created_at).getTime();
+    const tik = () => setDetik(Math.max(0, Math.floor((Date.now() - mulai) / 1000)));
+    tik();
+    // Dari selisih jam, bukan penghitung yang menambah sendiri: tab yang
+    // dilatarbelakangkan membuat interval dilambatkan browser, dan angkanya
+    // akan meleset justru pada orang yang menunggu paling lama.
+    const t = setInterval(tik, 1000);
+    return () => clearInterval(t);
+  }, [job?.created_at]);
+
+  useEffect(() => {
+    if (!job) return;
+    const p = hitungProgres({ state: job.state, berjalanDetik: detik, tier: job.quality_tier, sebelumnya: rasio });
+    setRasio(p.rasio);
+    setEstimateText(teksSisa(p.sisaDetik));
+  }, [job, detik, rasio]);
 
   useEffect(() => {
     if (!jobId) return;
@@ -153,8 +181,28 @@ function ProsesInner() {
             </span>
             <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Proses aman</span>
           </div>
-          <div className="h-2.5 w-full overflow-hidden rounded-full bg-amber-100">
-            <div className="h-full w-1/2 animate-pulse rounded-full bg-amber-500" />
+          {/* BAR SUNGGUHAN.
+              Sebelumnya `w-1/2 animate-pulse`: setengah penuh, berkedip, dan
+              tidak pernah bergerak. Pada render Ultra yang memakan 16 menit,
+              bar yang diam di tengah selama seperempat jam lebih buruk
+              daripada tidak ada bar — ia menyiratkan sesuatu macet.
+              Lihat lib/estimasi-render.ts untuk angka dan aturannya. */}
+          <div
+            className="h-2.5 w-full overflow-hidden rounded-full bg-amber-100"
+            role="progressbar"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(rasio * 100)}
+            aria-label="Kemajuan pembuatan video"
+          >
+            <div
+              className="h-full rounded-full bg-amber-500 transition-[width] duration-1000 ease-out"
+              style={{ width: `${Math.max(2, Math.round(rasio * 100))}%` }}
+            />
+          </div>
+          <div className="mt-2 flex items-baseline justify-between text-xs text-zinc-500">
+            <span>{Math.round(rasio * 100)}%</span>
+            <span>Berjalan {detik < 60 ? `${detik} detik` : `${Math.floor(detik / 60)}:${String(detik % 60).padStart(2, "0")}`}</span>
           </div>
         </div>
         <ul className="space-y-1 rounded-3xl border border-zinc-100 bg-white p-3 shadow-sm">

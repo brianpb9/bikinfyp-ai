@@ -39,11 +39,25 @@ export interface ModelKatalog {
   tarif: "terukur" | "brosur";
   /** Satu kalimat: untuk apa model ini masuk akal. */
   catatan: string;
+  /**
+   * Durasi klip terpanjang yang diterima model, dalam detik.
+   *
+   * DIUKUR dengan menembak API-nya, bukan dibaca dari dokumentasi: 4 Sep 2026
+   * keluarga Seedance 1.0 menerima 3-12 detik dan MENOLAK 13, 14, dan 15.
+   * Video produksi kita 15 detik satu klip, jadi batas ini menentukan apakah
+   * sebuah model bisa dipakai sama sekali — dan kalau tidak dijaga, job akan
+   * gagal DI RENDER, sesudah naskah ditulis dan gambar disiapkan.
+   */
+  maksDetik: number;
 }
+
+/** Durasi video produksi kita. Model yang tidak sanggup segini tidak bisa dipetakan. */
+export const DETIK_PRODUKSI = 15;
 
 export const KATALOG_MODEL: ModelKatalog[] = [
   {
     id: "grok-imagine/image-to-video",
+    maksDetik: 15,  // batas keras Grok Imagine (MAKS_DETIK_PER_KLIP)
     label: "Grok Imagine (kie.ai)",
     mesin: "kie-grok",
     tarif: "terukur",
@@ -51,6 +65,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
   },
   {
     id: "dreamina-seedance-2-0-mini-260615",
+    maksDetik: 30,
     label: "Seedance 2.0 mini",
     mesin: "byteplus",
     tarif: "terukur",
@@ -58,6 +73,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
   },
   {
     id: "dreamina-seedance-2-5-260628",
+    maksDetik: 30,
     label: "Seedance 2.5",
     mesin: "byteplus",
     tarif: "terukur",
@@ -65,6 +81,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
   },
   {
     id: "dreamina-seedance-2-0-260128",
+    maksDetik: 30,
     label: "Seedance 2.0",
     mesin: "byteplus",
     tarif: "terukur",
@@ -73,6 +90,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
   {
     // Diaktifkan Brian 4 Sep 2026, diverifikasi hidup (HTTP 200).
     id: "seedance-1-0-pro-fast-251015",
+    maksDetik: 12,  // DIUKUR 4 Sep 2026: 3-12 diterima, 13/14/15 ditolak
     label: "Seedance 1.0 pro fast",
     mesin: "byteplus",
     tarif: "brosur",
@@ -81,6 +99,7 @@ export const KATALOG_MODEL: ModelKatalog[] = [
   {
     // Diaktifkan Brian 4 Sep 2026, diverifikasi hidup (HTTP 200).
     id: "seedance-1-0-pro-250528",
+    maksDetik: 12,  // DIUKUR 4 Sep 2026: 13/14/15 ditolak
     label: "Seedance 1.0 pro",
     mesin: "byteplus",
     tarif: "brosur",
