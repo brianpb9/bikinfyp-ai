@@ -77,14 +77,27 @@ export function perkiraanDetik(tier?: string | null): number {
   return PERKIRAAN_DETIK[tier ?? ""] ?? PERKIRAAN_BAWAAN;
 }
 
-/** Bobot kumulatif SEBELUM sebuah tahap dimulai. */
-function bobotSebelum(state: string): number {
+/**
+ * Bobot kumulatif SEBELUM sebuah tahap dimulai — null kalau state-nya bukan
+ * tahap render.
+ *
+ * null-nya PENTING. Versi pertama mengembalikan jumlah SELURUH bobot (1,0)
+ * untuk state yang tidak dikenal, dan itu berarti setiap state di luar daftar
+ * tampil sebagai 97% — batas atas bar. Yang kena bukan state khayalan:
+ * DRAFT, AWAITING_APPROVAL, FAILED, dan REFUNDED semuanya sah menurut
+ * JOB_STATES dan tidak satu pun ada di TAHAP_RENDER.
+ *
+ * Akibatnya persis kebalikan dari janji berkas ini: job yang MENUNGGU
+ * PERSETUJUAN pemiliknya menampilkan bar nyaris penuh, dan job yang GAGAL juga.
+ * Ditemukan lewat smoke test 5 Sep 2026, bukan oleh pengguna.
+ */
+function bobotSebelum(state: string): number | null {
   let total = 0;
   for (const t of TAHAP_RENDER) {
     if (t.state === state) return total;
     total += t.bobot;
   }
-  return total;
+  return null;
 }
 
 function bobotTahap(state: string): number {
@@ -126,7 +139,36 @@ export function hitungProgres(input: {
 
   if (input.state === "READY") return { rasio: 1, sisaDetik: 0, kelewat: false, label: "Selesai" };
 
-  const lantai = bobotSebelum(input.state);
+  // Berhenti bukan progres. Bar dibekukan di posisi terakhir yang sudah dilihat
+  // pengguna — bukan dinaikkan, bukan direset ke nol yang membuatnya seolah
+  // mengulang dari awal.
+  if (input.state === "FAILED" || input.state === "REFUNDED") {
+    return { rasio: input.sebelumnya ?? 0, sisaDetik: null, kelewat: false, label: "Berhenti" };
+  }
+  // Bola ada di tangan pengguna, dan hitungan mundur tidak berlaku: yang
+  // ditunggu bukan mesin. Duduk di batas sesudah syuting selesai.
+  if (input.state === "AWAITING_APPROVAL") {
+    const batas = bobotSebelum("GENERATING_VOICE") ?? 0;
+    return {
+      rasio: Math.max(input.sebelumnya ?? 0, batas),
+      sisaDetik: null,
+      kelewat: false,
+      label: "Menunggu persetujuanmu",
+    };
+  }
+
+  const lantaiMungkin = bobotSebelum(input.state);
+  // Belum masuk antrean, atau state yang belum dikenal versi ini: nol, BUKAN
+  // penuh. Menebak ke atas berbohong; menebak ke bawah hanya kurang informatif.
+  if (lantaiMungkin === null) {
+    return {
+      rasio: input.sebelumnya ?? 0,
+      sisaDetik: null,
+      kelewat: false,
+      label: input.state === "DRAFT" ? "Menyiapkan studio" : label,
+    };
+  }
+  const lantai = lantaiMungkin;
   const langit = lantai + bobotTahap(input.state);
 
   // Di dalam tahap: seberapa jauh waktu berjalan dibanding jatah tahap ini.

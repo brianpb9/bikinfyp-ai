@@ -19,6 +19,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { hitungProgres, perkiraanDetik, teksSisa, TAHAP_RENDER } from "../lib/estimasi-render";
+import { JOB_STATES } from "../lib/jobs";
 
 test("bobot tahap berjumlah 1 — kalau tidak, bar tidak pernah sampai ujung", () => {
   const total = TAHAP_RENDER.reduce((a, t) => a + t.bobot, 0);
@@ -94,4 +95,58 @@ test("halaman proses benar-benar memakai bar ini, bukan bar palsu lama", () => {
   // Waktu dari created_at job, bukan dari saat halaman dibuka: pembeli boleh
   // menutup dan membuka lagi, dan angkanya harus tetap benar.
   assert.match(hal, /new Date\(job\.created_at\)\.getTime\(\)/, "waktu berjalan dihitung dari halaman dibuka");
+});
+
+// ── State di luar TAHAP_RENDER ──────────────────────────────────────────────
+// Ditemukan lewat smoke test produksi 5 Sep 2026: bobotSebelum() mengembalikan
+// jumlah SELURUH bobot untuk state tak dikenal, sehingga setiap state di luar
+// daftar tampil 97%. Yang kena state SAH, bukan khayalan.
+
+test("state sah di luar tahap render TIDAK menampilkan bar hampir penuh", () => {
+  const diluar = JOB_STATES.filter(
+    (s) => s !== "READY" && !TAHAP_RENDER.some((t) => t.state === s),
+  );
+  assert.ok(diluar.length > 0, "uji ini kehilangan maknanya kalau semua state ada di TAHAP_RENDER");
+  for (const state of diluar) {
+    const p = hitungProgres({ state, berjalanDetik: 60, tier: "premium" });
+    assert.ok(
+      p.rasio <= 0.75,
+      `state ${state} menampilkan ${Math.round(p.rasio * 100)}% — bar hampir penuh untuk sesuatu yang belum/tidak dirender`,
+    );
+  }
+});
+
+test("job yang gagal membekukan bar, bukan menaikkannya", () => {
+  for (const state of ["FAILED", "REFUNDED"] as const) {
+    const p = hitungProgres({ state, berjalanDetik: 900, tier: "premium", sebelumnya: 0.42 });
+    assert.equal(p.rasio, 0.42, `${state} seharusnya membeku di posisi terakhir`);
+    assert.equal(p.sisaDetik, null, `${state} tidak boleh menjanjikan sisa waktu`);
+    assert.equal(p.label, "Berhenti");
+  }
+});
+
+test("menunggu persetujuan: hitungan mundur mati, sebab yang ditunggu bukan mesin", () => {
+  const p = hitungProgres({ state: "AWAITING_APPROVAL", berjalanDetik: 60, tier: "premium" });
+  assert.equal(p.sisaDetik, null);
+  assert.equal(p.label, "Menunggu persetujuanmu");
+  // Duduk sesudah syuting (0,04 antre + 0,7 syuting), bukan di 0,97.
+  assert.ok(Math.abs(p.rasio - 0.74) < 0.001, `rasio ${p.rasio} bukan batas sesudah syuting`);
+});
+
+test("DRAFT belum mulai: nol, bukan penuh", () => {
+  const p = hitungProgres({ state: "DRAFT", berjalanDetik: 5, tier: "premium" });
+  assert.equal(p.rasio, 0);
+  assert.equal(p.label, "Menyiapkan studio");
+});
+
+test("state yang belum dikenal versi ini menebak ke BAWAH", () => {
+  const p = hitungProgres({ state: "TAHAP_MASA_DEPAN", berjalanDetik: 120, tier: "premium" });
+  assert.equal(p.rasio, 0, "menebak ke atas berbohong; ke bawah hanya kurang informatif");
+});
+
+test("tahap render yang normal tidak ikut berubah", () => {
+  const p = hitungProgres({ state: "GENERATING_VISUAL", berjalanDetik: 60, tier: "premium" });
+  assert.ok(p.rasio > 0.04 && p.rasio < 0.74, `rasio ${p.rasio} keluar dari tahap syuting`);
+  assert.equal(p.label, "Kreator AI syuting produkmu");
+  assert.ok(p.sisaDetik !== null && p.sisaDetik > 0);
 });
