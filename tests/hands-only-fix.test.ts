@@ -78,7 +78,7 @@ test("format lain (vo_broll): negative kategori tidak diubah", () => {
 
 test("kedua shot membawa instruksi konservasi identitas produk + deskripsi visual user", () => {
   const s = spec();
-  assert.ok(s.shots[0].prompt.includes("identical packaging"), s.shots[0].prompt);
+  assert.ok(s.shots[0].prompt.includes("identical shape, identical colours, identical label"), s.shots[0].prompt);
   assert.ok(s.shots[1].prompt.includes("the same product as in shot 1"), s.shots[1].prompt);
   assert.ok(s.shots[0].prompt.includes("botol dropper amber 30ml"), "deskripsi visual user harus masuk prompt");
 });

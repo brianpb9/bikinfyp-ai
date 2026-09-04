@@ -30,9 +30,21 @@ const LAPIS_BAHASA: { nama: string; pola: RegExp }[] = [
   { nama: "penutup 'no English speech'", pola: /no English speech/i },
 ];
 
-/** Kunci ukuran asli produk (§C.10). Dua bagian: skala + jarak kamera. */
+/**
+ * Kunci ukuran asli produk (§C.10). Dua bagian: skala + jarak kamera.
+ *
+ * FRASA SKALA DIGANTI 4 Sep 2026. Gerbang ini dulu MEWAJIBKAN "true small
+ * size" di setiap shot — jadi anggapan bahwa semua produk itu kecil bukan
+ * hanya ada di prompt, ia ditegakkan di sini. Pada job be16d8f3 speaker 18
+ * inci dinyatakan "seukuran telapak tangan", dan gerbangnya justru menuntut
+ * kalimat itu ada.
+ *
+ * Yang dijaga tetap sama dan itulah maksud aslinya: foto referensi tidak boleh
+ * ditempel jadi bidang depan raksasa. Skala NYATA menjaganya tanpa mengarang
+ * ukuran.
+ */
 const LAPIS_UKURAN: { nama: string; pola: RegExp }[] = [
-  { nama: "skala 'true small size'", pola: /true small size/i },
+  { nama: "skala 'true real-world size'", pola: /true real-world size/i },
   { nama: "jarak 'normal conversational distance'", pola: /normal conversational distance/i },
 ];
 

@@ -52,7 +52,7 @@ for (const format of ["ads", "talking_head", "hands_only"] as const) {
 
   test(`[${format}] prompt akhir mengunci ukuran ASLI produk (§C.10)`, () => {
     const prompt = spec(format).shots[0].prompt;
-    assert.match(prompt, /true small size/i, "kunci ukuran asli hilang — produk raksasa tidak dicegah");
+    assert.match(prompt, /true real-world size/i, "kunci ukuran asli hilang — produk raksasa tidak dicegah");
     assert.match(prompt, /normal conversational distance/i);
   });
 
@@ -79,7 +79,7 @@ for (const format of ["ads", "talking_head", "hands_only"] as const) {
 
 test("gerbang MENOLAK (keras) prompt tanpa kunci bahasa", () => {
   const temuan = periksaPromptAkhir({
-    shots: [{ index: 0, prompt: "A woman speaks to camera holding the product at its true small size, about the width of a hand, the camera keeps a normal conversational distance from it." }],
+    shots: [{ index: 0, prompt: "A woman speaks to camera holding the product at its true real-world size, about the width of a hand, the camera keeps a normal conversational distance from it." }],
     negativePrompt: "blurry",
     namaProduk: "Serum Glow Bening",
     format: "talking_head",
@@ -101,7 +101,7 @@ test("gerbang MENOLAK (keras) prompt tanpa kunci ukuran asli", () => {
 
 test("gerbang MENOLAK (keras) kosakata pemicu di prompt akhir — bukan lagi peringatan", () => {
   const temuan = periksaPromptAkhir({
-    shots: [{ index: 0, prompt: 'Every spoken word is Indonesian. She speaks Indonesian (Bahasa Indonesia). Indonesian dialogue: "halo". no English speech. Every product in frame is at its true small size, about the width of a hand, and the camera keeps a normal conversational distance from it. She steps into the shower holding a towel.' }],
+    shots: [{ index: 0, prompt: 'Every spoken word is Indonesian. She speaks Indonesian (Bahasa Indonesia). Indonesian dialogue: "halo". no English speech. Every product in frame is at its true real-world size, about the width of a hand, and the camera keeps a normal conversational distance from it. She steps into the shower holding a towel.' }],
     negativePrompt: "blurry",
     namaProduk: "Serum Glow Bening",
     format: "talking_head",
@@ -114,7 +114,7 @@ test("gerbang MENOLAK (keras) kosakata pemicu di prompt akhir — bukan lagi per
 
 test("gerbang tetap MENOLAK negasi tentang orang (perilaku lama dipertahankan)", () => {
   const temuan = periksaPromptAkhir({
-    shots: [{ index: 0, prompt: 'Every spoken word is Indonesian. She speaks Indonesian (Bahasa Indonesia). Indonesian dialogue: "halo". no English speech. true small size, about the width of a hand, normal conversational distance. no second person in frame.' }],
+    shots: [{ index: 0, prompt: 'Every spoken word is Indonesian. She speaks Indonesian (Bahasa Indonesia). Indonesian dialogue: "halo". no English speech. true real-world size, about the width of a hand, normal conversational distance. no second person in frame.' }],
     negativePrompt: "blurry",
     namaProduk: "Serum Glow Bening",
     format: "talking_head",

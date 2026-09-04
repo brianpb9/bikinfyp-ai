@@ -23,6 +23,8 @@
 // jumlah cut/rapid-cut atas nama "pacing" tanpa bukti baru dari model.
 
 import { config } from "../config";
+import { periksaPemicu } from "./pemicu-filter";
+import { tokenMerek } from "../script-engine/validator";
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import { latarUntukTemplate } from "./latar-template";
 import type { CreatorCategory } from "../personas";
@@ -132,7 +134,10 @@ const HANDS_ONLY_FRAMING =
  *  bukan daftar larangan. */
 const HANDS_ONLY_HAND_LOCK =
   "Exactly two hands are visible in the entire frame, and both belong to the same single person. " +
-  "The SAME hand that holds the bottle also operates it, keeping its grip the whole time. " +
+  // "the bottle" -> "the product" (4 Sep 2026): kunci ini dikirim untuk semua
+  // produk, dan menyebut botol pada speaker 18 inci adalah bentuk yang sama
+  // dengan cacat IDENTITY_INSTRUCTION.
+  "The SAME hand that holds the product also operates it, keeping its grip the whole time. " +
   "The second hand does only one thing: receive the product or show the result. " +
   "The frame stays at exactly two hands from the first frame to the last, at every edge. ";
 
@@ -296,18 +301,33 @@ const TALKING_HEAD_FRAMING =
 //
 // Versi sekarang tetap dipertahankan: ia tidak memperbaiki, tapi ia menghapus
 // permintaan yang mustahil dan melarang angka volume karangan.
+/**
+ * KOSAKATA SKINCARE DIBUANG 4 Sep 2026 — kalimat ini dikirim untuk SEMUA produk.
+ *
+ * Versi sebelumnya menyebut "one cap, one dropper", "the ENTIRE bottle" (dua
+ * kali), "invented ingredient names", dan "invented volume figures". Semuanya
+ * benar untuk botol serum, dan semuanya BOHONG untuk produk lain.
+ *
+ * Terlihat pada job be16d8f3: produknya speaker 18 inci, dan prompt ini
+ * memberi tahu model bahwa ada botol dengan tutup dan pipet. Model diminta
+ * menjaga keutuhan benda yang tidak ada, lalu menghasilkan bentuk yang morphing
+ * — QC-02 menolaknya tiga kali berturut-turut.
+ *
+ * Yang dijaga kalimat ini tetap sama: produk identik dengan foto, label tidak
+ * dikarang, dan seluruh benda tetap di dalam bingkai. Yang dibuang hanya
+ * anggapan tentang BENTUKNYA.
+ */
 const IDENTITY_INSTRUCTION =
-  "the exact same product from the reference image, identical packaging, identical label, " +
-  "do not redesign or replace the product, the packaging stays physically intact and correct " +
-  "(one cap, one dropper, nothing floating or duplicated). The ENTIRE bottle and its full label " +
-  "stay completely inside the frame at all times, with visible margin on every side — never cropped " +
-  "or cut off by the frame edges, camera framed wide enough that no part of the bottle ever leaves " +
+  "the exact same product from the reference image, identical shape, identical colours, identical " +
+  "label, do not redesign or replace the product, and it stays physically whole and correct with " +
+  "every part in its right place and nothing floating or duplicated. The ENTIRE product and its full " +
+  "label stay completely inside the frame at all times, with visible margin on every side — never " +
+  "cropped or cut off by the frame edges, camera framed wide enough that no part of it ever leaves " +
   "frame. The large bold brand name on the label stays sharp, steady and perfectly legible the whole " +
   "time, reproduced with the EXACT same letters and spelling as the reference image (do not alter, " +
-  "add, drop, or misspell any letter). The smaller lines printed below the brand name read as fine " +
-  "printed TEXTURE at this distance — visible as faint grey lines of print, with no individual " +
-  "letters or words resolved anywhere. Never render invented words, invented ingredient names, or " +
-  "invented volume figures on the label";
+  "add, drop, or misspell any letter). Any smaller printed lines read as fine printed TEXTURE at this " +
+  "distance — visible as faint grey lines of print, with no individual letters or words resolved " +
+  "anywhere. Never render invented words or invented figures anywhere on the product";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
 // referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian
@@ -509,10 +529,50 @@ const MIN_SHOT_SEC = 4;
  * negasi justru memanggil objeknya kembali.
  */
 function kunciUkuranAsli(namaProduk: string): string {
+  // "about the width of a hand" DIBUANG 4 Sep 2026.
+  //
+  // Maksud kalimat ini (lihat catatan di atas) adalah mencegah foto referensi
+  // ditempel jadi bidang depan raksasa. Maksud itu tidak menuntut kita
+  // mengarang UKURANNYA — dan mengarangnya salah untuk sebagian besar produk:
+  // pada job be16d8f3 model diberi tahu bahwa speaker 18 inci selebar telapak
+  // tangan.
+  //
+  // Yang dikatakan sekarang cukup untuk menjaga maksudnya, dan kebetulan benar
+  // untuk semua produk: ukurannya wajar terhadap orangnya, dan kameranya
+  // berjarak percakapan biasa.
   return (
-    `Every "${namaProduk}" in frame is at its true small size, about the width of a hand, ` +
-    `resting on a surface or held in her hand, and the camera keeps a normal conversational distance from it.`
+    `Every "${namaProduk}" in frame appears at its true real-world size relative to the person handling it, ` +
+    `resting on a surface or held naturally in her hands, and the camera keeps a normal conversational distance from it.`
   );
+}
+
+/**
+ * Minta model melafalkan MEREK-nya, tapi hanya kalau mereknya aman dikirim.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA BERSYARAT
+ * ────────────────────────────────────────────────────────────────────────────
+ * Kalimat lama menyuruh melafalkan `input.productName` UTUH — dan nama produk
+ * marketplace bisa 24 kata penuh kata kunci ("ADVANCE Portable K1812-C Speaker
+ * Profesional Party RMS 100W 18inch - GARANSI RESMI karokean paket Bluetooth
+ * Extra Bass ..."). Menyuruh model mengucapkan itu bukan permintaan yang masuk
+ * akal, dan pada job be16d8f3 potongannya bahkan terpotong di tengah kata.
+ *
+ * Menggantinya dengan tokenMerek() membuka bahaya lain yang langsung tertangkap
+ * tes: untuk "Sabun Mandi Harian" tokennya adalah "mandi" — kata pemicu
+ * penyaring penyedia. Nama produk UTUH aman karena tutupiNama() menyamarkannya
+ * sebelum diperiksa; token telanjang tidak ikut disamarkan.
+ *
+ * Jadi mereknya disebut hanya kalau ia lolos penyaring yang sama dengan yang
+ * dipakai memeriksa prompt. Kalau tidak, kalimatnya DIHILANGKAN — melafalkan
+ * merek itu penyempurnaan, sementara prompt yang ditolak penyedia adalah
+ * kegagalan yang dibayar.
+ */
+function klausaLafalMerek(namaProduk: string): string {
+  const merek = tokenMerek(namaProduk);
+  if (!merek) return "";
+  if (periksaPemicu(merek, {}).length > 0) return "";
+  return `Enunciate clearly the brand name "${merek}". `;
 }
 
 /**
@@ -1676,6 +1736,21 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: "${dialogue}". `
             : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: "${dialogue}". `
         : format === "hands_only"
+        // JEDA SATU DETIK DIBUANG 4 Sep 2026.
+        //
+        // Kalimat lama menyuruh narasi BERHENTI satu detik penuh, "clearly
+        // noticeable, not rushed". Diukur hari itu pada empat render 15 detik:
+        // arahan yang menyuruh berhenti dituruti secara harfiah, dan naskah
+        // dengan arahan jeda meninggalkan 2,85 dtk sunyi sementara arahan aktif
+        // menyisakan 0,40 dtk.
+        //
+        // Lebih buruk lagi ia BERTENTANGAN dengan kalimat lain di prompt yang
+        // sama, yang menyuruh "keeping the narration flowing without long empty
+        // gaps" — dan prompt yang memuat dua perintah berlawanan menyerahkan
+        // pilihannya ke model.
+        //
+        // Yang tersisa: pemisahan antar baris tetap diminta, tapi sebagai
+        // PERGANTIAN yang wajar, bukan sebagai kesenyapan yang ditakar.
         ? `A warm female VOICEOVER narrates in casual Indonesian at a natural conversational pace, keeping the narration flowing without long empty gaps, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
         : lipSyncPresenter
           ? bukaTanpaWajah
@@ -1715,14 +1790,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           ? `The voiceover lands the final line cleanly and stops — one beat of silence on the hero shot, no trailing chatter. `
           : `A short, deliberate beat of silence separates this line from the next. `
         : format === "hands_only"
-        ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
+        ? `The narration moves into the next line with a natural change of breath, staying continuous without a long empty gap. `
         : bukaTanpaWajah
         // Shot pembuka tanpa wajah: "taking a visible breath" menyebut tubuh
         // yang justru tidak boleh tampil — pakai jeda narasi gaya hands_only.
-        ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
+        ? `The narration moves into the next line with a natural change of breath, staying continuous without a long empty gap. `
         : isLast
-          ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
-          : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
+          ? `She smiles warmly and lands the final line with a friendly inviting tone, her voice carrying right through to the last frame. `
+          : `She takes a quick breath and keeps talking as she brings the product closer, without a long empty gap. `;
     // rapikan() dipakai di prompt AKHIR, bukan cuma di base: titik gandanya
     // justru lahir DI SINI, saat `${base}. ` menempel pada base yang sudah
     // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
@@ -1742,7 +1817,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
         ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens. ${bahasa.penutup}`
-        : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
+        : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}${klausaLafalMerek(input.productName)}Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.

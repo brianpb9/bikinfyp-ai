@@ -69,7 +69,7 @@ const BUKTI: Record<number, () => boolean> = {
       { role: "cta", start: 10, end: 15, text: "satu dua tiga empat lima", visual_direction: "x" },
     ] as never).lolos;
     const kunciBahasa = periksaPromptAkhir({
-      shots: [{ index: 0, prompt: "A woman speaks to camera. true small size, about the width of a hand, normal conversational distance." }],
+      shots: [{ index: 0, prompt: "A woman speaks to camera. true real-world size, about the width of a hand, normal conversational distance." }],
       negativePrompt: "", namaProduk: "Serum Glow Bening", format: "talking_head", withAudio: true,
     }).some((t) => t.keras && t.aturan === "BAHASA");
     return batasKata && kunciBahasa;

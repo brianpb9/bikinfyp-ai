@@ -174,7 +174,7 @@ test("hands_only mengunci tepat dua tangan milik satu orang", () => {
     // membuktikan larangan saja tidak cukup: promptnya sendiri membagikan tiga
     // tugas — memegang (baris persona), mengoperasikan, dan menadah (kunci) —
     // lalu model menyediakan tangan ketiga untuk mengerjakannya.
-    assert.match(sh.prompt, /SAME hand that holds the bottle also operates it/i,
+    assert.match(sh.prompt, /SAME hand that holds the product also operates it/i,
       `shot ${sh.index}: memegang dan mengoperasikan belum digabung ke satu tangan`);
     assert.doesNotMatch(sh.prompt, /holding the product naturally/i,
       `shot ${sh.index}: baris persona masih memberi tugas "memegang" tanpa pemilik`);

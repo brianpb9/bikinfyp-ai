@@ -69,7 +69,7 @@ test("gila: pembuka HIGH-ENERGY hanya di shot 1, shot lain tidak berubah", async
 test("gila tetap product-safe: framing hands-only + identitas produk tidak hilang", async () => {
   const shot1 = spec("gila").shots[0];
   assert.ok(shot1.prompt.includes("hands and forearms only"), "framing hands-only hilang");
-  assert.ok(shot1.prompt.includes("identical packaging"), "instruksi identitas produk hilang");
+  assert.ok(shot1.prompt.includes("identical shape, identical colours, identical label"), "instruksi identitas produk hilang");
   // Tidak ada adegan bahaya/kacau — energi dari gerakan kamera saja.
   assert.ok(!/fall|roof|crash|explod|jump/i.test(shot1.prompt), shot1.prompt);
 });

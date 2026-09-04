@@ -105,7 +105,7 @@ test("expression 'not visible' dari penulis TIDAK memanggil wajah ke shot pembuk
 
 test("kunci wajib tetap ada — sinematografi menambah, tidak menggusur", () => {
   const p = rakit("ads").shots[0].prompt;
-  assert.match(p, /true small size/i, "kunci ukuran asli hilang");
+  assert.match(p, /true real-world size/i, "kunci ukuran asli hilang");
   assert.match(p, /Every spoken word is Indonesian/i, "kunci bahasa hilang");
   assert.match(p, /identical packaging|do not redesign/i, "kunci identitas produk hilang");
 });
