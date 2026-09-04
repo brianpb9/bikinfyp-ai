@@ -60,9 +60,14 @@ function HasilInner() {
               </p>
             </WarnCard>
 
+            {/* `download` TANPA NILAI, dan itu disengaja: server sudah mengirim
+                nama berkas lewat ?dl= (nama produk + potongan id job). Nilai yang
+                dipaku di sini justru MENIMPA-nya — itu sebabnya setiap unduhan
+                dulu bernama "racun-video.mp4" dan menumpuk sebagai
+                "racun-video (3).mp4" di folder unduhan. */}
             <a
               href={pkg.video_url}
-              download="racun-video.mp4"
+              download
               className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 text-lg font-bold text-white shadow-md shadow-amber-500/20 transition-transform active:scale-[0.98] active:bg-amber-600"
             >
               Unduh Videonya

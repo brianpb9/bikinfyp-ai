@@ -192,18 +192,40 @@ export async function POST(req: Request) {
     // Ditaruh DI SINI, tepat sebelum smokeCreateJob memotong jatah kredit di
     // dalam transaksinya: memeriksanya sesudah itu berarti mengembalikan
     // kredit untuk sesuatu yang sudah bisa kita tolak lebih dulu.
+    // `images` bisa berupa TEKS JSON (SQLite) atau ARRAY (repositori Postgres
+    // sudah mengurainya). Versi pertama hanya menangani yang pertama, dan
+    // JSON.parse atas sebuah array melempar — lalu ditelan try/catch, jadi
+    // gerbangnya diam-diam tidak pernah berjalan.
     const fotoUtama = (() => {
+      const mentah = (product as { images?: unknown }).images;
       try {
-        const daftar = JSON.parse(product.images ?? "[]") as string[];
-        return daftar[0] ?? null;
+        const daftar = Array.isArray(mentah) ? mentah : (JSON.parse(String(mentah ?? "[]")) as unknown[]);
+        const pertama = daftar[0];
+        return typeof pertama === "string" && pertama ? pertama : null;
       } catch { return null; }
     })();
     if (fotoUtama) {
-      const { materialize } = await import("@/lib/storage").then((m) => ({ materialize: m.mediaStorage().materialize }));
-      const lokal = await materialize(fotoUtama).catch(() => null);
+      // mediaStorage().materialize DIPANGGIL PADA OBJEKNYA, tidak dicomot lepas.
+      //
+      // Versi pertama menulis `const { materialize } = ...` lalu memanggilnya
+      // sendirian; metodenya kehilangan `this`, melempar, dan `.catch(() =>
+      // null)` menelannya tanpa jejak. Akibatnya gerbang foto TIDAK PERNAH
+      // berjalan sekali pun di produksi — job 5ecb6860 lolos dengan foto
+      // 320x320 yang seharusnya ditolak.
+      //
+      // Kegagalannya sekarang DICATAT. Diam adalah cara sebuah gerbang berhenti
+      // bekerja tanpa ada yang tahu.
+      const { mediaStorage } = await import("@/lib/storage");
+      const lokal = await mediaStorage()
+        .materialize(fotoUtama)
+        .catch((e) => {
+          console.error(`[foto-produk] ${product.id}: gagal mengambil foto — ${(e as Error).message}`);
+          return null;
+        });
       if (lokal) {
         const { periksaFotoProduk } = await import("@/lib/media/foto-produk");
         const periksa = await periksaFotoProduk(lokal);
+        console.log(`[foto-produk] ${product.id}: ${periksa.lebar}x${periksa.tinggi}, ditolak=${periksa.ditolak}`);
         if (periksa.ditolak) {
           throw ERR.BAD_REQUEST(
             periksa.alasanTolak ?? "Foto produknya belum bisa dipakai.",
@@ -211,7 +233,11 @@ export async function POST(req: Request) {
           );
         }
         for (const p of periksa.peringatan) console.warn(`[foto-produk] ${product.id}: ${p}`);
+      } else {
+        console.warn(`[foto-produk] ${product.id}: foto tidak bisa diambil — gerbang dilewati`);
       }
+    } else {
+      console.warn(`[foto-produk] ${product.id}: tidak ada foto utama — gerbang dilewati`);
     }
 
     // Checkpoint 1E only: compose the parity-tested PG repositories behind

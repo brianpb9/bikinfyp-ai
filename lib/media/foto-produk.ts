@@ -40,6 +40,8 @@
  */
 
 import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import sharp from "sharp";
 import { runFf } from "./ffmpeg";
 
@@ -50,14 +52,26 @@ export const AMBANG_TOLAK_PX = 400;
 export const AMBANG_IDEAL_PX = 1000;
 
 /**
- * Berapa banyak kata terbaca sebelum foto disebut "penuh tulisan".
+ * Berapa banyak kata terbaca sebelum foto dicurigai poster.
  *
- * Label produk biasa menyisakan beberapa kata (nama merek, varian). Banner
- * promosi menyisakan belasan. Sembilan dipilih sebagai batas: cukup longgar
- * untuk label sungguhan, cukup ketat untuk menangkap banner seperti milik job
- * be16d8f3 yang memuat belasan kata pemasaran.
+ * ────────────────────────────────────────────────────────────────────────────
+ * DITURUNKAN DARI 9 KE 3 SETELAH DIUKUR
+ * ────────────────────────────────────────────────────────────────────────────
+ * Sembilan dipilih dengan menalar: banner promosi "menyisakan belasan kata".
+ * Diukur pada banner job be16d8f3 — yang jelas-jelas penuh tulisan besar —
+ * tesseract hanya membaca "BLUETOOTH Wireless Mic": TIGA kata, dan angkanya
+ * tidak membaik walau gambarnya dibesarkan 2x, 3x, atau 4x. Huruf hiasnya
+ * terlalu besar dan resolusinya terlalu rendah untuk OCR.
+ *
+ * Jadi ambang 9 gagal tepat pada jenis foto yang paling perlu ditangkap, dan
+ * pemotongan tidak pernah dipanggil untuknya.
+ *
+ * Biaya salah tangkap kecil dan berpagar: foto produk polos yang kebetulan
+ * memuat nama merek akan memicu SATU panggilan model penglihatan, dan hasilnya
+ * masih harus lolos kotakMasukAkal() — kotak yang mencakup hampir seluruh
+ * gambar ditolak, dan fotonya dipakai apa adanya.
  */
-export const AMBANG_KATA_BANNER = 9;
+export const AMBANG_KATA_BANNER = 3;
 
 export interface PeriksaFoto {
   lebar: number;
@@ -85,7 +99,24 @@ export function perluDitegakkan(lebar: number, tinggi: number): boolean {
 
 async function hitungKataOcr(berkas: string): Promise<number> {
   try {
-    const { stdout } = await runFf("tesseract", [berkas, "stdout", "-l", "eng", "--psm", "11"]);
+    // DIBESARKAN DULU. Tesseract praktis buta di bawah ~300 DPI, dan foto
+    // marketplace yang paling bermasalah justru yang paling kecil: pada banner
+    // 320x320 job be16d8f3 — yang jelas-jelas penuh tulisan — OCR membaca NOL
+    // kata. Akibatnya pendeteksi poster gagal tepat pada kasus yang paling
+    // butuh dideteksi, dan pemotongan tidak pernah dipanggil.
+    //
+    // Pembesaran 3x dilakukan ke berkas sementara; fotonya sendiri tidak
+    // disentuh.
+    const meta = await sharp(berkas).metadata();
+    let dipakai = berkas;
+    let sementara: string | null = null;
+    if ((meta.width ?? 0) > 0 && (meta.width ?? 0) < 900) {
+      sementara = path.join(os.tmpdir(), `ocr-${path.basename(berkas)}.png`);
+      await sharp(berkas).resize({ width: (meta.width ?? 0) * 3 }).png().toFile(sementara);
+      dipakai = sementara;
+    }
+    const { stdout } = await runFf("tesseract", [dipakai, "stdout", "-l", "eng", "--psm", "11"]);
+    if (sementara) fs.rmSync(sementara, { force: true });
     return stdout
       .split(/\s+/)
       .map((w) => w.replace(/[^A-Za-z0-9]/g, ""))

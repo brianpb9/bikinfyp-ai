@@ -2,8 +2,9 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, type JobRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
+import { namaBerkasVideo } from "@/lib/nama-berkas-video";
 import { PRE_DOWNLOAD_NOTICE } from "@/lib/config/compliance";
-import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { computeViralityChecklist } from "@/lib/virality-checklist";
 
 export const runtime = "nodejs";
@@ -27,6 +28,19 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       : db!.prepare("SELECT * FROM outputs WHERE job_id = ?").get(id) as { job_id: string; video_url: string; caption: string; hashtags: string; suggested_post_time: string; compliance_checklist: string } | undefined;
     if (!output) throw ERR.JOB_NOT_READY();
 
+    // Nama produk untuk nama berkas unduhan. Dibaca terpisah karena JobRow
+    // tidak memuatnya, dan kegagalannya TIDAK menjatuhkan unduhan: nama berkas
+    // yang kurang enak jauh lebih ringan daripada video yang tidak bisa
+    // diambil.
+    const namaProduk = await (async () => {
+      try {
+        const p = postgresRuntimeEnabled()
+          ? await smokeGetProduct(user.id, job.product_id)
+          : db!.prepare("SELECT name FROM products WHERE id = ?").get(job.product_id) as { name?: string } | undefined;
+        return (p as { name?: string } | null)?.name ?? null;
+      } catch { return null; }
+    })();
+
     const ctaText = `${output.caption} ${JSON.parse(output.hashtags).join(" ")}`.toLowerCase();
     const virality = computeViralityChecklist({
       durationSec: job.duration_s,
@@ -44,7 +58,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
 
     return Response.json({
       job_id: id,
-      video_url: createSignedUrl(output.video_url),
+      // ?dl= memaksa browser MENYIMPAN dengan nama yang bisa dikenali.
+      // Mekanismenya sudah ada di /api/files sejak lama, tapi tidak pernah
+      // dipakai — jadi setiap unduhan bernama "racun-video.mp4" dan sepuluh
+      // video menumpuk sebagai "racun-video (3).mp4" di folder unduhan.
+      // Tanda tangannya tidak terpengaruh: HMAC hanya menutup (path, exp).
+      video_url: `${createSignedUrl(output.video_url)}&dl=${encodeURIComponent(namaBerkasVideo(namaProduk, id))}`,
       video_expires_in_sec: 3600,
       caption: output.caption,
       hashtags: JSON.parse(output.hashtags),

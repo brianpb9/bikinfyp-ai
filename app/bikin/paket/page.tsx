@@ -59,7 +59,7 @@ function PaketInner() {
         <span className="font-bold">📹 Video</span>
         <a
           href={pkg.video_url}
-          download="racun-video.mp4"
+          download
           className="flex min-h-[44px] items-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 px-5 font-bold text-white shadow-sm shadow-amber-500/20"
         >
           Unduh
