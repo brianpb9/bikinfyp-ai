@@ -4,6 +4,10 @@ import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { audit } from "@/lib/db";
 import { daftarPaket, hargaKredit, nonaktifkanPaket, setHargaKredit, simpanPaket } from "@/lib/kredit-video-runtime";
 import { jenisDikenal, JENIS_VIDEO, totalVideoPaket } from "@/lib/kredit-video";
+import { config } from "@/lib/config";
+import { getPool } from "@/lib/postgres/pool";
+import { KUALITAS, type Kualitas } from "@/lib/kualitas-video";
+import { mesinBerlaku, modelBerlaku, muatPemetaan, pemetaanTersimpan, periksaPemetaan } from "@/lib/pemetaan-model";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -18,9 +22,25 @@ export async function GET(req: Request) {
   try {
     await wajibAdminApi(req);
     const [harga, paket] = await Promise.all([hargaKredit(), daftarPaket(false)]);
+    // Dimuat ulang supaya layar admin menampilkan yang BERLAKU, bukan yang
+    // tersimpan di memori proses ini beberapa menit lalu.
+    await muatPemetaan();
+    const disimpan = new Set(pemetaanTersimpan().map((b) => b.kualitas));
     return Response.json({
       harga: JENIS_VIDEO.map((j) => ({ jenis: j, harga_idr: harga[j] ?? null })),
       paket: paket.map((p) => ({ ...p, total_video: totalVideoPaket(p) })),
+      // Pemetaan model per paket. `bawaan` menyatakan apakah nilainya datang
+      // dari kode atau dari keputusan admin — tanpa itu, layar tidak bisa
+      // membedakan "belum pernah diatur" dari "diatur ke nilai yang sama".
+      pemetaan: (Object.keys(KUALITAS) as Kualitas[]).map((k) => ({
+        kualitas: k,
+        label: KUALITAS[k].label,
+        mesin: mesinBerlaku(k),
+        model: modelBerlaku(k),
+        bawaan: !disimpan.has(k),
+        mesin_bawaan: KUALITAS[k].mesin,
+        model_bawaan: KUALITAS[k].model,
+      })),
     });
   } catch (err) {
     return errorResponse(err);
@@ -33,6 +53,8 @@ export async function GET(req: Request) {
  *   { aksi: "harga", jenis, harga_idr }
  *   { aksi: "paket", paket: {...} }
  *   { aksi: "nonaktif", id }
+ *   { aksi: "model", kualitas, mesin, model }   <- pemetaan model per paket
+ *   { aksi: "model_bawaan", kualitas }          <- kembalikan ke bawaan kode
  *
  * Semua angka DIVALIDASI di sini, bukan dipercaya dari layar admin. Layar
  * admin memang dipakai orang yang berwenang, tapi salah ketik satu nol pada
@@ -92,6 +114,49 @@ export async function POST(req: Request) {
       await simpanPaket(paket);
       await catat(aktor, "admin.paket_simpan", id, paket);
       return Response.json({ ok: true, paket });
+    }
+
+    // ── PEMETAAN MODEL PER PAKET ────────────────────────────────────────
+    //
+    // Permintaan Brian 4 Sep 2026: menentukan sendiri mesin & model tiap paket
+    // dari /admin, "sehingga memungkinkan ekspansi bisnis model apabila
+    // kedepan muncul efisiensi bisnis dengan perubahan model".
+    //
+    // Divalidasi DI SINI, bukan di ujung render: pemetaan yang salah baru
+    // ketahuan saat merender — sesudah naskah ditulis, gambar disiapkan, dan
+    // pembeli menunggu.
+    if (aksi === "model") {
+      const kualitas = String(body.kualitas ?? "");
+      const mesin = String(body.mesin ?? "");
+      const model = String(body.model ?? "").trim();
+      const tolak = periksaPemetaan({ kualitas, mesin, model });
+      if (tolak) throw ERR.BAD_REQUEST(tolak, `Invalid model mapping: ${tolak}`);
+
+      const pool = getPool(config.databaseUrl);
+      const at = new Date().toISOString();
+      await pool.query(
+        `INSERT INTO pemetaan_model (kualitas, mesin, model, diperbarui_pada, diperbarui_oleh)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (kualitas) DO UPDATE SET mesin = EXCLUDED.mesin, model = EXCLUDED.model,
+           diperbarui_pada = EXCLUDED.diperbarui_pada, diperbarui_oleh = EXCLUDED.diperbarui_oleh`,
+        [kualitas, mesin, model, at, aktor],
+      );
+      // Dimuat ulang SEKARANG supaya jawaban yang dikirim balik sudah
+      // mencerminkan keadaan yang berlaku — bukan keadaan 30 detik lalu.
+      await muatPemetaan();
+      await catat(aktor, "admin.pemetaan_model", kualitas, { mesin, model });
+      return Response.json({ ok: true, kualitas, mesin, model });
+    }
+
+    // Kembalikan satu paket ke bawaan kode.
+    if (aksi === "model_bawaan") {
+      const kualitas = String(body.kualitas ?? "");
+      if (!(kualitas in KUALITAS)) throw ERR.BAD_REQUEST(`Paket "${kualitas}" tidak dikenal.`, "Unknown quality");
+      const pool = getPool(config.databaseUrl);
+      await pool.query("DELETE FROM pemetaan_model WHERE kualitas = $1", [kualitas]);
+      await muatPemetaan();
+      await catat(aktor, "admin.pemetaan_model_bawaan", kualitas, {});
+      return Response.json({ ok: true, kualitas, bawaan: true });
     }
 
     if (aksi === "nonaktif") {

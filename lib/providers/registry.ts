@@ -17,7 +17,19 @@ import { mockVoiceB } from "./mock/voice-b";
 import { byteplusVideo } from "./stubs/byteplus";
 import { dashscopeVideo } from "./stubs/dashscope";
 import { kieGrokVideo } from "./stubs/kie-grok";
-import { mesinUntuk } from "../kualitas-video";
+import { mesinUntuk, kualitasDikenal, type Kualitas } from "../kualitas-video";
+import { mesinBerlaku } from "../pemetaan-model";
+
+/**
+ * Mesin yang berlaku: pemetaan admin kalau ada, bawaan kode kalau tidak.
+ *
+ * Tier LAMA (high_quality, super_hq, silent_caption) tidak punya pemetaan dan
+ * tidak boleh punya — job lama harus tetap dirender dengan mesin yang sama
+ * seperti saat ia dibuat. mesinUntuk() tetap yang menjawab untuk mereka.
+ */
+function mesinUntukBerlaku(tier: string): ReturnType<typeof mesinUntuk> {
+  return kualitasDikenal(tier) ? mesinBerlaku(tier as Kualitas) : mesinUntuk(tier as never);
+}
 // google-tts.ts & azure-tts.ts sengaja TIDAK diimpor: TTS terpisah tidak dipakai di
 // jalur produksi (keputusan final 31 Jul) — file dipertahankan sebagai referensi.
 
@@ -58,7 +70,7 @@ export function videoOrder(spec?: VisualSpec): VideoProvider[] {
 
   if (active === "mock") {
     list.push(mockVideoA, mockVideoB);
-  } else if (spec && mesinUntuk(spec.qualityTier) === "kie-grok") {
+  } else if (spec && mesinUntukBerlaku(spec.qualityTier) === "kie-grok") {
     list.push(kieGrokVideo, byteplusVideo, dashscopeVideo);
   } else if (active === "dashscope") {
     list.push(dashscopeVideo, byteplusVideo);

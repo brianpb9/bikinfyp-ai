@@ -4,7 +4,7 @@
 - HOOK ×1 first, BODY 1–5, CTA ×1 last. Contiguous timecodes.
 - Every segment: start_state · framing+angle · camera movement · sequenced action · product_state at end · expression. Two to four sentences.
 - Mode consistency per segment (see modes.md).
-- CTA: ≥4s, "one continuous take", product hero, label readable, held still for the final second.
+- CTA: ≥4s, "one continuous take", product hero, label readable, **ekor hidup** — pegangan tenang dengan gerak mikro yang wajar sampai frame terakhir. *(Dibatalkan 4 Sep 2026: "held still for the final second" menyuruh model membekukan detik terakhir, dan model menurutinya. Label terbaca tidak menuntut kebekuan.)*
 - Time direction (Aturan 4.1): the model moves TOWARD the prompt; what you describe arrives at the END of the clip. State the starting condition explicitly ("already lit from the very first frame", "soap still in box, untouched") or the model will invent it.
 
 ## Dialogue

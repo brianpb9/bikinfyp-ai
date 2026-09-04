@@ -48,6 +48,8 @@ import {
 import { taskMemo } from "../task-memo";
 import { terbitkanGambarProvider } from "../../gambar-provider";
 import { teksPromptShot } from "../teks-prompt";
+import { kualitasDikenal, type Kualitas } from "../../kualitas-video";
+import { modelBerlaku } from "../../pemetaan-model";
 
 const PROVIDER_KEY = "kie-grok";
 
@@ -161,7 +163,9 @@ export function buatBadanTask(spec: VisualSpec, shot: ShotSpec, imageUrl: string
     );
   }
   return {
-    model: config.kieGrokModel,
+    // Model dari pemetaan admin kalau paketnya punya; config.kieGrokModel
+    // tetap jadi bawaan. Lihat lib/pemetaan-model.ts.
+    model: kualitasDikenal(spec.qualityTier) ? modelBerlaku(spec.qualityTier as Kualitas) : config.kieGrokModel,
     input: {
       image_urls: [imageUrl],
       index: 0,

@@ -15,6 +15,8 @@ import {
   type VideoProvider, type VideoAsset, type VisualSpec, type ShotSpec,
 } from "../types";
 import { taskMemo } from "../task-memo";
+import { kualitasDikenal, type Kualitas } from "../../kualitas-video";
+import { modelBerlaku } from "../../pemetaan-model";
 import { teksPromptShot } from "../teks-prompt";
 
 // Tarif referensi (USD). Sumber:
@@ -195,6 +197,22 @@ export function modeReferensi(
   return "first_frame (i2v)";
 }
 
+/**
+ * Model yang BENAR-BENAR dipakai untuk sebuah tier.
+ *
+ * Pemetaan admin (lib/pemetaan-model.ts) menang atas bawaan kode. Tier LAMA
+ * tidak punya pemetaan dan memakai config.tiers — job lama harus tetap
+ * dirender dengan model yang sama seperti saat ia dibuat.
+ *
+ * SATU fungsi, dipakai juga oleh penghitung biaya dan baris log. Kalau
+ * penghitung biaya membaca model yang berbeda dari yang dikirim, tagihan
+ * dihitung untuk model yang tidak pernah dipanggil — dan salahnya baru
+ * ketahuan saat tagihan bulanan datang.
+ */
+export function modelUntukSpec(tier: string, bawaan: string): string {
+  return kualitasDikenal(tier) ? modelBerlaku(tier as Kualitas) : bawaan;
+}
+
 export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string): unknown[] {
   const textItem = {
     type: "text",
@@ -229,7 +247,10 @@ const PROVIDER_KEY = "byteplus";
 
 async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
-  const content = buildTaskContent(spec, shot, tierCfg.byteplusModel);
+  // MODEL dari pemetaan admin kalau paketnya punya, bawaan kode kalau tidak.
+  // Lihat lib/pemetaan-model.ts — mengganti model tidak lagi menuntut deploy.
+  const modelDipakai = modelUntukSpec(spec.qualityTier, tierCfg.byteplusModel);
+  const content = buildTaskContent(spec, shot, modelDipakai);
   // Mode r2v (ada role reference_image) minimal 4 dtk (diverifikasi: duration 3
   // ditolak InvalidParameter di r2v; i2v tetap 2-15).
   const minDur = content.some((c) => (c as { role?: string }).role === "reference_image") ? 4 : 2;
@@ -244,10 +265,10 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   //
   // Ini juga catatan penting kalau produksi mau pindah ke 2.5: rasio keluaran
   // tidak lagi bisa diminta, ia ditentukan foto yang dikirim.
-  const modelDuaLima = /seedance-2-5/.test(tierCfg.byteplusModel);
+  const modelDuaLima = /seedance-2-5/.test(modelDipakai);
   const punyaFramePertama = !content.some((c) => (c as { role?: string }).role === "reference_image");
   const body = {
-    model: tierCfg.byteplusModel,
+    model: modelDipakai,
     content,
     // ATURAN SUARA FINAL: diturunkan dari tier (silent=false, bersuara=true) — ditegakkan assertVisualSpec
     generate_audio: spec.generateAudio,
@@ -305,7 +326,7 @@ export const byteplusVideo: VideoProvider = {
   estimateCost(spec: VisualSpec): number {
     const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
     const totalSec = spec.shots.reduce((s, sh) => s + Math.ceil(sh.durationSec), 0);
-    return estimateCostIdr(tierCfg.byteplusModel, undefined, totalSec, tierCfg.resolution).idr;
+    return estimateCostIdr(modelUntukSpec(spec.qualityTier, tierCfg.byteplusModel), undefined, totalSec, tierCfg.resolution).idr;
   },
 
   async healthCheck(): Promise<boolean> {
@@ -364,9 +385,10 @@ export const byteplusVideo: VideoProvider = {
       const secs = Math.round((Date.now() - startedAt) / 1000);
       const durSec = result.duration ?? Math.ceil(shot.durationSec);
       const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
-      const cost = estimateCostIdr(tierCfg.byteplusModel, result.usage?.total_tokens, durSec, tierCfg.resolution);
+      const modelTerpakai = modelUntukSpec(spec.qualityTier, tierCfg.byteplusModel);
+      const cost = estimateCostIdr(modelTerpakai, result.usage?.total_tokens, durSec, tierCfg.resolution);
       console.log(
-        `[byteplus] job ${spec.jobId} shot ${shot.index}: selesai ${secs} dtk, model=${tierCfg.byteplusModel}, audio=${spec.generateAudio}, biaya Rp${cost.idr}${cost.estimated ? " (estimasi tarif)" : " (dari usage)"}`
+        `[byteplus] job ${spec.jobId} shot ${shot.index}: selesai ${secs} dtk, model=${modelTerpakai}, audio=${spec.generateAudio}, biaya Rp${cost.idr}${cost.estimated ? " (estimasi tarif)" : " (dari usage)"}`
       );
       assets.push({ filePath: path.resolve(outPath), durationSec: durSec, costIdr: cost.idr, hasAudio: spec.generateAudio });
     }

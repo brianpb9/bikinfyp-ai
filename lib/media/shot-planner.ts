@@ -1571,7 +1571,19 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? `Product state at the end of this shot: still idle — present in frame but not yet held up or presented, its label not turned to camera.`
         : busur === "partial"
           ? `Product state at the end of this shot: partially revealed — in her hands and clearly in use, but not yet held up as a hero shot.`
-          : `Product state at the end of this shot: hero — held up, label squarely readable to camera, and held still for the final second.`;
+          // EKOR HIDUP, bukan "held still for the final second".
+          //
+          // Kalimat lama menyuruh model membekukan detik terakhir — dan model
+          // menurutinya, menghasilkan frame beku di ujung video. Itu cacat yang
+          // sama keluarganya dengan "natural pauses" yang dibuang 4 Sep 2026
+          // dari arahan bicara: perintah berhenti yang dituruti secara harfiah.
+          //
+          // Yang sebenarnya dikejar kalimat itu adalah LABEL TERBACA, dan itu
+          // tidak menuntut kebekuan — label terbaca justru lebih meyakinkan
+          // kalau bendanya masih hidup di tangan. Jadi yang diminta sekarang
+          // ketenangan yang bergerak: pegangan mantap, gerak mikro yang wajar,
+          // dan video berakhir saat semuanya masih berjalan.
+          : `Product state at the end of this shot: hero — held up steadily with the label squarely readable to camera, the grip calm and secure while her hand keeps its natural micro-movement and her breathing continues right through the final frame.`;
     const mulaiDari = isFirst
       ? `Start state: the first frame is already mid-action, not a posed opening.`
       : `Start state: this shot begins exactly where the previous one ended — ${

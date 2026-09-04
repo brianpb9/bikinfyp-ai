@@ -13,11 +13,16 @@ import { monitoringSettings, runOperationalMonitor } from "../lib/operational-mo
 import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
 import { processPromoJob } from "../lib/promo/worker";
 import { mulaiPenyegaranKredensial } from "../lib/kredensial";
+import { mulaiPenyegaranPemetaan } from "../lib/pemetaan-model";
 
 // Kredensial yang diganti lewat halaman admin harus ikut terpakai di sini.
 // Tanpa ini worker memakai nilai .env sampai container di-recreate — dan
 // menghindari recreate itulah seluruh alasan fitur ini dibangun.
 mulaiPenyegaranKredensial();
+// Pemetaan model per paket disegarkan dengan cara yang sama: worker harus
+// melihat perubahan dari /admin tanpa restart, karena restart membunuh job
+// yang sedang berjalan.
+mulaiPenyegaranPemetaan();
 
 // Provider sengaja buta database (lib/providers/task-memo.ts). Worker-lah yang
 // memasang implementasi nyatanya, dan HARUS sebelum job pertama diambil —

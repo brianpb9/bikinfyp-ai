@@ -4,6 +4,9 @@ import { daftarPaket, hargaKredit } from "@/lib/kredit-video-runtime";
 import { JENIS_VIDEO } from "@/lib/kredit-video";
 import { KUALITAS } from "@/lib/kualitas-video";
 import { PengaturPaket } from "./PengaturPaket";
+import { PemetaanModel } from "./PemetaanModel";
+import { mesinBerlaku, modelBerlaku, muatPemetaan, pemetaanTersimpan } from "@/lib/pemetaan-model";
+import type { Kualitas } from "@/lib/kualitas-video";
 
 // PAKET & HARGA — layar tempat model bisnis diatur tanpa menyentuh kode.
 //
@@ -26,6 +29,10 @@ const rupiah = (n: number) => `Rp${Math.round(n).toLocaleString("id-ID")}`;
 export default async function HalamanPaket() {
   await wajibAdmin();
   const [harga, paket] = await Promise.all([hargaKredit(), daftarPaket(false)]);
+  // Dimuat di server sebelum dirender: layar harus menampilkan yang BERLAKU,
+  // bukan bawaan kode yang kebetulan ada di memori proses ini.
+  await muatPemetaan();
+  const diaturAdmin = new Set(pemetaanTersimpan().map((b) => b.kualitas));
 
   return (
     <main className="mx-auto max-w-4xl p-6">
@@ -63,6 +70,18 @@ export default async function HalamanPaket() {
           ))}
         </div>
       </section>
+
+      <PemetaanModel
+        awal={(Object.keys(KUALITAS) as Kualitas[]).map((k) => ({
+          kualitas: k,
+          label: KUALITAS[k].label,
+          mesin: mesinBerlaku(k),
+          model: modelBerlaku(k),
+          bawaan: !diaturAdmin.has(k),
+          mesin_bawaan: KUALITAS[k].mesin,
+          model_bawaan: KUALITAS[k].model,
+        }))}
+      />
 
       <PengaturPaket
         hargaAwal={JENIS_VIDEO.map((j) => ({ jenis: j, label: KUALITAS[j].label, harga_idr: harga[j] ?? null }))}
