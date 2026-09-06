@@ -12,7 +12,7 @@ process.env.AUTH_SECRET = "rahasia-uji-yang-cukup-panjang-32byte!!";
 process.env.DB_PATH = `/tmp/racun-test-gambarprov-${process.pid}.db`;
 const storage = `/tmp/racun-test-gambarprov-storage-${process.pid}`;
 process.env.STORAGE_DIR = storage;
-process.env.APP_BASE_URL = "https://bikinfyp.com";
+process.env.APP_BASE_URL = "https://aiugc.id";
 
 const G = await import("../lib/gambar-provider");
 
@@ -35,7 +35,7 @@ function bagian(url: string) {
 
 test("URL yang diterbitkan MUTLAK — server orang lain tidak bisa membuka alamat relatif", async () => {
   const url = await G.terbitkanGambarProvider(berkas, "job-1", 0);
-  assert.match(url, /^https:\/\/bikinfyp\.com\/api\/provider-image\/provider-in\/job-1\/0\.png\?/);
+  assert.match(url, /^https:\/\/aiugc\.id\/api\/provider-image\/provider-in\/job-1\/0\.png\?/);
   const { rel, exp, sig } = bagian(url);
   assert.equal(G.verifikasiGambarProvider(rel, exp, sig), true);
 });

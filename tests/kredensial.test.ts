@@ -142,12 +142,12 @@ test("redirect URI Google diturunkan dari APP_BASE_URL, bukan diketik", () => {
   const semula = config.appBaseUrl;
   const pasang = (v: string) => { (config as unknown as Record<string, string>).appBaseUrl = v; };
 
-  pasang("https://bikinfyp.com");
-  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://bikinfyp.com/api/auth/google/callback"]);
+  pasang("https://aiugc.id");
+  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://aiugc.id/api/auth/google/callback"]);
 
   // Garis miring berlebih tidak boleh bocor jadi "//callback".
-  pasang("https://bikinfyp.com/");
-  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://bikinfyp.com/api/auth/google/callback"]);
+  pasang("https://aiugc.id/");
+  assert.deepEqual(K.redirectUriGoogleTerdaftar(), ["https://aiugc.id/api/auth/google/callback"]);
 
   // KOSONG HARUS KOSONG, bukan path relatif. "/api/auth/google/callback"
   // terlihat masuk akal dan akan disalin operator ke Google Console, lalu

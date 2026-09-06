@@ -10,13 +10,17 @@ import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { SiteFooter } from "../_components/SiteFooter";
 
-/** Harga tier di landing. SATU sumber untuk kalkulator dan section "Harga
- *  transparan" — kalau keduanya menyimpan angkanya sendiri, halaman yang
- *  menjanjikan transparansi justru bisa menyebut dua harga berbeda. */
-const TIER_LANDING = [
-  { label: "AI Bersuara", price: 12_000, jelas: "AI memperagakan produkmu, dengan suara yang menjelaskan" },
-  { label: "Bersuara Pro", price: 80_000, jelas: "Presenter AI bicara langsung ke kamera, lip-sync sungguhan" },
-] as const;
+/** Satu paket seperti yang dikirim /api/harga-publik. */
+type PaketPublik = { id: string; label: string; jelas: string; harga_idr: number };
+
+/**
+ * Titik tengah riset pasar Fastwork (Rp100–150 ribu per video UGC).
+ *
+ * Dipakai HANYA sebagai pembanding, dan angkanya disebutkan apa adanya berikut
+ * sumbernya di kaki kalkulator. Kalkulator yang membandingkan dengan angka
+ * tanpa sumber bukan kalkulator — itu iklan yang menyamar jadi hitungan.
+ */
+const BIAYA_MANUSIA_PER_VIDEO = 125_000;
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
@@ -72,11 +76,23 @@ export default function OnboardingPage() {
   // setelah harganya berubah. null = belum terjawab; kalimat harganya
   // disembunyikan sampai angkanya benar-benar diketahui.
   const [mulaiIdr, setMulaiIdr] = useState<number | null>(null);
+  // SELURUH paket ikut diambil, bukan cuma yang termurah. Kalkulator dan
+  // section harga di bawah dulu memakai daftar yang diketik di berkas ini, dan
+  // daftar itu masih memajang dua paket yang sudah pensiun berbulan-bulan
+  // setelah susunan standard/premium/ultra berlaku (2 Sep 2026). Angka yang
+  // diketik di layar promosi adalah angka yang paling lama tidak diperbaiki.
+  const [paket, setPaket] = useState<PaketPublik[]>([]);
   useEffect(() => {
     fetch("/api/harga-publik")
       .then((r) => r.json())
-      .then((d: { mulai_idr: number | null }) => setMulaiIdr(d.mulai_idr ?? null))
-      .catch(() => setMulaiIdr(null));
+      .then((d: { mulai_idr: number | null; jenis?: PaketPublik[] }) => {
+        setMulaiIdr(d.mulai_idr ?? null);
+        setPaket(Array.isArray(d.jenis) ? d.jenis : []);
+      })
+      .catch(() => {
+        setMulaiIdr(null);
+        setPaket([]);
+      });
   }, []);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   // KESIAPAN dibaca SEKALI untuk seluruh halaman — lihat useKesiapan().
@@ -91,8 +107,11 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [monthlyVideos, setMonthlyVideos] = useState(10);
-  // Nilai awal DITURUNKAN dari TIER_LANDING, bukan diketik ulang.
-  const [tierPrice, setTierPrice] = useState<number>(TIER_LANDING[0].price);
+  // Yang disimpan ID paketnya, BUKAN harganya. Menyimpan harga membuat pilihan
+  // pengguna diam-diam salah begitu harga berubah di admin: tombol tetap
+  // menyala di paket lama karena angkanya kebetulan cocok, atau tidak menyala
+  // sama sekali karena tidak ada yang cocok.
+  const [paketDipilih, setPaketDipilih] = useState<string | null>(null);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   // r13 (review produk 2026-08-07): landing publik sempat mengklaim "Checkout
   // aman lewat GoPay/OVO/DANA..." tanpa syarat walau Duitku belum aktif.
@@ -137,10 +156,17 @@ export default function OnboardingPage() {
     window.history.replaceState(null, "", window.location.pathname + (sisa ? `?${sisa}` : ""));
   }, []);
 
-  const humanCost = monthlyVideos * 125_000;
-  const aiCost = monthlyVideos * tierPrice;
+  // Paket aktif: pilihan pengguna, atau yang TERMURAH selama ia belum memilih.
+  // Bukan paket pertama dalam daftar — urutan daftar bisa berubah, dan
+  // kalkulator yang membuka dengan paket termahal membaca seperti jebakan.
+  const paketAktif =
+    paket.find((t) => t.id === paketDipilih) ??
+    [...paket].sort((a, b) => a.harga_idr - b.harga_idr)[0] ??
+    null;
+  const humanCost = monthlyVideos * BIAYA_MANUSIA_PER_VIDEO;
+  const aiCost = paketAktif ? monthlyVideos * paketAktif.harga_idr : 0;
   const saving = humanCost - aiCost;
-  const savingPercent = Math.round((saving / humanCost) * 100);
+  const savingPercent = humanCost > 0 ? Math.round((saving / humanCost) * 100) : 0;
 
   async function requestOtp(e?: React.FormEvent) {
     e?.preventDefault();
@@ -319,10 +345,47 @@ export default function OnboardingPage() {
               <div className="mt-5 flex items-end justify-between"><span className="text-4xl font-extrabold text-amber-300">{monthlyVideos}</span><span className="mb-1 text-sm text-zinc-300">video / bulan</span></div>
               <input aria-label="Jumlah video per bulan" type="range" min="1" max="100" value={monthlyVideos} onChange={(e) => setMonthlyVideos(Number(e.target.value))} className="mt-3 w-full accent-amber-400" />
               <div className="mt-5 grid grid-cols-3 gap-2">
-                {TIER_LANDING.map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
+                {paket.map((t) => (
+                  <button
+                    type="button"
+                    key={t.id}
+                    onClick={() => setPaketDipilih(t.id)}
+                    aria-pressed={paketAktif?.id === t.id}
+                    className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${paketAktif?.id === t.id ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}
+                  >
+                    <span className="block leading-tight">{t.label}</span>
+                    <span className="mt-1 block text-xs">Rp{t.harga_idr.toLocaleString("id-ID")}</span>
+                  </button>
+                ))}
               </div>
-              <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>AIUGC.ID</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
-              <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
+              {paketAktif && (
+                <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900">
+                  <div className="flex justify-between text-xs text-zinc-500">
+                    <span>Bikin sendiri / jasa UGC*</span>
+                    <span className="line-through tabular-nums">Rp{humanCost.toLocaleString("id-ID")}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between text-xs text-zinc-500">
+                    <span>AIUGC.ID — {paketAktif.label}</span>
+                    <span className="tabular-nums">Rp{aiCost.toLocaleString("id-ID")}</span>
+                  </div>
+                  <p className="mt-3 font-display text-2xl font-extrabold text-emerald-600 tabular-nums">
+                    Hemat Rp{saving.toLocaleString("id-ID")}
+                  </p>
+                  <p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p>
+                  {/* WAKTU ikut disebut karena itu selisih yang paling terasa dan
+                      paling bisa kami buktikan: JANJI_WAKTU adalah angka yang
+                      sama dengan yang dipakai halaman hasil, bukan klaim
+                      pemasaran yang ditulis terpisah. */}
+                  <p className="mt-3 border-t border-zinc-100 pt-3 text-[11px] leading-relaxed text-zinc-500">
+                    Selesai {JANJI_WAKTU.kisaran} per video, bukan menunggu jadwal kreator dan babak revisi.
+                  </p>
+                </div>
+              )}
+              <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">
+                *Estimasi Rp100–150 ribu per video dari riset pasar Fastwork; kalkulator memakai titik
+                tengah Rp{BIAYA_MANUSIA_PER_VIDEO.toLocaleString("id-ID")}. Harga AIUGC.ID diambil langsung
+                dari daftar harga yang berlaku saat ini — bukan angka yang ditulis di halaman ini.
+              </p>
             </section>
 
             {/* r13 (review produk 2026-08-07): badge metode bayar dulu tampil TANPA
@@ -343,18 +406,25 @@ export default function OnboardingPage() {
             {/* HARGA TRANSPARAN — dulu cuma lencana di pojok atas.
                 Section ini menggantikannya karena transparansi diukur dari
                 angka yang benar-benar disebut, bukan dari kata "transparan". */}
+            {paket.length > 0 && (
             <section>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Harga transparan</p>
               <h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Bayar per video, bukan langganan</h2>
+              {/* Daftar ini DIBACA DARI SERVER. Versi sebelumnya memajang "AI
+                  Bersuara" dan "Bersuara Pro" — pembagian bersuara/tidak yang
+                  sudah tidak ada sejak susunan standard/premium/ultra berlaku
+                  (2 Sep 2026), lengkap dengan harga yang juga sudah berubah.
+                  Kosong = seluruh section disembunyikan; halaman yang menjanjikan
+                  transparansi lebih baik diam daripada menyebut angka karangan. */}
               <div className="mt-4 space-y-2">
-                {TIER_LANDING.map((tier) => (
-                  <div key={tier.price} className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
+                {paket.map((t) => (
+                  <div key={t.id} className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
                     <span className="min-w-0">
-                      <span className="block font-bold text-zinc-900">{tier.label}</span>
-                      <span className="mt-0.5 block text-xs leading-5 text-zinc-500">{tier.jelas}</span>
+                      <span className="block font-bold text-zinc-900">{t.label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-zinc-500">{t.jelas}</span>
                     </span>
                     <span className="shrink-0 text-right">
-                      <span className="block font-display text-lg font-extrabold text-zinc-900">Rp{tier.price.toLocaleString("id-ID")}</span>
+                      <span className="block font-display text-lg font-extrabold text-zinc-900 tabular-nums">Rp{t.harga_idr.toLocaleString("id-ID")}</span>
                       <span className="block text-[11px] text-zinc-400">per video</span>
                     </span>
                   </div>
@@ -363,9 +433,10 @@ export default function OnboardingPage() {
               <ul className="mt-3 space-y-1.5 text-sm leading-6 text-zinc-600">
                 <li>Tidak ada biaya bulanan. Isi saldo seperlunya, pakai kapan saja.</li>
                 <li>Kalau video gagal dibuat, kreditnya kembali ke saldomu.</li>
-                <li>Harga di atas sudah termasuk suara. Tidak ada biaya tambahan di akhir.</li>
+                <li>Yang membedakan paket adalah model AI-nya, bukan ada-tidaknya suara — semuanya bersuara.</li>
               </ul>
             </section>
+            )}
 
             <section><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Jawaban jujur sebelum mulai</p><h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Yang perlu kamu tahu</h2><div className="mt-4 space-y-2">{[
               ["Videonya kelihatan AI? Aman dari TikTok Shop?", "Video diberi label AIGC dan kamu tetap perlu menyalakan label konten AI saat upload. Kami tidak menyembunyikan asal konten—ini membantu kamu mengikuti aturan platform."],

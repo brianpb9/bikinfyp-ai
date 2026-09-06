@@ -10,7 +10,7 @@ process.env.DB_PATH = `/tmp/racun-test-duitku-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-duitku-storage-${process.pid}`;
 process.env.DUITKU_MERCHANT_CODE = "DTEST1";
 process.env.DUITKU_API_KEY = "kunci-uji-duitku";
-process.env.APP_BASE_URL = "https://bikinfyp.com";
+process.env.APP_BASE_URL = "https://aiugc.id";
 
 const { verifyDuitkuCallbackSignature, createDuitkuInvoice, duitkuBase } = await import("../lib/duitku");
 
@@ -84,8 +84,8 @@ test("createInvoice mengirim header signature yang benar dan membaca paymentUrl"
     assert.equal(c.headers["x-duitku-signature"], expected);
     assert.equal(c.body.paymentAmount, 60000);
     assert.equal(c.body.merchantOrderId, "racun-abc-123");
-    assert.equal(c.body.callbackUrl, "https://bikinfyp.com/api/webhooks/duitku");
-    assert.equal(c.body.returnUrl, "https://bikinfyp.com/kredit");
+    assert.equal(c.body.callbackUrl, "https://aiugc.id/api/webhooks/duitku");
+    assert.equal(c.body.returnUrl, "https://aiugc.id/kredit");
   } finally {
     globalThis.fetch = realFetch;
   }

@@ -24,7 +24,7 @@ process.env.PAYMENT_GATEWAY = "duitku";
 process.env.DUITKU_MERCHANT_CODE = "DS34363";
 process.env.DUITKU_API_KEY = "kunci-uji";
 process.env.DUITKU_IS_PRODUCTION = "false";
-process.env.APP_BASE_URL = "https://bikinfyp.com";
+process.env.APP_BASE_URL = "https://aiugc.id";
 
 const D = await import("../lib/duitku");
 const baca = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");

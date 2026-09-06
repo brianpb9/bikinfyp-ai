@@ -20,8 +20,8 @@ import path from "node:path";
 process.env.RACUN_NO_DOTENV = "1";
 process.env.DB_PATH = `/tmp/racun-test-bayar-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-bayar-storage-${process.pid}`;
-process.env.ADMIN_EMAILS = "bos@bikinfyp.test";
-process.env.SANDBOX_TESTER_EMAILS = "penguji@bikinfyp.test, lain@bikinfyp.test";
+process.env.ADMIN_EMAILS = "bos@aiugc.test";
+process.env.SANDBOX_TESTER_EMAILS = "penguji@aiugc.test, lain@aiugc.test";
 
 const { apakahPengujiSandbox, apakahAdmin } = await import("../lib/admin-auth");
 const baca = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
@@ -49,9 +49,9 @@ test('"sandbox_paid" BUKAN "paid" — laporan keuangan tidak boleh menghitung ua
 test("penguji sandbox TERPISAH dari admin", () => {
   // Menjadikan penguji sebagai admin demi mencoba alur beli berarti memberi
   // akses dashboard operator untuk alasan yang tidak berhubungan.
-  assert.equal(apakahPengujiSandbox("penguji@bikinfyp.test"), true);
-  assert.equal(apakahAdmin("penguji@bikinfyp.test"), false, "penguji ikut jadi admin");
-  assert.equal(apakahPengujiSandbox("bos@bikinfyp.test"), true, "admin harus tetap bisa menguji");
+  assert.equal(apakahPengujiSandbox("penguji@aiugc.test"), true);
+  assert.equal(apakahAdmin("penguji@aiugc.test"), false, "penguji ikut jadi admin");
+  assert.equal(apakahPengujiSandbox("bos@aiugc.test"), true, "admin harus tetap bisa menguji");
   assert.equal(apakahPengujiSandbox("orang.lain@contoh.com"), false);
   assert.equal(apakahPengujiSandbox(null), false);
 });

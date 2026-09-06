@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+// BERKAS INI SENGAJA MEMAKAI bikinfyp.com, dan tidak boleh ikut disapu saat
+// penggantian merek: yang diuji di sini justru perilaku terhadap DOMAIN LAMA
+// yang masih terdaftar di Google Cloud Console. Menggantinya jadi aiugc.id
+// membuat tes lulus tanpa menguji apa pun.
 process.env.APP_BASE_URL = "https://aiugc.id";
 process.env.APP_ASAL_TAMBAHAN = "https://bikinfyp.com, http://tidak-aman.example, bukan-url";
 

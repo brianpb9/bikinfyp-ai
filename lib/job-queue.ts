@@ -7,6 +7,7 @@
  */
 import { Queue } from "bullmq";
 import { config } from "./config";
+import { PRIORITAS, type AsalJob } from "./prioritas-antrean";
 
 export type QueueMode = "inline" | "redis";
 
@@ -49,9 +50,13 @@ export function getRedisJobQueue(): Queue<{ jobId: string }> {
 }
 
 /** Enqueue is durable and idempotent while the BullMQ job id exists. */
-export async function enqueueRedisJob(jobId: string): Promise<void> {
+export async function enqueueRedisJob(jobId: string, asal: AsalJob = "retail"): Promise<void> {
   await getRedisJobQueue().add("render", { jobId }, {
     jobId,
+    // Brand didahulukan atas retail — lihat lib/prioritas-antrean.ts. Bawaan
+    // "retail" dipilih sengaja: jalur yang lupa menyebut asalnya tidak boleh
+    // diam-diam naik kelas.
+    priority: PRIORITAS[asal],
     attempts: 3,
     backoff: { type: "exponential", delay: 1_000 },
     removeOnComplete: { age: 86_400, count: 1_000 },
@@ -64,9 +69,9 @@ export async function enqueueRedisJob(jobId: string): Promise<void> {
  * worker module; inline imports it only when a developer explicitly chooses
  * the SQLite rollback path.
  */
-export async function enqueueJob(jobId: string): Promise<void> {
+export async function enqueueJob(jobId: string, asal: AsalJob = "retail"): Promise<void> {
   if (process.env.RACUN_WORKER_DISABLED === "1") return;
-  if (queueMode() === "redis") return enqueueRedisJob(jobId);
+  if (queueMode() === "redis") return enqueueRedisJob(jobId, asal);
   const inline = await import("./worker");
   await inline.enqueueInlineJob(jobId);
 }
@@ -80,11 +85,15 @@ export async function enqueueJob(jobId: string): Promise<void> {
  * pernah dilanjutkan dan brand menunggu selamanya tanpa error apa pun.
  * Karena itu id BullMQ-nya unik per percobaan; payload {jobId} tetap sama,
  * dan itulah yang dibaca worker (scripts/worker.ts: job.data.jobId). */
-export async function enqueueJobResume(jobId: string, reason: string): Promise<void> {
+export async function enqueueJobResume(jobId: string, reason: string, asal: AsalJob = "brand"): Promise<void> {
   if (process.env.RACUN_WORKER_DISABLED === "1") return;
   if (queueMode() === "redis") {
     await getRedisJobQueue().add("render", { jobId }, {
       jobId: `${jobId}:${reason}:${Date.now()}`,
+      // Bawaan "brand" di sini, BUKAN "retail": melanjutkan job adalah alur
+      // persetujuan scene milik dashboard brand. Job yang sudah setengah jalan
+      // dan sudah dibayar tidak pantas mengantre ulang dari belakang.
+      priority: PRIORITAS[asal],
       attempts: 3,
       backoff: { type: "exponential", delay: 1_000 },
       removeOnComplete: { age: 86_400, count: 1_000 },

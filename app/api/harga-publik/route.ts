@@ -28,6 +28,12 @@ export async function GET() {
   const daftar = JENIS_VIDEO.filter((j) => harga[j]).map((j) => ({
     id: j,
     label: KUALITAS[j].label,
+      // Penjelasan IKUT dikirim supaya layar promosi tidak perlu menuliskannya
+      // sendiri. Sampai 6 Sep 2026 halaman /onboarding memajang dua paket yang
+      // sudah pensiun ("AI Bersuara Rp12.000", "Bersuara Pro Rp80.000") lengkap
+      // dengan deskripsinya — angka DAN kalimatnya sama-sama basi, karena
+      // dua-duanya diketik di sana.
+      jelas: KUALITAS[j].jelas,
     harga_idr: harga[j] as number,
   }));
 

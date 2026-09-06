@@ -19,10 +19,10 @@ test("daftar kosong berarti TIDAK ADA admin, bukan semua orang admin", () => {
 test("hanya email yang terdaftar, tidak peduli huruf besar-kecil", () => {
   const asli = process.env.ADMIN_EMAILS;
   try {
-    process.env.ADMIN_EMAILS = "Founder@Bikinfyp.com, ops@bikinfyp.com";
+    process.env.ADMIN_EMAILS = "Founder@Aiugc.id, ops@aiugc.id";
     assert.equal(daftarAdmin().length, 2);
-    assert.equal(apakahAdmin("FOUNDER@bikinfyp.com"), true);
-    assert.equal(apakahAdmin("ops@bikinfyp.com"), true);
+    assert.equal(apakahAdmin("FOUNDER@aiugc.id"), true);
+    assert.equal(apakahAdmin("ops@aiugc.id"), true);
     assert.equal(apakahAdmin("orang@lain.com"), false);
     // Yang paling berbahaya: nilai kosong/null diperlakukan sebagai admin.
     assert.equal(apakahAdmin(null), false);

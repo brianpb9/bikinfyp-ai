@@ -1,5 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { PAKET_KREDIT, TIER_HARGA, TIER_PENSIUN, rentangHarga, tierMasihDijual } from "../lib/paket-kredit";
 import { config } from "../lib/config";
 
@@ -131,4 +133,56 @@ test("halaman promosi tidak menuliskan harga sendiri", async () => {
   assert.match(rute, /hargaKredit\(\)/, "rute publik tidak membaca harga yang berlaku");
   assert.ok(!/getAuthUser/.test(rute), "rute harga publik menuntut login — halaman promosi tidak bisa memakainya");
   assert.match(baca("app/onboarding/page.tsx"), /\/api\/harga-publik/, "onboarding tidak membaca harga dari server");
+});
+
+const bacaSumber = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+
+/**
+ * Sumber TANPA komentar.
+ *
+ * Dua kali dalam satu hari (admin & halaman ini) tes yang memeriksa isi berkas
+ * lulus atau jatuh karena KOMENTAR, bukan karena kodenya: komentar yang
+ * menjelaskan "dulu di sini tertulis X" membuat pencarian X tetap ketemu.
+ * Komentar dibuang lebih dulu supaya yang diperiksa benar-benar kodenya.
+ */
+const kodeSaja = (rel: string) =>
+  bacaSumber(rel)
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter((b) => !/^\s*\/\//.test(b))
+    .join("\n");
+
+// ── LAYAR PROMOSI TIDAK BOLEH MENYIMPAN HARGA SENDIRI (6 Sep 2026) ──────────
+//
+// Dilaporkan Brian: kalkulator hemat biaya dan section "Harga transparan" di
+// /onboarding masih memajang "AI Bersuara Rp12.000" dan "Bersuara Pro
+// Rp80.000" — dua paket yang pensiun 2 Sep 2026 saat susunan
+// standard/premium/ultra berlaku. Angka DAN nama layanannya sama-sama basi,
+// karena dua-duanya diketik di berkas halaman.
+
+test("kalkulator & section harga di /onboarding dibaca dari server, bukan diketik", () => {
+  const src = kodeSaja("app/onboarding/page.tsx");
+  // Paket yang sudah pensiun tidak boleh muncul lagi di layar promosi.
+  for (const pensiun of ["AI Bersuara", "Bersuara Pro"]) {
+    assert.doesNotMatch(src, new RegExp(pensiun), `paket pensiun "${pensiun}" masih dipajang`);
+  }
+  // Harga paket TIDAK boleh berupa literal di halaman ini.
+  assert.doesNotMatch(src, /12_000|80_000/, "harga paket diketik sebagai literal");
+  assert.match(src, /fetch\("\/api\/harga-publik"\)/, "harga harus diambil dari /api/harga-publik");
+  assert.match(src, /paket\.map/, "daftar paket harus dirender dari data server");
+});
+
+test("angka pembanding kalkulator punya SATU tempat dan sumbernya disebut", () => {
+  const src = kodeSaja("app/onboarding/page.tsx");
+  assert.match(src, /BIAYA_MANUSIA_PER_VIDEO = 125_000/, "pembanding harus satu konstanta bernama");
+  // Sumbernya wajib ikut tampil. Kalkulator yang membandingkan dengan angka
+  // tanpa sumber bukan kalkulator — itu iklan yang menyamar jadi hitungan.
+  assert.match(src, /Fastwork/, "sumber angka pembanding harus disebut di halaman");
+  // Hanya boleh muncul sekali sebagai literal: di deklarasi konstantanya.
+  assert.equal((src.match(/125_000/g) ?? []).length, 1, "angka pembanding diketik lebih dari sekali");
+});
+
+test("API harga publik mengirim penjelasan paket, supaya halaman tidak menuliskannya", () => {
+  assert.match(kodeSaja("app/api/harga-publik/route.ts"), /jelas: KUALITAS\[j\]\.jelas/);
 });

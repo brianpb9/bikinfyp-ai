@@ -14,7 +14,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-process.env.APP_BASE_URL = "https://bikinfyp.com";
+process.env.APP_BASE_URL = "https://aiugc.id";
 const { cookieSesi, cookieHapus, cookieState, cookieAnon, cookieAman } = await import("../lib/cookies");
 
 test("produksi HTTPS menandai cookie Secure", () => {

@@ -20,7 +20,7 @@ process.env.PAYMENT_GATEWAY = "duitku";
 process.env.DUITKU_MERCHANT_CODE = "DS34363";
 process.env.DUITKU_API_KEY = "kunci-uji-sandbox";
 process.env.DUITKU_IS_PRODUCTION = "false";
-process.env.ADMIN_EMAILS = "penguji@bikinfyp.test";
+process.env.ADMIN_EMAILS = "penguji@aiugc.test";
 
 const { paymentsEnv, paymentsLive, paymentsProvider, paymentsConfigured } = await import("../lib/config");
 
@@ -118,7 +118,7 @@ test("callback sandbox TETAP mengkredit penguji terdaftar", async () => {
   const db = getDb();
   const id = uuid();
   db.prepare("INSERT INTO users (id, phone, email, name, tier, locale, created_at) VALUES (?,?,?,?,?,?,?)")
-    .run(id, null, "penguji@bikinfyp.test", "Penguji", "free", "id", now());
+    .run(id, null, "penguji@aiugc.test", "Penguji", "free", "id", now());
   const orderId = `racun-sandbox-admin-${uuid().slice(0, 8)}`;
   db.prepare(
     "INSERT INTO payments (id, user_id, gateway, gateway_ref, amount_idr, credits, status, raw_payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)"

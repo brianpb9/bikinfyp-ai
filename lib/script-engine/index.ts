@@ -607,7 +607,7 @@ async function generateOne(
     quality_tier: tier,
     segments,
     caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg, promo, hookFamily: family, kategori: product.category }), cartLabel),
-    hashtags: buildHashtags(product.category),
+    hashtags: buildHashtags(product.category, product.name),
     validation,
   };
 }

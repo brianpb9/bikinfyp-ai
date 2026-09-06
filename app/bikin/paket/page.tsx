@@ -4,6 +4,7 @@ import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { apiFetch } from "../../_components/api";
 import { ErrorText } from "../../_components/ui";
+import Link from "next/link";
 
 interface OutputPackage {
   job_id: string;
@@ -52,7 +53,29 @@ function PaketInner() {
     <main className="min-h-dvh space-y-5 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 py-6 pb-10">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah terakhir</p>
-        <h1 className="font-display text-xl font-bold text-zinc-900">← Paket Posting</h1>
+        {/* PANAH ITU DULU CUMA GAMBAR.
+            Ia ditulis di dalam <h1> sebagai karakter biasa, jadi terlihat persis
+            seperti tombol kembali tapi tidak bisa ditekan — dilaporkan Brian
+            6 Sep 2026. Panah yang tidak mengantar ke mana-mana lebih buruk
+            daripada tidak ada panah: pengguna menekannya, tidak terjadi apa-apa,
+            dan ia menyimpulkan halamannya rusak.
+            Sekarang benar-benar tautan ke halaman sebelumnya dalam alur
+            (/bikin/hasil), dengan sasaran sentuh 44px sesuai sisa aplikasi.
+            Tanpa jobId panahnya TIDAK ditampilkan — tautan yang menuju halaman
+            hasil tanpa job hanya memindahkan kebuntuan. */}
+        {jobId ? (
+          <h1 className="font-display text-xl font-bold text-zinc-900">
+            <Link
+              href={`/bikin/hasil?job=${jobId}`}
+              aria-label="Kembali ke hasil video"
+              className="inline-flex min-h-[44px] items-center gap-2 hover:text-amber-700"
+            >
+              <span aria-hidden>←</span> Paket Posting
+            </Link>
+          </h1>
+        ) : (
+          <h1 className="font-display text-xl font-bold text-zinc-900">Paket Posting</h1>
+        )}
       </div>
 
       <section className="flex items-center justify-between rounded-2xl border-2 border-zinc-100 bg-white p-4 shadow-sm">

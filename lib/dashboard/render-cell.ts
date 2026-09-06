@@ -223,7 +223,8 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   }
 
   try {
-    await enqueueJob(jobId);
+    // Jalur BRAND — dashboard enterprise. Lihat lib/prioritas-antrean.ts.
+    await enqueueJob(jobId, "brand");
   } catch {
     await jobsRepo.failJob(jobId, "Antrean render tidak tersedia; kredit dikembalikan otomatis.");
     return gagal("Antrean render tidak tersedia — kredit dikembalikan otomatis.");

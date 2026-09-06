@@ -270,7 +270,7 @@ export async function POST(req: Request) {
       // The deterministic completion fixture belongs only to the disposable
       // smoke.  A real PostgreSQL runtime is completed by the queue worker.
       if (!created.duplicate && postgresSmokeEnabled()) await smokeCompleteJob(created.jobId);
-      if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId);
+      if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId, "retail");
       return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, jenis_video: jenis, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
     }
 
@@ -314,7 +314,7 @@ export async function POST(req: Request) {
       // A duplicate request also re-attempts enqueue. BullMQ job-id dedup
       // makes this safe and recovers the narrow case where Redis was down
       // after SQLite committed the hold but before the first enqueue.
-      await enqueueJob(jobId);
+      await enqueueJob(jobId, "retail");
     } catch (queueError) {
       const queued = getJob(jobId);
       if (queued) failJob(queued, "Antrean render tidak tersedia; kredit dikembalikan otomatis.");

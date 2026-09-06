@@ -6,6 +6,7 @@ import {
 import type { RegisterSpec } from "./registers";
 import { formatHargaOverlay } from "./templates";
 import { formatPromoDateShort, type ActivePromo } from "../promo";
+import { rangkaiHashtag } from "./hashtag-produk";
 
 // Pembuka caption per KELUARGA HOOK (2026-08-11).
 //
@@ -95,9 +96,18 @@ export function buildCaption(opts: {
   return `${opener} ${promoLine}${CAPTION_CTA[ctaIndex](reg.me)}`;
 }
 
-export function buildHashtags(category: string): string[] {
+/**
+ * Hashtag untuk satu produk.
+ *
+ * namaProduk OPSIONAL demi pemanggil lama, tapi memberikannya adalah yang
+ * membuat hasilnya menyebut barangnya. Tanpa itu, speaker karaoke dan kabel
+ * charger mendapat delapan tag yang sama persis — persis keluhan Brian 6 Sep
+ * 2026. Lihat lib/script-engine/hashtag-produk.ts.
+ */
+export function buildHashtags(category: string, namaProduk?: string | null): string[] {
   const niche = CATEGORY_NICHE_HASHTAGS[category] ?? CATEGORY_NICHE_HASHTAGS.default;
-  return [...BASE_HASHTAGS, ...niche]; // 8 tag: campuran umum + niche + #racuntiktok
+  if (!namaProduk) return [...BASE_HASHTAGS, ...niche];
+  return rangkaiHashtag(BASE_HASHTAGS, namaProduk, niche);
 }
 
 export function suggestedPostTime(category: string): string {

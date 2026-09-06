@@ -2,7 +2,7 @@
 //
 // Diuji terhadap ARTEFAK NYATA, bukan fixture karangan:
 //   asli  = storage/uploads/f4d0d645-.../0.webp        (SCARLETT, dropper, 15 ML)
-//   palsu = /tmp/bikinfyp-audit.r8g5CW/c-no-face-2.5.png (SCARLET, pump, 10 ml)
+//   palsu = /tmp/aiugc-audit.r8g5CW/c-no-face-2.5.png (SCARLET, pump, 10 ml)
 //
 // Frame palsu itu LOLOS di versi sebelumnya. Ia harus GAGAL sekarang.
 
@@ -16,7 +16,7 @@ process.env.STORAGE_DIR = `/tmp/racun-test-qcf1-storage-${process.pid}`;
 const { merekCocok, bolehJadiReferensi, qcF1FrameFidelity } = await import("../lib/media/qc-frame");
 
 const ASLI = "storage/uploads/f4d0d645-ecd8-4842-be0e-17c14ea5826c/0.webp";
-const PALSU = "/tmp/bikinfyp-audit.r8g5CW/c-no-face-2.5.png";
+const PALSU = "/tmp/aiugc-audit.r8g5CW/c-no-face-2.5.png";
 
 test("merekCocok menolak merek yang TERPOTONG, menerima derau di ekor", () => {
   // Inti cacatnya: awalan 4 huruf membuat "scarlet" lolos untuk "scarlett" —

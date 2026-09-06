@@ -83,12 +83,18 @@ test("HARGA TRANSPARAN: pil dicabut, janjinya ditepati section dengan angka", ()
   assert.match(src, /uppercase tracking-\[0\.16em\] text-amber-600">Harga transparan</, "section-nya tidak ada");
   // Satu sumber harga untuk kalkulator DAN section: halaman yang menjanjikan
   // transparansi tidak boleh menyebut dua harga berbeda di dua tempat.
-  assert.match(src, /const TIER_LANDING = \[/);
-  assert.match(src, /\{TIER_LANDING\.map/);
+  //
+  // SUMBERNYA PINDAH 6 Sep 2026. Dulu satu sumber itu berupa daftar TIER_LANDING
+  // yang diketik di berkas ini — satu sumber, tapi sumber yang salah: ia masih
+  // memajang "AI Bersuara Rp12.000" berbulan-bulan sesudah paket itu pensiun.
+  // Sekarang sumbernya /api/harga-publik, jadi angka di layar promosi tidak bisa
+  // lagi tertinggal dari angka yang benar-benar ditagihkan.
+  assert.match(src, /fetch\("\/api\/harga-publik"\)/, "harga tidak diambil dari server");
   assert.equal(
-    (src.match(/12_000|12000/g) ?? []).length, 1,
-    "harga 12.000 tertulis lebih dari sekali — dua salinan bisa melenceng",
+    (src.match(/paket\.map/g) ?? []).length, 2,
+    "kalkulator dan section harga harus sama-sama dirender dari daftar yang sama",
   );
+  assert.doesNotMatch(src, /12_000|80_000/, "harga paket kembali diketik di halaman");
 });
 
 test("bendera kemampuan SELAMAT walau health gagal", () => {

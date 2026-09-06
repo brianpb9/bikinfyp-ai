@@ -17,7 +17,7 @@ test("sesi berlaku tepat 24 jam", () => {
 
 test("token yang diterbitkan membawa exp 24 jam dari sekarang", async () => {
   const sebelum = Math.floor(Date.now() / 1000);
-  const token = await issueToken("user-uji", "uji@bikinfyp.test");
+  const token = await issueToken("user-uji", "uji@aiugc.test");
   const payload = JSON.parse(Buffer.from(token.split(".")[1], "base64url").toString());
   const umur = payload.exp - payload.iat;
   assert.equal(umur, SESSION_MAX_AGE_SEC, `umur token ${umur} detik, seharusnya ${SESSION_MAX_AGE_SEC}`);
@@ -25,7 +25,7 @@ test("token yang diterbitkan membawa exp 24 jam dari sekarang", async () => {
 });
 
 test("token yang baru diterbitkan masih sah", async () => {
-  const token = await issueToken("user-uji", "uji@bikinfyp.test");
+  const token = await issueToken("user-uji", "uji@aiugc.test");
   const hasil = await verifyToken(token);
   assert.equal(hasil?.userId, "user-uji");
 });
