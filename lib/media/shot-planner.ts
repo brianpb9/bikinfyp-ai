@@ -38,6 +38,8 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { mesinBerlaku } from "../pemetaan-model";
+import { kualitasDikenal, type Kualitas } from "../kualitas-video";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -520,6 +522,40 @@ function isLastShot(i: number, total: number): boolean { return i === total - 1;
 const MIN_SHOT_SEC = 4;
 
 /**
+ * Durasi klip terpendek yang DITERIMA MESINNYA, bukan yang kita mau.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA ADA
+ * ---------------------------------------------------------------------------
+ * Ditemukan 6 Sep 2026 saat menjalankan kampanye brand dari ujung ke ujung.
+ * Perencana ini memecah 15 detik jadi 3 shot @5 detik — sah menurut
+ * MIN_SHOT_SEC = 4. Tapi Grok Imagine lewat kie.ai, yaitu mesin paket
+ * STANDARD, MENOLAK durasi di bawah 6 detik:
+ *
+ *   duration=5  -> {"code":500,"msg":"Value must be within the specified range"}
+ *   duration=6  -> {"code":200,...,"taskId":"f718954c..."}
+ *   duration=8, 10, 15 -> diterima
+ *
+ * (diuji langsung ke API kie.ai, bukan diturunkan dari dokumentasi)
+ *
+ * Akibatnya SETIAP shot ditolak, ketiga percobaan gagal, dan seluruh paket
+ * Standard mati — sementara biayanya sudah keluar di frame yang terlanjur
+ * dibuat. Dua job uji menelan Rp11.880 dan Rp5.958 tanpa menghasilkan apa pun.
+ *
+ * MIN_SHOT_SEC = 4 tetap benar untuk BytePlus. Yang salah adalah menganggap
+ * satu angka berlaku untuk semua mesin.
+ */
+const MIN_DETIK_MESIN: Record<string, number> = {
+  "kie-grok": 6,
+  byteplus: MIN_SHOT_SEC,
+};
+
+function minDetikUntuk(tier: string | null | undefined): number {
+  if (!tier || !kualitasDikenal(tier)) return MIN_SHOT_SEC;
+  return MIN_DETIK_MESIN[mesinBerlaku(tier as Kualitas)] ?? MIN_SHOT_SEC;
+}
+
+/**
  * Kunci UKURAN ASLI produk (standar 10/10 §C.10).
  *
  * Ditulis positif dan disematkan di TIAP shot, bukan sekali di header: cacat
@@ -679,7 +715,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // BytePlus membulatkan naik — 6 shot dalam 15 detik berarti 2,5 detik per
   // shot, dipanjangkan jadi 4, dan videonya jadi 24 detik padahal user minta
   // 15. Jadi jumlah shot HARUS dibatasi durasi, bukan cuma dibatasi 2-6.
-  const maxShotsForDuration = Math.max(1, Math.floor(input.durationSec / MIN_SHOT_SEC));
+  // Batas minimum diambil dari MESIN paket ini, bukan dari satu angka tetap.
+  const minDetik = minDetikUntuk(input.qualityTier);
+  const maxShotsForDuration = Math.max(1, Math.floor(input.durationSec / minDetik));
   const requested = input.shotCountOverride
     ? Math.min(Math.max(2, Math.round(input.shotCountOverride)), 6, maxShotsForDuration)
     : null;
@@ -710,7 +748,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   function modulRapi(durasi: number, minimal: number): number {
     const ideal = Math.min(6, Math.max(minimal, Math.round(durasi / 5)));
     for (let n = ideal; n >= minimal; n--) {
-      if (durasi % n === 0 && durasi / n >= MIN_SHOT_SEC && durasi / n <= 15) return n;
+      if (durasi % n === 0 && durasi / n >= minDetik && durasi / n <= 15) return n;
     }
     return minimal;
   }
