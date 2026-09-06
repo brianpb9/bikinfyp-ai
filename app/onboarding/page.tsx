@@ -100,6 +100,22 @@ export default function OnboardingPage() {
   // CTA bawah tetap mengajak daftar saat intake ditutup, jadi satu halaman
   // memberi dua jawaban untuk status sistem yang sama.
   const kesiapan = useKesiapan();
+  // SIAPA YANG DATANG — retail atau brand.
+  //
+  // /brands sudah lama menautkan ke sini dengan ?audience=brand, dan halaman ini
+  // MENGABAIKANNYA sama sekali. Akibatnya calon brand mendarat di seluruh
+  // halaman pemasaran retail — termasuk janji "Daftar gratis — 1 video demo",
+  // yang untuk brand TIDAK BENAR: akun brand mulai dengan token nol
+  // (keputusan Brian 6 Sep 2026). Satu alur pendaftaran yang menjanjikan dua hal
+  // berbeda di dua layar adalah cara tercepat kehilangan kepercayaan sebelum
+  // orangnya sempat mencoba apa pun. Dilaporkan Brian, 6 Sep 2026.
+  const [brand, setBrand] = useState(false);
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search);
+    // Hostname brand ikut dihitung: orang bisa membuka /onboarding langsung di
+    // brand.aiugc.id tanpa lewat tautan ber-parameter.
+    setBrand(p.get("audience") === "brand" || window.location.hostname.startsWith("brand."));
+  }, []);
   const cta = ajakan(kesiapan);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
@@ -237,22 +253,38 @@ export default function OnboardingPage() {
                 dipakai kalkulator di bawah. "Video pertama gratis" tetap persis
                 benar karena paket gratis pendaftar berupa satu video. */}
             <div className="space-y-3">
-              <h1 className="text-center font-display text-[2.3rem] font-extrabold leading-[1.08] tracking-tight text-zinc-900">
-                Konten jualan tiap hari
-                <br />
-                <span className="text-amber-500">tanpa syuting.</span>
-              </h1>
-              <p className="text-center text-lg leading-snug text-zinc-600">
-                Upload foto produk, biasanya {JANJI_WAKTU.kisaran} kemudian videonya siap ditinjau.
-                <br />
-                {mulaiIdr ? (
-                  <>
-                    Mulai <b className="text-zinc-900">Rp{mulaiIdr.toLocaleString("id-ID")}</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
-                  </>
-                ) : (
-                  <>Bayar per video — jasa UGC biasanya sekitar Rp100–150 ribu.</>
-                )}
-              </p>
+              {brand ? (
+                <>
+                  <h1 className="text-center font-display text-[2.1rem] font-extrabold leading-[1.1] tracking-tight text-zinc-900">
+                    Masuk ke
+                    <br />
+                    <span className="text-indigo-600">AIUGC.ID Brands</span>
+                  </h1>
+                  <p className="text-center text-base leading-snug text-zinc-600">
+                    Buat akun dulu, lalu daftarkan brand kamu. Kami tinjau pendaftarannya sebelum
+                    membuka akses dashboard.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h1 className="text-center font-display text-[2.3rem] font-extrabold leading-[1.08] tracking-tight text-zinc-900">
+                    Konten jualan tiap hari
+                    <br />
+                    <span className="text-amber-500">tanpa syuting.</span>
+                  </h1>
+                  <p className="text-center text-lg leading-snug text-zinc-600">
+                    Upload foto produk, biasanya {JANJI_WAKTU.kisaran} kemudian videonya siap ditinjau.
+                    <br />
+                    {mulaiIdr ? (
+                      <>
+                        Mulai <b className="text-zinc-900">Rp{mulaiIdr.toLocaleString("id-ID")}</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
+                      </>
+                    ) : (
+                      <>Bayar per video — jasa UGC biasanya sekitar Rp100–150 ribu.</>
+                    )}
+                  </p>
+                </>
+              )}
               <a
                 href={cta.href}
                 onClick={(e) => {
@@ -261,11 +293,19 @@ export default function OnboardingPage() {
                 }}
                 aria-disabled={kesiapan === "memuat"}
                 className="mx-auto flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600"
+                style={brand ? { backgroundColor: "#4f46e5", boxShadow: "0 10px 15px -3px rgb(79 70 229 / 0.25)" } : undefined}
               >
-                {cta.label}
+                {/* Label CTA untuk brand TIDAK boleh memakai ajakan() apa adanya:
+                    seluruh variannya menjanjikan "gratis — 1 video demo", dan
+                    itu jatah pendaftar RETAIL. Brand mulai dengan token nol. */}
+                {brand ? "Buat akun brand" : cta.label}
               </a>
-              {cta.catatan && (
-                <p className="text-center text-sm text-zinc-500">{cta.catatan}</p>
+              {brand ? (
+                <p className="text-center text-sm text-zinc-500">
+                  Akun brand mulai dengan saldo token nol — berbeda dengan akun retail.
+                </p>
+              ) : (
+                cta.catatan && <p className="text-center text-sm text-zinc-500">{cta.catatan}</p>
               )}
               {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu,
                   daftar belakangan. Turun jadi tautan kecil — dulu ini satu-
@@ -339,6 +379,13 @@ export default function OnboardingPage() {
               ))}
             </div>
 
+            {/* SELURUH BLOK DI BAWAH INI MILIK RETAIL.
+                Kalkulator per-video, daftar harga paket, dan FAQ "bayar per
+                video" semuanya menjawab pertanyaan penjual satuan. Brand
+                membayar dengan token dan pertanyaannya berbeda; menampilkan
+                halaman ini kepada mereka membuat produk enterprise terbaca
+                seperti layanan eceran. */}
+            {!brand && (
             <section className="rounded-[28px] bg-zinc-900 p-5 text-white shadow-xl shadow-zinc-900/15">
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Kalkulator hemat biaya</p>
               <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight">Berapa video yang kamu butuh tiap bulan?</h2>
@@ -387,6 +434,7 @@ export default function OnboardingPage() {
                 dari daftar harga yang berlaku saat ini — bukan angka yang ditulis di halaman ini.
               </p>
             </section>
+            )}
 
             {/* r13 (review produk 2026-08-07): badge metode bayar dulu tampil TANPA
                 SYARAT ke semua pengunjung — janji "checkout aman" yang tidak benar
@@ -395,7 +443,7 @@ export default function OnboardingPage() {
                 dan selama null (menunggu /api/meta) versi lama menampilkan
                 klaim checkout yang belum tentu benar. Halaman /kredit sudah
                 diperbaiki 16 Agu; halaman ini terlewat. */}
-            {paymentsLive === true && (
+            {paymentsLive === true && !brand && (
             <section className="rounded-[26px] border border-zinc-100 bg-white p-5 shadow-sm">
               <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">Checkout aman lewat</p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">Virtual Account</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">Kartu Kredit</span></div>
@@ -406,7 +454,7 @@ export default function OnboardingPage() {
             {/* HARGA TRANSPARAN — dulu cuma lencana di pojok atas.
                 Section ini menggantikannya karena transparansi diukur dari
                 angka yang benar-benar disebut, bukan dari kata "transparan". */}
-            {paket.length > 0 && (
+            {paket.length > 0 && !brand && (
             <section>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Harga transparan</p>
               <h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Bayar per video, bukan langganan</h2>
@@ -438,6 +486,7 @@ export default function OnboardingPage() {
             </section>
             )}
 
+            {!brand && (
             <section><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Jawaban jujur sebelum mulai</p><h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Yang perlu kamu tahu</h2><div className="mt-4 space-y-2">{[
               ["Videonya kelihatan AI? Aman dari TikTok Shop?", "Video diberi label AIGC dan kamu tetap perlu menyalakan label konten AI saat upload. Kami tidak menyembunyikan asal konten—ini membantu kamu mengikuti aturan platform."],
               ["Kalau hasilnya jelek gimana?", "Sistem QC memeriksa wajah yang tidak diinginkan dan konsistensi produk. Jika job gagal QC atau gagal render, kredit di-release otomatis lewat ledger."],
@@ -446,6 +495,7 @@ export default function OnboardingPage() {
               ["Berapa lama sampai jadi?", `Biasanya ${JANJI_WAKTU.kisaran} per video — kalau antrean AI padat bisa sampai ${JANJI_WAKTU.ekor}. Halaman hasil memperbarui sendiri.`],
               ["Ada garansi kalau render gagal?", "Ya. Hold kredit dilepas otomatis ketika job gagal, jadi saldo bisa dipakai lagi untuk mencoba render berikutnya."],
             ].map(([q,a],i)=><div key={q} className="rounded-2xl border border-zinc-200 bg-white"><button type="button" onClick={()=>setOpenFaq(openFaq===i?null:i)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left text-sm font-bold text-zinc-800"><span>{q}</span><span className="text-amber-500">{openFaq===i?"−":"+"}</span></button>{openFaq===i&&<p className="border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-600">{a}</p>}</div>)}</div></section>
+            )}
 
             {/* Identitas & kontak merchant di halaman depan publik — syarat
                 onboarding gateway pembayaran (telepon, email, alamat terlihat

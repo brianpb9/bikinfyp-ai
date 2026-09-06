@@ -186,3 +186,35 @@ test("angka pembanding kalkulator punya SATU tempat dan sumbernya disebut", () =
 test("API harga publik mengirim penjelasan paket, supaya halaman tidak menuliskannya", () => {
   assert.match(kodeSaja("app/api/harga-publik/route.ts"), /jelas: KUALITAS\[j\]\.jelas/);
 });
+
+// ── HALAMAN MASUK HARUS TAHU SIAPA YANG DATANG (laporan Brian 6 Sep 2026) ───
+//
+// /brands sudah lama menautkan ke /onboarding?audience=brand, dan halaman itu
+// MENGABAIKAN parameternya. Calon brand mendarat di seluruh halaman pemasaran
+// retail — termasuk janji "Daftar gratis — 1 video demo", yang untuk brand
+// TIDAK BENAR: akun brand mulai dengan token nol. Satu alur pendaftaran yang
+// menjanjikan dua hal berbeda di dua layar adalah cara tercepat kehilangan
+// kepercayaan sebelum orangnya mencoba apa pun.
+
+test("/onboarding membaca audience=brand DAN hostname brand", () => {
+  const src = kodeSaja("app/onboarding/page.tsx");
+  assert.match(src, /audience"\) === "brand"/, "parameter audience diabaikan");
+  // Hostname ikut dihitung: orang bisa membuka /onboarding langsung di
+  // brand.aiugc.id tanpa lewat tautan ber-parameter.
+  assert.match(src, /hostname\.startsWith\("brand\."\)/, "hostname brand tidak dikenali");
+});
+
+test("janji 'gratis 1 video demo' TIDAK ditampilkan ke calon brand", () => {
+  const src = kodeSaja("app/onboarding/page.tsx");
+  // Label CTA-nya tidak boleh memakai ajakan() apa adanya untuk brand — semua
+  // variannya menjanjikan video gratis.
+  assert.match(src, /brand \? "Buat akun brand" : cta\.label/, "CTA brand memakai label retail");
+});
+
+test("blok harga retail disembunyikan dari calon brand", () => {
+  const src = kodeSaja("app/onboarding/page.tsx");
+  // Kalkulator, daftar harga paket, badge pembayaran, dan FAQ semuanya
+  // menjawab pertanyaan penjual satuan. Brand membayar dengan token.
+  assert.ok((src.match(/!brand &&/g) ?? []).length >= 3, "blok retail tidak dijaga");
+  assert.match(src, /paket\.length > 0 && !brand &&/, "daftar harga paket masih tampil untuk brand");
+});
