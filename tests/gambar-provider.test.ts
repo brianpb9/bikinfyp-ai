@@ -108,3 +108,38 @@ test("salinan job dibuang saat job selesai", async () => {
   await G.hapusGambarProvider("job-7", 2);
   assert.ok(!ada(0) && !ada(1), "foto produk tertinggal di kotak yang bisa dibaca tanpa sesi");
 });
+
+// ── WEBP TIDAK BISA DIBACA PENYEDIA (temuan 6 Sep 2026) ────────────────────
+//
+// Grok Imagine lewat kie.ai — mesin paket Standard — menolak WebP, dan
+// penolakannya tidak menyebut formatnya sama sekali:
+//   {"state":"fail","failCode":400,"failMsg":"Upload failed: Server internal error."}
+//
+// Diisolasi dengan tiga permintaan yang seluruhnya identik kecuali formatnya,
+// lewat URL bertanda tangan yang sama: webp gagal, png dan jpg berhasil.
+// Penyimpanan kita menyimpan unggahan sebagai .webp, jadi SETIAP render
+// Standard mengirim format yang tidak bisa dibaca.
+
+test("webp diterbitkan sebagai JPEG, bukan apa adanya", async () => {
+  const sharp = (await import("sharp")).default;
+  const webp = await sharp({ create: { width: 400, height: 600, channels: 3, background: "#a33" } }).webp().toBuffer();
+  const berkas = `/tmp/uji-webp-${process.pid}.webp`;
+  fs.writeFileSync(berkas, webp);
+  const url = await G.terbitkanGambarProvider(berkas, "uji-format", 0);
+  assert.match(url, /\.jpg\?/, `URL masih menunjuk berkas non-JPEG: ${url}`);
+  fs.unlinkSync(berkas);
+});
+
+test("JPEG dan PNG diterbitkan apa adanya — tidak diubah tanpa alasan", async () => {
+  const sharp = (await import("sharp")).default;
+  for (const [ext, buat] of [
+    [".jpg", () => sharp({ create: { width: 300, height: 300, channels: 3, background: "#3a3" } }).jpeg().toBuffer()],
+    [".png", () => sharp({ create: { width: 300, height: 300, channels: 3, background: "#33a" } }).png().toBuffer()],
+  ] as const) {
+    const berkas = `/tmp/uji-asli-${process.pid}${ext}`;
+    fs.writeFileSync(berkas, await buat());
+    const url = await G.terbitkanGambarProvider(berkas, `uji-asli${ext}`, 0);
+    assert.ok(url.includes(`${ext}?`), `${ext} ikut diubah padahal sudah diterima penyedia: ${url}`);
+    fs.unlinkSync(berkas);
+  }
+});

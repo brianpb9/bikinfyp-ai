@@ -138,12 +138,40 @@ export async function terbitkanGambarProvider(
     throw new Error(`APP_BASE_URL bukan alamat http(s): "${basis}"`);
   }
 
-  const bytes = await fs.promises.readFile(berkasLokal);
-  if (!mimeGambar(bytes)) {
+  const mentah = await fs.promises.readFile(berkasLokal);
+  if (!mimeGambar(mentah)) {
     throw new Error(`Berkas ${path.basename(berkasLokal)} bukan JPEG/PNG/WebP — tidak diterbitkan.`);
   }
 
-  const key = kunciGambar(jobId, shotIndex, path.extname(berkasLokal));
+  // WEBP DIUBAH JADI JPEG SEBELUM DITERBITKAN.
+  //
+  // Bukan soal ukuran, tapi soal apa yang bisa DIBACA penyedia. Grok Imagine
+  // lewat kie.ai — mesin paket Standard — menolak WebP, dan penolakannya tidak
+  // menyebut formatnya sama sekali:
+  //
+  //   {"state":"fail","failCode":400,"failMsg":"Upload failed: Server internal error."}
+  //
+  // Diisolasi 6 Sep 2026 dengan tiga permintaan yang SELURUHNYA identik kecuali
+  // formatnya, lewat URL bertanda tangan yang sama:
+  //   webp -> fail "Upload failed: Server internal error."
+  //   png  -> success
+  //   jpg  -> success
+  //
+  // Penyimpanan kita menyimpan unggahan sebagai .webp, jadi setiap render
+  // Standard mengirim format yang tidak bisa dibaca — dan gagal SESUDAH frame
+  // dibayar. JPEG dipilih, bukan PNG: pada gambar produk ia ~3x lebih kecil
+  // (35 KB vs 105 KB pada foto uji), dan yang mengunduhnya ada di seberang
+  // internet.
+  //
+  // Diterapkan untuk SEMUA penyedia, bukan cuma kie: satu format keluaran
+  // berarti satu perilaku untuk diuji, dan JPEG diterima semuanya.
+  const perluUbah = mimeGambar(mentah) === "image/webp";
+  const bytes = perluUbah
+    ? await (await import("sharp")).default(mentah).jpeg({ quality: 92 }).toBuffer()
+    : mentah;
+  const ext = perluUbah ? ".jpg" : path.extname(berkasLokal);
+
+  const key = kunciGambar(jobId, shotIndex, ext);
   await mediaStorage().put(key, bytes, mimeGambar(bytes) ?? undefined);
 
   const exp = Math.floor(Date.now() / 1000) + TTL_DETIK;
