@@ -214,7 +214,18 @@ test("janji 'gratis 1 video demo' TIDAK ditampilkan ke calon brand", () => {
   const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
   // Label CTA-nya tidak boleh memakai ajakan() apa adanya untuk brand — semua
   // variannya menjanjikan video gratis.
-  assert.match(src, /brand \? "Buat akun brand" : cta\.label/, "CTA brand memakai label retail");
+  // SEMUA cta.label harus dijaga, bukan cuma yang di hero. Yang tertinggal
+  // membuat satu halaman menjanjikan dua hal: hero "Buat akun brand", tombol
+  // di kaki halaman "Daftar gratis — 1 video demo".
+  const polos = (src.match(/(?<!brand \? "Buat akun brand" : )cta\.label/g) ?? []).length;
+  assert.equal(polos, 0, `${polos} tombol masih memakai label retail tanpa penjagaan brand`);
+  // Kalimat retail BOLEH tetap ada — ia dipakai cabang retail. Yang dijaga:
+  // cabang brand harus DIPERIKSA LEBIH DULU, kalau tidak brand ikut membacanya.
+  assert.match(
+    src,
+    /\{brand\s*\n?\s*\? "Akun brand mulai dengan saldo token nol/,
+    "catatan CTA bawah tidak memeriksa brand lebih dulu",
+  );
 });
 
 test("blok harga retail disembunyikan dari calon brand", () => {

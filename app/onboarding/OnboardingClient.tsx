@@ -509,18 +509,25 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
               pendaftar memang berupa SATU VIDEO, jadi janjinya bisa dibuat
               spesifik tanpa melebih-lebihkan — dan tetap benar walau harganya
               diubah admin. */}
+          {/* CTA BAWAH ikut menyesuaikan, bukan cuma yang di hero.
+              Yang tertinggal di sini sempat lolos: hero-nya sudah berbunyi
+              "Buat akun brand" sementara tombol di kaki halaman masih
+              menjanjikan "1 video demo" pada halaman yang sama. Satu halaman,
+              dua janji yang bertentangan. */}
           {cta.mulaiDaftar ? (
             <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
-              {cta.label}
+              {brand ? "Buat akun brand" : cta.label}
             </PrimaryButton>
           ) : (
             <a href={cta.href} onClick={() => track("bottom_cta_click", { kesiapan })}
               className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600">
-              {cta.label}
+              {brand ? "Buat akun brand" : cta.label}
             </a>
           )}
           <p className="mt-2 text-center text-xs text-zinc-500">
-            {cta.mulaiDaftar
+            {brand
+              ? "Akun brand mulai dengan saldo token nol. Pendaftaran ditinjau dulu."
+              : cta.mulaiDaftar
               ? "Daftar dapat 1 video gratis. Tanpa kartu kredit."
               : cta.catatan}
           </p>
