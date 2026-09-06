@@ -76,7 +76,13 @@ test("setiap tab admin punya query dan tampilan, tidak ada yang kosong", () => {
   for (const tab of tabs) {
     const komponen = tab.charAt(0).toUpperCase() + tab.slice(1);
     assert.match(src, new RegExp(`async function ${komponen}\\(`), `tab "${tab}" tidak punya komponen`);
-    assert.match(src, new RegExp(`aktif === "${tab}" && <${komponen} ?/>`), `tab "${tab}" tidak dirender`);
+    // Pola sengaja MENERIMA prop: `<Pengguna jenis={...} />` sama sahnya
+    // dengan `<Pengguna />`. Yang dijaga test ini adalah tab yang TIDAK
+    // dirender sama sekali, bukan tab yang komponennya kebetulan butuh
+    // masukan. Versi pertama menuntut tag tertutup-sendiri tanpa prop, dan
+    // jatuh begitu saringan Retail/Brand ditambahkan (6 Sep) — menghukum
+    // perubahan yang benar.
+    assert.match(src, new RegExp(`aktif === "${tab}" && <${komponen}[ /]`), `tab "${tab}" tidak dirender`);
   }
 });
 
@@ -104,4 +110,53 @@ test("COGS admin dari cost_actual_idr, bukan ditaksir dari daftar harga", () => 
   assert.match(src, /SUM\(cost_actual_idr\)/);
   assert.match(src, /SUM\(j\.cost_actual_idr\)/);
   assert.doesNotMatch(src, /cogsIdr|priceIdr/, "admin menaksir biaya dari config, bukan dari yang tercatat");
+});
+
+// ── PEMBEDA RETAIL vs BRAND (permintaan Brian 6 Sep 2026) ───────────────────
+//
+// Satu produk, dua jenis pelanggan: retail beli paket di aiugc.id, brand punya
+// organisasi dan token. Admin harus bisa membedakannya — dan yang lebih penting,
+// TIDAK boleh kehilangan salah satunya.
+
+test("daftar pengguna admin memakai LEFT JOIN — retail tidak boleh lenyap", () => {
+  // Komentar SQL DIBUANG lebih dulu. Versi pertama memeriksa apakah teks
+  // "LEFT JOIN LATERAL" ada di berkas — dan teks itu juga ada di komentar SQL
+  // di atas query-nya. Jadi mengganti join sungguhannya jadi inner join tetap
+  // lolos: tesnya mencocokkan komentar, bukan query. Terbukti lewat mutasi.
+  const q = kode("app/admin/page.tsx").replace(/^\s*--.*$/gm, "");
+  assert.match(
+    q,
+    /FROM users u\s+LEFT JOIN LATERAL/,
+    "join ke organisasi harus LEFT, dan harus menempel pada FROM users",
+  );
+  // Inner join di sini akan MENGHAPUS seluruh pengguna retail dari daftar tanpa
+  // satu pun galat — halaman tetap tampil, isinya saja tinggal sebagian. Di
+  // produksi 6 Sep itu berarti 5 dari 8 pengguna hilang diam-diam.
+  assert.doesNotMatch(
+    q,
+    /\n\s*JOIN org_members m ON m\.user_id = u\.id/,
+    "inner join ke org_members menghapus semua pengguna retail",
+  );
+});
+
+test("jenis pengguna diturunkan dari organisasi, bukan dari kolom flag", () => {
+  const q = kode("app/admin/page.tsx");
+  assert.match(q, /function jenisPengguna/, "penentuan jenis harus punya satu tempat");
+  // Kolom "is_brand" di tabel users akan jadi kebenaran kedua yang bisa
+  // menyimpang dari org_members. Yang menyimpang biasanya baru ketahuan
+  // sesudah seseorang salah ditagih.
+  assert.doesNotMatch(q, /u\.is_brand|u\.jenis_pengguna|users\.tipe/, "jenis tidak boleh disimpan di users");
+});
+
+test("saringan hidup di URL, supaya bisa disalin dan dibuka lagi", () => {
+  const q = kode("app/admin/page.tsx");
+  assert.match(q, /jenis\?: string/, "searchParams harus menerima jenis");
+  assert.match(q, /tab=pengguna.*jenis=/s, "tautan saringan harus membawa tab DAN jenis");
+  // Kehilangan tab=pengguna membuat saringan melempar admin kembali ke
+  // Ringkasan — filter yang memindahkan halaman bukan filter.
+});
+
+test("nilai jenis yang asing jatuh ke \"semua\", bukan menghasilkan galat", () => {
+  const q = kode("app/admin/page.tsx");
+  assert.match(q, /jenis === "retail" \|\| jenis === "brand" \? jenis : "semua"/);
 });

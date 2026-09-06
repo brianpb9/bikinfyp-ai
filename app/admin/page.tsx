@@ -162,6 +162,8 @@ async function ambilPengguna() {
     ultra: string;
     jobs: string;
     job_terakhir: string | null;
+    org_nama: string | null;
+    org_status: string | null;
   }>(
     `WITH topup AS (
        SELECT user_id, jenis, SUM(delta) AS n FROM kredit_video
@@ -190,8 +192,29 @@ async function ambilPengguna() {
             (COALESCE((SELECT n FROM topup t WHERE t.user_id=u.id AND t.jenis='ultra'),0)
              + COALESCE((SELECT ultra FROM langganan_sisa s WHERE s.user_id=u.id),0))::text AS ultra,
             (SELECT COUNT(*) FROM jobs j WHERE j.user_id = u.id)::text AS jobs,
-            (SELECT MAX(j.created_at) FROM jobs j WHERE j.user_id = u.id) AS job_terakhir
-       FROM users u ORDER BY u.created_at DESC LIMIT 200`,
+            (SELECT MAX(j.created_at) FROM jobs j WHERE j.user_id = u.id) AS job_terakhir,
+            org.nama   AS org_nama,
+            org.status AS org_status
+       -- JENIS PENGGUNA DITURUNKAN, BUKAN DISIMPAN.
+       --
+       -- Tidak ada kolom "retail"/"brand" di tabel users, dan tidak perlu ada:
+       -- yang membedakan keduanya adalah FAKTA punya organisasi atau tidak.
+       -- Kolom terpisah akan jadi kebenaran kedua yang bisa menyimpang dari
+       -- org_members, dan yang menyimpang biasanya baru ketahuan sesudah
+       -- seseorang salah ditagih.
+       --
+       -- LEFT JOIN LATERAL, bukan JOIN: pengguna retail HARUS tetap muncul.
+       -- Keanggotaan tertua yang dipakai supaya urutannya stabil antar-muat,
+       -- aturan yang sama dengan lib/org.ts (created_at ASC).
+       FROM users u
+       LEFT JOIN LATERAL (
+         SELECT o.name AS nama, o.status AS status
+           FROM org_members m JOIN organizations o ON o.id = m.org_id
+          WHERE m.user_id = u.id
+          ORDER BY m.created_at ASC
+          LIMIT 1
+       ) org ON TRUE
+       ORDER BY u.created_at DESC LIMIT 200`,
     [sekarang],
   );
   return rows;
@@ -326,10 +349,13 @@ function Kosong({ pesan }: { pesan: string }) {
 
 /* ── halaman ──────────────────────────────────────────────────────────── */
 
-export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
+export default async function AdminPage({ searchParams }: { searchParams: Promise<{ tab?: string; jenis?: string }> }) {
   const user = await wajibAdmin();
-  const { tab } = await searchParams;
+  const { tab, jenis } = await searchParams;
   const aktif: IdTab = TAB.find((t) => t.id === tab)?.id ?? "ringkasan";
+  // Nilai asing diperlakukan sebagai "semua", bukan ditolak: ini saringan
+  // tampilan, dan URL yang salah ketik tidak pantas menghasilkan halaman galat.
+  const jenisPg = jenis === "retail" || jenis === "brand" ? jenis : "semua";
 
   if (!postgresRuntimeEnabled()) {
     return (
@@ -367,7 +393,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 
       {aktif === "ringkasan" && <Ringkasan />}
       {aktif === "keuangan" && <Keuangan />}
-      {aktif === "pengguna" && <Pengguna />}
+      {aktif === "pengguna" && <Pengguna jenis={jenisPg} />}
       {aktif === "pesanan" && <Pesanan />}
       {aktif === "pemakaian" && <Pemakaian />}
       {aktif === "job" && <Job />}
@@ -504,18 +530,82 @@ async function Keuangan() {
   );
 }
 
-async function Pengguna() {
-  const rows = await ambilPengguna();
+/** Retail atau brand — dibaca dari ADA/TIDAKNYA organisasi, bukan dari flag. */
+function jenisPengguna(u: { org_nama: string | null }): "brand" | "retail" {
+  return u.org_nama ? "brand" : "retail";
+}
+
+function LencanaJenis({ nama, status }: { nama: string | null; status: string | null }) {
+  if (!nama) {
+    return <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">Retail</span>;
+  }
+  // Organisasi yang TIDAK aktif ditandai berbeda. Tanpa ini, brand tertangguh
+  // terlihat sama persis dengan brand yang sehat di daftar ini — dan pertanyaan
+  // "kenapa dia tidak bisa masuk?" jadi tidak terjawab dari halaman ini.
+  const aktif = status === "active";
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${aktif ? "bg-indigo-100 text-indigo-700" : "bg-amber-100 text-amber-800"}`}>
+        Brand
+      </span>
+      <span className="max-w-[9rem] truncate text-[11px] text-zinc-500" title={nama}>{nama}</span>
+      {!aktif && <span className="text-[11px] font-medium text-amber-700">({status ?? "?"})</span>}
+    </span>
+  );
+}
+
+function SaringJenis({ aktif }: { aktif: "semua" | "retail" | "brand" }) {
+  const pilihan = [
+    { id: "semua", label: "Semua" },
+    { id: "retail", label: "Retail" },
+    { id: "brand", label: "Brand" },
+  ] as const;
+  return (
+    <div className="flex gap-1">
+      {pilihan.map((p) => (
+        <Link
+          key={p.id}
+          // Saringan hidup di URL, bukan di state klien: halaman ini komponen
+          // server, dan URL-nya bisa disalin, ditandai, dan dibuka lagi apa adanya.
+          href={`/admin?tab=pengguna${p.id === "semua" ? "" : `&jenis=${p.id}`}`}
+          className={`rounded-lg px-2.5 py-1 text-[11px] font-semibold ${
+            aktif === p.id ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+          }`}
+        >
+          {p.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+async function Pengguna({ jenis }: { jenis: "semua" | "retail" | "brand" }) {
+  const semua = await ambilPengguna();
+  // Disaring DI SINI, bukan di SQL. Jumlahnya dibatasi 200 baris dan angka
+  // "dari N" di bawah hanya benar kalau kedua sisi berasal dari kumpulan yang
+  // sama; menyaring di SQL membuat penyebutnya ikut menyusut dan pembacanya
+  // kehilangan pembanding.
+  const rows = jenis === "semua" ? semua : semua.filter((u) => jenisPengguna(u) === jenis);
+  const nBrand = semua.filter((u) => jenisPengguna(u) === "brand").length;
   return (
     <section className="space-y-2">
-      <h2 className="text-sm font-bold text-zinc-900">Pengguna ({rows.length})</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-zinc-900">
+          Pengguna ({rows.length}{jenis === "semua" ? "" : ` dari ${semua.length}`})
+        </h2>
+        <SaringJenis aktif={jenis} />
+      </div>
+      <p className="text-[11px] text-zinc-500">
+        {nBrand} brand · {semua.length - nBrand} retail
+      </p>
       {rows.length === 0 ? (
-        <Kosong pesan="Belum ada pengguna terdaftar." />
+        <Kosong pesan={jenis === "semua" ? "Belum ada pengguna terdaftar." : `Belum ada pengguna ${jenis}.`} />
       ) : (
-        <Tabel kepala={["Email", "Nama", "Standard", "Premium", "Ultra", "Job", "Job terakhir", "Daftar"]}>
+        <Tabel kepala={["Email", "Jenis", "Nama", "Standard", "Premium", "Ultra", "Job", "Job terakhir", "Daftar"]}>
           {rows.map((u) => (
             <tr key={u.id}>
               <td className="max-w-[16rem] truncate p-2 font-medium" title={u.email ?? ""}>{u.email ?? "—"}</td>
+              <td className="whitespace-nowrap p-2"><LencanaJenis nama={u.org_nama} status={u.org_status} /></td>
               <td className="max-w-[10rem] truncate p-2 text-zinc-500" title={u.name ?? ""}>{u.name ?? "—"}</td>
               <Jatah n={Number(u.standard)} />
               <Jatah n={Number(u.premium)} />
