@@ -60,7 +60,19 @@ function membershipAktif<T extends { org_status: string }>(semua: T[]): T | unde
  *  terhubung ke organisasi" menyembunyikan keadaan sebenarnya dan membuatnya
  *  mengulang pendaftaran yang tidak akan pernah berhasil. */
 function semuaTertangguh<T extends { org_status: string }>(semua: T[]): boolean {
-  return semua.length > 0 && !semua.some((m) => m.org_status === "active");
+  return semua.length > 0 && semua.every((m) => m.org_status === "suspended");
+}
+
+/**
+ * Sudah mendaftar, belum ditinjau.
+ *
+ * DIBEDAKAN dari tertangguh dengan sengaja. "Ditangguhkan" berarti pernah aktif
+ * lalu dihentikan, dan halaman /dashboard/suspended menyuruh menghubungi kami
+ * untuk mengaktifkan LAGI. Mengatakan itu kepada brand yang baru mendaftar lima
+ * menit lalu membuat kesan mereka sudah melakukan kesalahan.
+ */
+function menungguPersetujuan<T extends { org_status: string }>(semua: T[]): boolean {
+  return semua.length > 0 && !semua.some((m) => m.org_status === "active") && semua.some((m) => m.org_status === "pending");
 }
 
 export async function requireOrgContext(): Promise<DashboardContext> {
@@ -68,6 +80,7 @@ export async function requireOrgContext(): Promise<DashboardContext> {
   if (!user) redirect("/onboarding");
 
   const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
+  if (menungguPersetujuan(memberships)) redirect("/dashboard/menunggu");
   if (semuaTertangguh(memberships)) redirect("/dashboard/suspended");
   const membership = membershipAktif(memberships);
   if (!membership) redirect("/dashboard/request-access");
@@ -83,6 +96,8 @@ export async function requireOrgContextApi(req: Request): Promise<DashboardConte
   if (!user) throw ERR.UNAUTHORIZED();
 
   const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
+  if (menungguPersetujuan(memberships))
+    throw ERR.BAD_REQUEST("Pendaftaranmu sedang kami tinjau. Kami kabari lewat email begitu selesai.", "Organization pending approval.");
   if (semuaTertangguh(memberships))
     throw ERR.BAD_REQUEST("Organisasi ini sedang ditangguhkan. Hubungi kami untuk mengaktifkannya lagi.", "Organization suspended.");
   const membership = membershipAktif(memberships);

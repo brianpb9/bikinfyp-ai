@@ -44,20 +44,53 @@ function toOnboarding(req: NextRequest, clearCookie: boolean) {
 // lolos sampai ke layout, dan barulah ditolak di sana. Sekarang tanda
 // tangannya benar-benar diverifikasi di tepi, sebelum satu pun halaman atau
 // query database tersentuh.
+/** Halaman yang boleh dibuka tanpa login, di hostname mana pun. */
+function publik(pathname: string): boolean {
+  return (
+    pathname.startsWith("/brands") ||
+    pathname.startsWith("/onboarding") ||
+    pathname.startsWith("/coba") ||
+    pathname.startsWith("/mulai") ||
+    pathname.startsWith("/harga") ||
+    pathname.startsWith("/kontak") ||
+    pathname.startsWith("/legal") ||
+    pathname.startsWith("/.well-known")
+  );
+}
+
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (DASHBOARD_HOST && req.headers.get("host") === DASHBOARD_HOST && !pathname.startsWith("/dashboard") && !pathname.startsWith("/api")) {
+  // REWRITE HOSTNAME DASHBOARD — dihitung di sini, DITERAPKAN DI BAWAH.
+  //
+  // Versi pertama mengembalikan rewrite-nya seketika, dan itu membuat penjaga
+  // login di bawah tidak pernah jalan untuk hostname brand: permintaan langsung
+  // diteruskan ke /dashboard, halaman itu memanggil requireOrgContext(), dan
+  // pengunjung yang belum login dilempar ke /onboarding RETAIL — halaman
+  // "Rp14.000 per video" untuk orang yang datang mencari layanan brand.
+  // Persis kebuntuan yang komentar di toOnboarding() bilang ingin dicegah.
+  const onDashboardHost = Boolean(DASHBOARD_HOST) && req.headers.get("host") === DASHBOARD_HOST;
+  const perluRewrite = onDashboardHost && !pathname.startsWith("/dashboard") && !pathname.startsWith("/api");
+  const rewriteKe = perluRewrite ? `/dashboard${pathname === "/" ? "" : pathname}` : null;
+
+  function teruskan() {
+    if (!rewriteKe) return NextResponse.next();
     const url = req.nextUrl.clone();
-    url.pathname = `/dashboard${pathname === "/" ? "" : pathname}`;
+    url.pathname = rewriteKe;
     return NextResponse.rewrite(url);
   }
+
+
   // /harga WAJIB publik. Seluruh daftar harga dulu hanya ada di /kredit yang
   // butuh login, jadi siapa pun yang menilai kita dari luar — calon pelanggan
   // maupun reviewer Midtrans — cuma melihat dinding login. Itu persis dua
   // temuan onboarding Midtrans 13 Agustus 2026.
   // /kontak juga publik: syarat onboarding Duitku — kontak dukungan (telepon,
   // email, alamat) harus terlihat tanpa login, sama alasannya dengan /harga.
-  if (pathname.startsWith("/brands") || pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/harga") || pathname.startsWith("/kontak") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
+  // Halaman publik tetap publik di hostname mana pun — TERMASUK hostname brand,
+  // dan tanpa rewrite. /brands adalah tujuan pengunjung yang belum punya akun;
+  // me-rewrite-nya ke /dashboard/brands (yang tidak ada) mengubah halaman depan
+  // enterprise jadi 404.
+  if (publik(pathname)) return NextResponse.next();
   const token = req.cookies.get(COOKIE)?.value;
   if (!token) return toOnboarding(req, false);
 
@@ -74,7 +107,8 @@ export async function middleware(req: NextRequest) {
     // diperlakukan sama: bukan sesi yang sah.
     return toOnboarding(req, true);
   }
-  return NextResponse.next();
+  // Sesi sah: BARU sekarang rewrite-nya diterapkan.
+  return teruskan();
 }
 
 export const config = {

@@ -3,6 +3,7 @@ import { wajibAdmin } from "@/lib/admin-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { config } from "@/lib/config";
+import { TombolStatusOrg } from "./_TombolStatusOrg";
 
 // DASHBOARD ADMIN — BACA SAJA.
 //
@@ -164,6 +165,7 @@ async function ambilPengguna() {
     job_terakhir: string | null;
     org_nama: string | null;
     org_status: string | null;
+    org_id: string | null;
   }>(
     `WITH topup AS (
        SELECT user_id, jenis, SUM(delta) AS n FROM kredit_video
@@ -605,7 +607,12 @@ async function Pengguna({ jenis }: { jenis: "semua" | "retail" | "brand" }) {
           {rows.map((u) => (
             <tr key={u.id}>
               <td className="max-w-[16rem] truncate p-2 font-medium" title={u.email ?? ""}>{u.email ?? "—"}</td>
-              <td className="whitespace-nowrap p-2"><LencanaJenis nama={u.org_nama} status={u.org_status} /></td>
+              <td className="whitespace-nowrap p-2">
+                <LencanaJenis nama={u.org_nama} status={u.org_status} />
+                {u.org_id && u.org_status && (
+                  <span className="ml-2"><TombolStatusOrg orgId={u.org_id} status={u.org_status} /></span>
+                )}
+              </td>
               <td className="max-w-[10rem] truncate p-2 text-zinc-500" title={u.name ?? ""}>{u.name ?? "—"}</td>
               <Jatah n={Number(u.standard)} />
               <Jatah n={Number(u.premium)} />

@@ -24,7 +24,7 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
-  status: "active" | "suspended";
+  status: "pending" | "active" | "suspended";
   created_at: string;
   website_url: string | null;
   business_type: string | null;
@@ -45,7 +45,7 @@ export interface OrgMembership {
   org_id: string;
   org_name: string;
   org_slug: string;
-  org_status: "active" | "suspended";
+  org_status: "pending" | "active" | "suspended";
   role: "owner" | "member";
 }
 
