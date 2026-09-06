@@ -4,6 +4,7 @@ import { findOrCreateUserByEmail, issueToken, cookieName, SESSION_MAX_AGE_SEC } 
 import { audit } from "@/lib/db";
 import { pgAudit, pgVerifyOtp, postgresRuntimeEnabled, smokeFindOrCreateUser } from "@/lib/postgres/smoke-runtime";
 import { cookieSesi } from "@/lib/cookies";
+import { dariBrand } from "@/lib/asal-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,11 +42,19 @@ export async function POST(req: Request) {
       );
     }
 
+    // AKUN BRAND MULAI DENGAN SALDO NOL.
+    //
+    // Bonus pendaftar diberikan di transaksi pembuatan akun, yang dipakai
+    // BERSAMA oleh retail dan brand. Ditemukan 6 Sep 2026 saat menjalankan
+    // pendaftaran brand dari ujung ke ujung: rute /api/brands/daftar memang
+    // tidak menulis ledger, tapi akunnya sudah lahir dengan saldo 1.
+    const brand = dariBrand(req);
     const user = postgresRuntimeEnabled() ? await (async () => {
       const { PgAuthOtpAuditRepository } = await import("@/lib/postgres/auth-otp-audit");
       const { config } = await import("@/lib/config");
       const repo = new PgAuthOtpAuditRepository(config.databaseUrl, { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
-      try { return await repo.findOrCreateUserByEmail(email); } finally { await repo.close(); }
+      // tanpaBonus untuk jalur brand: akun brand mulai dengan saldo NOL.
+      try { return await repo.findOrCreateUserByEmail(email, { tanpaBonus: brand }); } finally { await repo.close(); }
     })() : findOrCreateUserByEmail(email);
     if (postgresRuntimeEnabled()) await pgAudit(user.id, "auth.otp_verified", "users", user.id, {});
     else audit(user.id, "auth.otp_verified", "users", user.id, {});

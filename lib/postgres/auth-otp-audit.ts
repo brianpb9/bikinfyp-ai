@@ -60,7 +60,14 @@ export class PgAuthOtpAuditRepository {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 
-  async findOrCreateUserByEmail(email: string): Promise<UserRow> {
+  /**
+   * tanpaBonus: jangan berikan paket gratis pendaftar.
+   *
+   * Dipakai jalur BRAND. Akun brand mulai dengan saldo NOL (keputusan Brian
+   * 6 Sep 2026), dan bonus itu diberikan di sini — bukan di rute pendaftaran
+   * brand. Menjaga rute brand saja tidak cukup: uangnya keluar dari sini.
+   */
+  async findOrCreateUserByEmail(email: string, opsi: { tanpaBonus?: boolean } = {}): Promise<UserRow> {
     const key = normalizeEmail(email);
     const client = await this.pool.connect();
     try {
@@ -84,7 +91,7 @@ export class PgAuthOtpAuditRepository {
         await client.query("COMMIT");
         return raced.rows[0];
       }
-      await this.insertSignupSideEffects(client, id, { email: key }, createdAt);
+      await this.insertSignupSideEffects(client, id, { email: key }, createdAt, opsi.tanpaBonus === true);
       const user = await client.query<UserRow>("SELECT * FROM users WHERE id = $1", [id]);
       await client.query("COMMIT");
       return user.rows[0];
@@ -198,7 +205,7 @@ export class PgAuthOtpAuditRepository {
     return result;
   }
 
-  private async insertSignupSideEffects(client: PoolClient, userId: string, identity: { email?: string; phone?: string }, createdAt: string): Promise<void> {
+  private async insertSignupSideEffects(client: PoolClient, userId: string, identity: { email?: string; phone?: string }, createdAt: string, tanpaBonus = false): Promise<void> {
     // PAKET GRATIS pendaftar baru: satu JATAH VIDEO, bukan rupiah. Rupiah tidak
     // lagi membeli apa pun sejak kredit dihitung per jenis video; bonus rupiah
     // hanya akan jadi angka yang tidak bisa dibelanjakan — pendaftar melihat
@@ -207,7 +214,7 @@ export class PgAuthOtpAuditRepository {
     // Ditulis di transaksi pendaftaran yang SAMA: bonus yang diberikan lewat
     // panggilan terpisah bisa gagal sesudah akun terbentuk, dan yang lahir
     // adalah akun tanpa jatah yang tidak ada jejaknya.
-    if (config.signupBonusQty > 0) {
+    if (config.signupBonusQty > 0 && !tanpaBonus) {
       await client.query(
         `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
          VALUES ($1,$2,$3,'topup',$4,'bonus',NULL,NULL,NULL,$5,$6)`,

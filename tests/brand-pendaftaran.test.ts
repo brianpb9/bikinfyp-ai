@@ -98,3 +98,34 @@ test("halaman 'belum punya organisasi' menawarkan pendaftaran mandiri", () => {
   assert.match(src, /href="\/dashboard\/daftar"/, "tidak ada tautan ke pendaftaran mandiri");
   assert.doesNotMatch(src, /yang sudah didaftarkan tim/, "kalimat lama yang buntu masih ada");
 });
+
+// ── BONUS PENDAFTAR TIDAK BOLEH SAMPAI KE AKUN BRAND ────────────────────────
+//
+// Ditemukan saat menjalankan pendaftaran brand dari ujung ke ujung, BUKAN oleh
+// tes: rute /api/brands/daftar memang tidak menulis satu pun baris ledger —
+// dan itu sudah dijaga tes di atas — tapi akun brand tetap lahir dengan saldo
+// 1. Bonusnya diberikan jauh lebih awal, di transaksi pembuatan AKUN yang
+// dipakai BERSAMA oleh retail dan brand.
+//
+// Pelajarannya: menjaga satu rute tidak cukup kalau uangnya keluar dari rute
+// lain. Tes di bawah menjaga jalur MASUK, bukan cuma jalur pendaftaran.
+
+test("kedua jalur masuk meneruskan asal brand ke pembuatan akun", () => {
+  for (const f of ["app/api/auth/verify-otp/route.ts", "app/api/auth/google/callback/route.ts"]) {
+    const src = kode(f);
+    assert.match(src, /dariBrand\(req\)/, `${f} tidak memeriksa asal brand`);
+    assert.match(src, /tanpaBonus:/, `${f} tidak meneruskan tanpaBonus`);
+  }
+});
+
+test("bonus pendaftar dijaga oleh tanpaBonus, bukan cuma oleh jumlahnya", () => {
+  const src = kode("lib/postgres/auth-otp-audit.ts");
+  assert.match(src, /config\.signupBonusQty > 0 && !tanpaBonus/, "penjagaan bonus tidak lengkap");
+});
+
+test("asal brand dikenali dari hostname DAN dari parameter", () => {
+  const src = kode("lib/asal-brand.ts");
+  assert.match(src, /DASHBOARD_HOSTNAME/, "hostname dashboard tidak dipakai");
+  assert.match(src, /startsWith\("brand\."\)/, "awalan brand. tidak dikenali");
+  assert.match(src, /audience"\) === "brand"/, "parameter audience tidak dipakai");
+});

@@ -6,6 +6,7 @@ import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieSesi, cookieHapus } from "@/lib/cookies";
 import { redirectUriGoogle } from "@/lib/asal-oauth";
+import { dariBrand } from "@/lib/asal-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -84,7 +85,8 @@ export async function GET(req: Request) {
             otpMaxAttempts: config.otpMaxAttempts,
             otpRateLimitPer15Min: config.otpRateLimitPer15Min,
           });
-          try { return await repo.findOrCreateUserByEmail(email); } finally { await repo.close(); }
+          // Aturan yang sama dengan jalur OTP: akun brand mulai dengan saldo NOL.
+          try { return await repo.findOrCreateUserByEmail(email, { tanpaBonus: dariBrand(req) }); } finally { await repo.close(); }
         })()
       : findOrCreateUserByEmail(email);
 
