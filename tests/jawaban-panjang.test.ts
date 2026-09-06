@@ -61,20 +61,38 @@ test("galat pun sampai sebagai JSON, bukan sambungan yang putus", async () => {
 });
 
 test("denyutnya HANYA ruang putih — apa pun selain itu merusak JSON.parse", async () => {
-  // Pekerjaannya SENGAJA dibuat lebih lama dari beberapa jeda denyut.
+  // DIGERAKKAN OLEH PEMBACAAN, BUKAN OLEH JAM.
   //
   // Versi pertama memakai pekerjaan yang selesai seketika, jadi tidak satu pun
-  // denyut sempat terjadi — dan tes itu lulus walau denyutnya diganti "X".
-  // Menguji denyut menuntut adanya denyut.
-  const res = jawabanPanjang(
-    async () => { await new Promise((r) => setTimeout(r, 120)); return { a: 1 }; },
-    { jedaMs: 10 },
-  );
-  const teks = await res.text();
-  const depan = teks.slice(0, teks.indexOf("{"));
-  assert.ok(depan.length >= 5, `cuma ${depan.length} karakter di depan — denyutnya tidak sempat terjadi`);
-  assert.match(depan, /^\s*$/, `ada karakter bukan ruang putih di depan: ${JSON.stringify(depan)}`);
-  assert.deepEqual(JSON.parse(teks), { a: 1 });
+  // denyut sempat terjadi — dan lulus walau denyutnya diganti "X". Versi kedua
+  // memperbaikinya dengan menunggu 120ms, dan itu GOYAH: lulus sendirian,
+  // gagal saat 1155 tes jalan bersamaan, karena denyut 10ms tidak dijamin
+  // sempat empat kali di bawah beban. Tes yang bergantung jam mengukur mesin
+  // penguji, bukan kode.
+  //
+  // Sekarang pekerjaannya baru diselesaikan SESUDAH tiga denyut benar-benar
+  // terbaca. Tidak ada lagi yang bisa kalah cepat.
+  let selesaikan: (v: { a: number }) => void = () => {};
+  const res = jawabanPanjang(() => new Promise<{ a: number }>((r) => { selesaikan = r; }), { jedaMs: 5 });
+  const reader = res.body!.getReader();
+  const dec = new TextDecoder();
+  let depan = "";
+  while (depan.length < 3) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const potong = dec.decode(value);
+    assert.match(potong, /^\s*$/, `denyut memuat karakter bukan ruang putih: ${JSON.stringify(potong)}`);
+    depan += potong;
+  }
+  assert.ok(depan.length >= 3, `cuma ${depan.length} denyut terbaca`);
+  selesaikan({ a: 1 });
+  let sisa = "";
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    sisa += dec.decode(value);
+  }
+  assert.deepEqual(JSON.parse(depan + sisa), { a: 1 });
 });
 
 test("jeda denyut jauh di bawah batas 100 detik", () => {
