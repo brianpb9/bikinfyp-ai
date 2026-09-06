@@ -346,8 +346,39 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     } else {
       await runProviderPipeline(row, jobs, pool);
     }
-    const credits = new PgCreditPaymentRepository(databaseUrl);
-    try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
+    // KREDIT DI-CAPTURE HANYA KALAU JOB BENAR-BENAR READY.
+    //
+    // ---------------------------------------------------------------------
+    // BUG UANG YANG DITUTUP DI SINI (ditemukan 6 Sep 2026 saat menjalankan
+    // kampanye brand sampai render)
+    // ---------------------------------------------------------------------
+    // runProviderPipeline() punya BANYAK jalan keluar normal yang BUKAN
+    // "selesai": setiap transition() yang kalah balapan `return`, dan yang
+    // paling sering terjadi — job berhenti di AWAITING_APPROVAL menunggu brand
+    // menyetujui adegannya (baris ~621).
+    //
+    // Sebelumnya capture dipanggil tanpa syarat sesudah pipeline kembali. Jadi
+    // saat brand menyetujui adegan, kredit LANGSUNG difinalkan — padahal
+    // penggabungan dan QC belum jalan. Ketika QC kemudian menolak, refund tidak
+    // bisa menulis apa pun: credit_ledger menolak entri terminal kedua. Job
+    // berakhir berstatus REFUNDED sementara uangnya TETAP TERPOTONG.
+    //
+    // Terbukti di produksi: job 371bf679 -> hold -14000, capture, QC gagal,
+    // state REFUNDED, saldo organisasi tidak kembali. Status job dan buku besar
+    // saling bertentangan, dan yang dipercaya pengguna adalah statusnya.
+    //
+    // Aturannya sudah tertulis sejak lama di jalur retail (lib/worker.ts:
+    // "kredit hanya di-capture setelah QC lulus, BR-06.1") — jalur Postgres
+    // yang menyimpang. Janji di halaman depan juga menyebutnya apa adanya:
+    // "Kalau video gagal dibuat, kreditnya kembali ke saldomu."
+    //
+    // Job READY yang capture-nya gagal di sini TIDAK hilang: sweepStaleJobs
+    // menyapu hold menggantung pada job READY (lihat catatan di bawah).
+    const setelahPipeline = await jobs.getJob(jobId);
+    if (setelahPipeline?.state === "READY") {
+      const credits = new PgCreditPaymentRepository(databaseUrl);
+      try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
+    }
   } catch (error) {
     if (options.retryViaQueue) throw error;
     await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));

@@ -12,6 +12,7 @@ import { TIER_DITERIMA, tierMasihDiterima } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
 import type { QualityTier } from "@/lib/providers/types";
 import { pastikanSegar } from "@/lib/kredensial";
+import { jawabanPanjang } from "@/lib/jawaban-panjang";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,19 @@ const MAX_VIDEOS = 6;
 // TIDAK membuat job / menahan kredit di sini. Skrip AI tetap wajib lewat
 // gerbang HITL manusia (aturan keras #5) di langkah confirm.
 export async function POST(req: Request) {
-  try {
+  // JAWABAN MENGALIR, bukan sekali kirim di ujung.
+  //
+  // Menulis naskah kampanye memakan 137-224 detik terukur, sementara
+  // Cloudflare memutus permintaan yang belum dijawab dalam 100 detik (524).
+  // Batas itu tetap di paket Free dan tidak bisa dinaikkan. Yang paling
+  // berbahaya bukan galatnya: pekerjaannya TETAP SELESAI di server, pengguna
+  // melihat kegagalan, lalu mengulang dan membayar naskah duplikat.
+  //
+  // jawabanPanjang() mengirim byte pertama seketika lalu berdenyut spasi
+  // sampai selesai. Bentuk JSON-nya tidak berubah sama sekali — spasi di
+  // depan dimaafkan JSON.parse dan Response.json(). Lihat lib/jawaban-panjang.ts.
+  return jawabanPanjang(async () => {
+   try {
     // Kredensial partner bisa diganti dari /admin/kredensial tanpa restart.
     // Tanpa penyegaran ini, kunci yang baru dipasang tidak berpengaruh sampai
     // container dimuat ulang — dan halaman itu tetap bilang "tersimpan",
@@ -169,7 +182,7 @@ export async function POST(req: Request) {
       qualityTier: tier, hookLevel,
     })), membership.org_id);
 
-    return Response.json({
+    return {
       product_id: product.id,
       requested: count,
       // Jujur kalau kami memendekkan nama supaya skrip bisa dibuat.
@@ -202,25 +215,25 @@ export async function POST(req: Request) {
         ...(v.segments.find((sg) => sg.mode)?.mode ? { mode: v.segments.find((sg) => sg.mode)!.mode } : {}),
         ...(getTemplate(templateId)?.format ? { format: getTemplate(templateId)!.format } : {}),
       })),
-    });
+    };
   } catch (err) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
     // pulih, jadi pengguna berhak tahu ia boleh mencoba lagi.
-    if (err instanceof TemplateTidakDisajikan) {
-      console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
-      return Response.json(
-        {
+      if (err instanceof TemplateTidakDisajikan) {
+        console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
+        // BADAN, bukan status HTTP. Header sudah terkirim di byte pertama, jadi
+        // status tidak bisa diubah lagi — itu harga yang dibayar untuk tidak
+        // kena 524. Klien membaca `code` di badan, jadi bentuk galatnya tetap
+        // sama persis seperti sebelumnya.
+        return {
           code: "SCRIPT_WRITER_UNAVAILABLE",
           message_id: err.message,
-          // Sebab teknis TIDAK ikut ke klien — lihat catatan di
-          // TemplateTidakDisajikan. Ia sudah dicatat penuh di log.
           message_en: "We could not finish the script right now. Please try again shortly.",
           retryable: true,
-        },
-        { status: 503 }
-      );
-    }
-    return errorResponse(err);
+        };
+      }
+      throw err;
   }
+  });
 }

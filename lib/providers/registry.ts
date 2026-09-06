@@ -71,7 +71,21 @@ export function videoOrder(spec?: VisualSpec): VideoProvider[] {
   if (active === "mock") {
     list.push(mockVideoA, mockVideoB);
   } else if (spec && mesinUntukBerlaku(spec.qualityTier) === "kie-grok") {
-    list.push(kieGrokVideo, byteplusVideo, dashscopeVideo);
+    // GROK HANYA DI KIE.AI — TANPA CADANGAN LINTAS MESIN.
+    //
+    // Sebelumnya baris ini mendaftarkan byteplus dan dashscope sebagai
+    // cadangan. Keduanya TIDAK PERNAH bisa berhasil: spec membawa nama model
+    // milik kie, dan BytePlus menjawabnya apa adanya —
+    //
+    //   HTTP 404: The model or endpoint grok-imagine/image-to-video does not
+    //   exist or you do not have access to it
+    //
+    // Cadangan yang pasti gagal bukan redundansi. Ia menyembunyikan galat yang
+    // sebenarnya di balik daftar galat yang panjang, memperlambat kegagalan
+    // sebanyak dua panggilan jaringan, dan membuat log seolah masalahnya ada di
+    // BytePlus. Keputusan Brian 6 Sep 2026: Grok tetap di kie.ai, sisanya murni
+    // BytePlus, dan tidak ada yang menyeberang.
+    list.push(kieGrokVideo);
   } else if (active === "dashscope") {
     list.push(dashscopeVideo, byteplusVideo);
   } else {
@@ -111,7 +125,15 @@ export interface VideoGenResult {
 export async function generateVideoWithFailover(spec: VisualSpec, outDir: string): Promise<VideoGenResult> {
   assertVisualSpec(spec); // aturan keras #1 & #3 — ditegakkan di runtime
   const providers = videoOrder(spec);
-  if (providers.length < 2) throw new Error("SR-ABS-01: minimal 2 provider video wajib terdaftar");
+  // SR-ABS-01 menuntut minimal dua provider — TAPI hanya kalau memang ada dua
+  // yang masuk akal. Paket yang dipaku ke satu mesin (Grok di kie.ai) sengaja
+  // berjalan sendirian: cadangannya dulu ada dan tidak pernah bisa berhasil.
+  // Menuntut angka dua di situ berarti memaksa mendaftarkan provider yang kita
+  // tahu akan 404, hanya demi memenuhi hitungan.
+  const mesinTunggal = Boolean(spec) && mesinUntukBerlaku(spec.qualityTier) === "kie-grok";
+  if (providers.length < (mesinTunggal ? 1 : 2)) {
+    throw new Error(`SR-ABS-01: provider video tidak terdaftar untuk paket ${spec.qualityTier}`);
+  }
 
   // Ketersediaan dulu, lalu biaya, lalu skor historis.
   const available: VideoProvider[] = [];

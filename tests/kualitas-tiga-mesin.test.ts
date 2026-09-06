@@ -121,15 +121,26 @@ test("premium dan ultra TIDAK PERNAH jatuh ke kie.ai — 720p tidak boleh diam-d
   }
 });
 
-test("standard dirender kie.ai LEBIH DULU, dengan BytePlus sebagai cadangan", async () => {
+test("standard dirender kie.ai SAJA — tanpa cadangan lintas mesin", async () => {
+  // BERUBAH 6 Sep 2026, atas keputusan Brian dan atas bukti produksi.
+  //
+  // Versi sebelumnya menuntut BytePlus terdaftar sebagai cadangan, dengan
+  // alasan "satu gangguan kie.ai mematikan tier ini". Alasannya masuk akal di
+  // atas kertas, tapi cadangan itu TIDAK PERNAH bisa bekerja: spec membawa nama
+  // model milik kie, dan BytePlus menjawabnya
+  //   HTTP 404: The model or endpoint grok-imagine/image-to-video does not exist
+  // pada SETIAP kegagalan Standard yang tercatat.
+  //
+  // Konsekuensinya diterima dengan mata terbuka, bukan disembunyikan: gangguan
+  // kie.ai memang mematikan paket Standard. Yang berubah cuma satu — sekarang
+  // kegagalannya cepat dan galatnya menunjuk penyebab sebenarnya, bukan
+  // terkubur di balik 404 dari mesin yang tidak pernah diminta merender.
   const { videoOrder } = await import("../lib/providers/registry");
   const asalProvider = config.providerVideo;
   (config as { providerVideo: string }).providerVideo = "byteplus";
   try {
-    const nama = videoOrder(spec("standard")).map((p) => p.name);
-    assert.equal(nama[0], "kie-grok-imagine", "standard tidak dirender mesin yang dipilih untuknya");
-    // Cadangannya mesin yang LEBIH mahal: kerugiannya di pihak kita, bukan pembeli.
-    assert.ok(nama.includes("byteplus-ark-seedance"), "standard tidak punya cadangan — satu gangguan kie.ai mematikan tier ini");
+    const nama = videoOrder(spec("standard")).map((p) => p.name).filter((n) => !n.startsWith("mock"));
+    assert.deepEqual(nama, ["kie-grok-imagine"], `standard tidak lagi murni kie: ${nama.join(", ")}`);
   } finally {
     (config as { providerVideo: string }).providerVideo = asalProvider;
   }
