@@ -1,0 +1,58 @@
+# Aturan tunnel Cloudflare untuk aiugc.id — DITULIS SEBAGAI BERKAS, BUKAN DI DASHBOARD.
+#
+# KENAPA BERKAS:
+# Tunnel ini dibuat lewat dashboard (mode token), dan pada mode itu aturan
+# ingress ditarik dari Cloudflare. Aturannya tidak pernah sampai: sesudah
+# dimuat ulang dan menarik konfigurasi segar, cloudflared tetap mencatat
+# "No ingress rules were defined" — sehingga Cloudflare menjawab 530 untuk
+# setiap permintaan dan situs mati. Berkas ini membuat aturannya ada di tempat
+# yang bisa dibaca, diperiksa, dan disalin ulang, bukan di balik klik.
+#
+# KENAPA https://127.0.0.1:443 DAN BUKAN :80:
+# Blok :80 nginx mengalihkan semuanya ke https://aiugc.id. Lewat tunnel,
+# pengalihan itu kembali ke Cloudflare, masuk lagi ke tunnel, dan berputar
+# tanpa henti. Diuji: :80 menjawab 301 ke dirinya sendiri, :443 menjawab 200.
+#
+# KENAPA originServerName:
+# Sambungan dibuka ke 127.0.0.1, jadi sertifikat Let's Encrypt untuk aiugc.id
+# tidak akan cocok dengan nama itu. Baris ini menyuruh cloudflared memverifikasi
+# sertifikatnya terhadap aiugc.id — jadi TLS ke origin tetap diperiksa sungguhan,
+# bukan dimatikan dengan noTLSVerify.
+tunnel: 49b20f63-3651-4318-965e-09a21c28c3df
+credentials-file: /etc/cloudflared/49b20f63-3651-4318-965e-09a21c28c3df.json
+
+ingress:
+  - hostname: aiugc.id
+    service: https://127.0.0.1:443
+    originRequest:
+      originServerName: aiugc.id
+  - hostname: www.aiugc.id
+    service: https://127.0.0.1:443
+    originRequest:
+      originServerName: aiugc.id
+  # Wajib ada dan wajib terakhir: apa pun yang tidak cocok di atas ditolak di
+  # sini, bukan diteruskan diam-diam ke aplikasi.
+  - service: http_status:404
+
+# ---------------------------------------------------------------------------
+# CATATAN PEMASANGAN
+#
+# Layanan systemd:
+#   ExecStart=/usr/bin/cloudflared --no-autoupdate \
+#             --config /etc/cloudflared/config.yml tunnel run
+#
+# Berkas kredensial /etc/cloudflared/<tunnel-id>.json (mode 600) diturunkan dari
+# token yang dipasang dashboard: token itu base64 JSON berisi {a: akun,
+# t: tunnel-id, s: rahasia}, dan ketiganya persis isi berkas kredensial.
+#
+# DNS yang membuatnya berfungsi — SATU record, dan isinya harus PERSIS:
+#   aiugc.id      CNAME  49b20f63-3651-4318-965e-09a21c28c3df.cfargotunnel.com  (proxied)
+#   www.aiugc.id  CNAME  aiugc.id                                              (proxied)
+#
+# UUID itu 36 karakter dan diawali angka 4. Pernah tersalin kehilangan angka
+# depannya ("9b20f63-…"), dan akibatnya BUKAN galat kecil: Cloudflare mencari
+# tunnel yang tidak ada, menjawab 530 untuk SETIAP permintaan, dan seluruh situs
+# mati. Tidak ada satu pun log di sisi kita yang menunjukkan sebabnya — tunnel
+# tampak sehat, origin tampak sehat, hanya tidak ada yang menyambungkan.
+# Kalau situs menjawab 530: cocokkan record ini karakter per karakter lebih
+# dulu, sebelum menyentuh apa pun yang lain.
