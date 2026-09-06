@@ -43,7 +43,8 @@ export default async function RequestAccessPage() {
         </p>
         <h1 className="font-display text-xl font-bold">Akun kamu belum terhubung ke organisasi</h1>
         <p className="text-sm text-zinc-400">
-          Dashboard ini khusus brand/agency yang sudah didaftarkan tim AIUGC.ID.
+          Dashboard ini khusus brand/agency. Sejak 6 Sep 2026 brand bisa mendaftar sendiri —
+          tidak perlu lagi menunggu kami mendaftarkan.
           {email ? (
             <> Akunmu (<span className="text-zinc-200">{email}</span>) belum jadi anggota organisasi manapun.</>
           ) : (
@@ -51,6 +52,17 @@ export default async function RequestAccessPage() {
           )}
         </p>
         {/* Form, bukan kalimat buntu — lihat FormAkses. */}
+        {/* PENDAFTARAN MANDIRI DIDAHULUKAN atas form "minta akses".
+            Form itu mengirim email ke kami dan menunggu kami membuat
+            organisasinya dengan tangan — jalur yang lebih lambat untuk kedua
+            pihak, dan satu-satunya jalur yang ada sebelum 6 Sep 2026. Ia
+            dipertahankan di bawah untuk yang memang ingin bicara dulu. */}
+        {email && (
+          <a href="/dashboard/daftar"
+            className="mx-auto flex min-h-[44px] w-full items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-extrabold text-zinc-950">
+            Daftarkan brand kamu
+          </a>
+        )}
         {email ? (
           <FormAkses email={email} whatsapp={config.supportWhatsapp || null} />
         ) : (

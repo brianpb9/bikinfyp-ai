@@ -87,3 +87,14 @@ test("migrasi menambah 'pending' TANPA membuang status lama", () => {
   // Organisasi lama tidak boleh ikut berubah statusnya.
   assert.doesNotMatch(sql, /UPDATE organizations/, "migrasi mengubah data organisasi yang sudah ada");
 });
+
+test("halaman 'belum punya organisasi' menawarkan pendaftaran mandiri", () => {
+  // Tanpa tautan ini, satu-satunya jalan masuk ke formulir pendaftaran adalah
+  // mengetik URL-nya sendiri. Ditemukan saat menjalankan alurnya sungguhan
+  // 6 Sep 2026: halaman ini masih berbunyi "khusus brand yang sudah
+  // didaftarkan tim AIUGC.ID" — kalimat yang sudah tidak benar sejak
+  // pendaftaran mandiri ada, dan buntu bagi orang yang baru saja membuat akun.
+  const src = kode("app/dashboard/request-access/page.tsx");
+  assert.match(src, /href="\/dashboard\/daftar"/, "tidak ada tautan ke pendaftaran mandiri");
+  assert.doesNotMatch(src, /yang sudah didaftarkan tim/, "kalimat lama yang buntu masih ada");
+});
