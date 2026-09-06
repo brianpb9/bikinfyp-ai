@@ -505,35 +505,16 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
                 tanpa login), sekaligus jalan masuk ke /harga dan /kontak. */}
             <SiteFooter />
           </div>
-          {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Paket gratis
-              pendaftar memang berupa SATU VIDEO, jadi janjinya bisa dibuat
-              spesifik tanpa melebih-lebihkan — dan tetap benar walau harganya
-              diubah admin. */}
-          {/* CTA BAWAH ikut menyesuaikan, bukan cuma yang di hero.
-              Yang tertinggal di sini sempat lolos: hero-nya sudah berbunyi
-              "Buat akun brand" sementara tombol di kaki halaman masih
-              menjanjikan "1 video demo" pada halaman yang sama. Satu halaman,
-              dua janji yang bertentangan. */}
-          {cta.mulaiDaftar ? (
-            <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
-              {brand ? "Buat akun brand" : cta.label}
-            </PrimaryButton>
-          ) : (
-            <a href={cta.href} onClick={() => track("bottom_cta_click", { kesiapan })}
-              className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600">
-              {brand ? "Buat akun brand" : cta.label}
-            </a>
-          )}
-          <p className="mt-2 text-center text-xs text-zinc-500">
-            {brand
-              ? "Akun brand mulai dengan saldo token nol. Pendaftaran ditinjau dulu."
-              : cta.mulaiDaftar
-              ? "Daftar dapat 1 video gratis. Tanpa kartu kredit."
-              : cta.catatan}
-          </p>
-          <button type="button" onClick={() => setStep(2)} className="mt-3 min-h-[44px] w-full text-center text-sm text-zinc-500">
-            Sudah punya akun? Masuk
-          </button>
+          {/* CTA KAKI HALAMAN DICABUT 6 Sep 2026 atas permintaan Brian.
+
+              Yang ada di sini: tombol besar berulang, catatan "Daftar dapat
+              1 video gratis", dan "Sudah punya akun? Masuk" — ketiganya
+              MENGULANG apa yang sudah ada di layar pertama, hanya lebih jauh
+              ke bawah. Halaman jadi berakhir dengan ajakan yang sama untuk
+              kedua kalinya alih-alih dengan sesuatu yang baru.
+
+              Jalan masuknya TIDAK hilang: tombol utama dan tautan "Sudah
+              punya akun? Masuk" tetap ada di bagian atas halaman. */}
         </>
       )}
 
@@ -542,7 +523,14 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
           <div className="flex-1 space-y-6 pt-8">
             <h1 className="text-2xl font-bold text-zinc-900">Masuk pakai email</h1>
             <p className="text-zinc-600">
-              Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat 1 video gratis.
+              Tanpa password. Kami kirim kode 6 digit ke email kamu.{" "}
+              {/* JATAH GRATIS hanya berlaku untuk retail. Kalimat ini sempat
+                  lolos dari penyisiran sebelumnya karena ia ada di LANGKAH 2,
+                  bukan di layar pertama — dan calon brand baru membacanya
+                  sesudah menekan tombol, yaitu saat ia paling percaya. */}
+              {brand
+                ? "Akun brand mulai dengan saldo token nol."
+                : "User baru langsung dapat 1 video gratis."}
             </p>
             {/* PERSETUJUAN DI TITIK DAFTAR, bukan cuma tautan di kaki halaman.
                 Audit kedalaman: tombol daftar (email maupun Google) tidak

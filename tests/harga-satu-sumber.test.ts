@@ -235,3 +235,22 @@ test("blok harga retail disembunyikan dari calon brand", () => {
   assert.ok((src.match(/!brand &&/g) ?? []).length >= 3, "blok retail tidak dijaga");
   assert.match(src, /paket\.length > 0 && !brand &&/, "daftar harga paket masih tampil untuk brand");
 });
+
+test("janji video gratis tidak bocor ke LANGKAH 2 milik brand", () => {
+  // Kalimat ini lolos dua kali dari penyisiran: ia ada di layar kedua, bukan
+  // di halaman depan, dan calon brand membacanya sesudah menekan tombol —
+  // yaitu saat ia paling percaya pada apa yang tertulis.
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
+  const i = src.indexOf("User baru langsung dapat 1 video gratis.");
+  assert.ok(i > 0, "kalimat retail hilang seluruhnya — seharusnya tetap ada untuk retail");
+  const sekitar = src.slice(Math.max(0, i - 240), i);
+  assert.match(sekitar, /\{brand\s*\n?\s*\?/, "kalimat gratis di langkah 2 tidak dijaga penanda brand");
+});
+
+test("CTA kaki halaman sudah dicabut, tanpa menutup jalan masuk", () => {
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
+  assert.doesNotMatch(src, /Daftar dapat 1 video gratis\. Tanpa kartu kredit\./, "catatan CTA kaki halaman masih ada");
+  assert.equal((src.match(/bottom_cta_click/g) ?? []).length, 0, "tombol CTA kaki halaman masih ada");
+  // Jalan masuknya harus tetap ada di bagian atas.
+  assert.match(src, /Sudah punya akun\?/, "tautan masuk hilang seluruhnya");
+});
