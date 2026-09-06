@@ -42,7 +42,7 @@ test("jalur berangkat MENGANTAR BALIK, tidak membalas JSON mentah", () => {
 });
 
 test("tombol Google hanya muncul kalau server BILANG kredensialnya ada", () => {
-  const src = baca("app/onboarding/page.tsx");
+  const src = baca("app/onboarding/OnboardingClient.tsx");
   assert.match(src, /googleLogin === true && \(/, "tombol tidak dijaga bendera");
   assert.match(src, /setGoogleLogin\(Boolean\(d\.google_login\)\)/, "bendera tidak dibaca dari /api/health");
   // "=== true", bukan "!== false": keadaan null (server belum menjawab) harus
@@ -77,7 +77,7 @@ test("callback tetap menolak email Google yang belum terverifikasi", () => {
 });
 
 test("HARGA TRANSPARAN: pil dicabut, janjinya ditepati section dengan angka", () => {
-  const src = kode("app/onboarding/page.tsx");
+  const src = kode("app/onboarding/OnboardingClient.tsx");
   assert.doesNotMatch(src, /● Harga transparan/, "pil bertitik masih ada di header");
   assert.doesNotMatch(src, /rounded-full bg-emerald-50[^"]*">●/, "markup pilnya masih dirender");
   assert.match(src, /uppercase tracking-\[0\.16em\] text-amber-600">Harga transparan</, "section-nya tidak ada");

@@ -137,7 +137,7 @@ test("tab gender mengganti wajah, suara, dan register sebagai satu identitas", (
 });
 
 test("onboarding publik tidak menjanjikan checkout saat status belum diketahui", () => {
-  const s = baca("app/onboarding/page.tsx");
+  const s = baca("app/onboarding/OnboardingClient.tsx");
   assert.ok(!/paymentsLive !== false/.test(s),
     "tiga keadaan, bukan dua — null berarti belum tahu, bukan berarti aktif");
   assert.match(s, /paymentsLive === true/, "klaim checkout hanya saat server bilang aktif");

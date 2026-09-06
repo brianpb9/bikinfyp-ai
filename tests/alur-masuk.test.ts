@@ -54,7 +54,7 @@ test('keadaan "memuat" bekerja TANPA JavaScript', () => {
 });
 
 test("?daftar=1 dan #daftar menembus langsung ke form", () => {
-  const src = baca("app/onboarding/page.tsx");
+  const src = baca("app/onboarding/OnboardingClient.tsx");
   assert.match(src, /p\.get\("daftar"\) === "1" \|\| window\.location\.hash === "#daftar"/);
   assert.match(src, /setStep\(2\)/);
 });
@@ -65,7 +65,7 @@ test("dari /coba, tombol render menembus ke form — bukan ke hero", () => {
 });
 
 test("ada jalan MASUK untuk pengguna lama", () => {
-  const src = baca("app/onboarding/page.tsx");
+  const src = baca("app/onboarding/OnboardingClient.tsx");
   assert.match(src, /Sudah punya akun\?/, "tidak ada tombol masuk di mana pun");
   assert.match(src, /signin_click/, "jalur masuk tidak terlacak, jadi tidak bisa diukur");
 });

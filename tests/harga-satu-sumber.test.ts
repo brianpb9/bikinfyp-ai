@@ -114,7 +114,7 @@ test("halaman promosi tidak menuliskan harga sendiri", async () => {
   const path = await import("node:path");
   const baca = (p: string) => fs.readFileSync(path.join(process.cwd(), p), "utf8");
 
-  for (const halaman of ["app/onboarding/page.tsx", "app/coba/page.tsx", "app/mulai/page.tsx", "app/layout.tsx"]) {
+  for (const halaman of ["app/onboarding/OnboardingClient.tsx", "app/coba/page.tsx", "app/mulai/page.tsx", "app/layout.tsx"]) {
     const src = baca(halaman);
     // Baris komentar boleh menyebut angka lama sebagai catatan sejarah; yang
     // dilarang adalah angka yang benar-benar dirender ke layar.
@@ -132,7 +132,7 @@ test("halaman promosi tidak menuliskan harga sendiri", async () => {
   const rute = baca("app/api/harga-publik/route.ts");
   assert.match(rute, /hargaKredit\(\)/, "rute publik tidak membaca harga yang berlaku");
   assert.ok(!/getAuthUser/.test(rute), "rute harga publik menuntut login — halaman promosi tidak bisa memakainya");
-  assert.match(baca("app/onboarding/page.tsx"), /\/api\/harga-publik/, "onboarding tidak membaca harga dari server");
+  assert.match(baca("app/onboarding/OnboardingClient.tsx"), /\/api\/harga-publik/, "onboarding tidak membaca harga dari server");
 });
 
 const bacaSumber = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
@@ -162,7 +162,7 @@ const kodeSaja = (rel: string) =>
 // karena dua-duanya diketik di berkas halaman.
 
 test("kalkulator & section harga di /onboarding dibaca dari server, bukan diketik", () => {
-  const src = kodeSaja("app/onboarding/page.tsx");
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
   // Paket yang sudah pensiun tidak boleh muncul lagi di layar promosi.
   for (const pensiun of ["AI Bersuara", "Bersuara Pro"]) {
     assert.doesNotMatch(src, new RegExp(pensiun), `paket pensiun "${pensiun}" masih dipajang`);
@@ -174,7 +174,7 @@ test("kalkulator & section harga di /onboarding dibaca dari server, bukan diketi
 });
 
 test("angka pembanding kalkulator punya SATU tempat dan sumbernya disebut", () => {
-  const src = kodeSaja("app/onboarding/page.tsx");
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
   assert.match(src, /BIAYA_MANUSIA_PER_VIDEO = 125_000/, "pembanding harus satu konstanta bernama");
   // Sumbernya wajib ikut tampil. Kalkulator yang membandingkan dengan angka
   // tanpa sumber bukan kalkulator — itu iklan yang menyamar jadi hitungan.
@@ -196,23 +196,29 @@ test("API harga publik mengirim penjelasan paket, supaya halaman tidak menuliska
 // menjanjikan dua hal berbeda di dua layar adalah cara tercepat kehilangan
 // kepercayaan sebelum orangnya mencoba apa pun.
 
-test("/onboarding membaca audience=brand DAN hostname brand", () => {
-  const src = kodeSaja("app/onboarding/page.tsx");
-  assert.match(src, /audience"\) === "brand"/, "parameter audience diabaikan");
-  // Hostname ikut dihitung: orang bisa membuka /onboarding langsung di
-  // brand.aiugc.id tanpa lewat tautan ber-parameter.
-  assert.match(src, /hostname\.startsWith\("brand\."\)/, "hostname brand tidak dikenali");
+test("/onboarding membaca audience=brand DAN hostname brand — DI SERVER", () => {
+  // DI SERVER, bukan di useEffect. Membacanya di klien berarti HTML yang
+  // dikirim selalu versi retail, dan calon brand membaca "Daftar gratis —
+  // 1 video demo" sampai JavaScript selesai jalan.
+  const srv = kodeSaja("app/onboarding/page.tsx");
+  assert.match(srv, /audience === "brand"/, "parameter audience diabaikan");
+  assert.match(srv, /host\.startsWith\("brand\."\)/, "hostname brand tidak dikenali");
+  assert.doesNotMatch(srv, /"use client"/, "keputusan brand kembali diambil di klien");
+  // Klien menerimanya sebagai prop, tidak menghitung sendiri.
+  const kli = kodeSaja("app/onboarding/OnboardingClient.tsx");
+  assert.match(kli, /\{ brand \}: \{ brand: boolean \}/, "klien tidak menerima brand sebagai prop");
+  assert.doesNotMatch(kli, /setBrand/, "klien masih menghitung brand sendiri");
 });
 
 test("janji 'gratis 1 video demo' TIDAK ditampilkan ke calon brand", () => {
-  const src = kodeSaja("app/onboarding/page.tsx");
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
   // Label CTA-nya tidak boleh memakai ajakan() apa adanya untuk brand — semua
   // variannya menjanjikan video gratis.
   assert.match(src, /brand \? "Buat akun brand" : cta\.label/, "CTA brand memakai label retail");
 });
 
 test("blok harga retail disembunyikan dari calon brand", () => {
-  const src = kodeSaja("app/onboarding/page.tsx");
+  const src = kodeSaja("app/onboarding/OnboardingClient.tsx");
   // Kalkulator, daftar harga paket, badge pembayaran, dan FAQ semuanya
   // menjawab pertanyaan penjual satuan. Brand membayar dengan token.
   assert.ok((src.match(/!brand &&/g) ?? []).length >= 3, "blok retail tidak dijaga");
