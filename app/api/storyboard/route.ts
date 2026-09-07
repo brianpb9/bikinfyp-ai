@@ -47,7 +47,23 @@ export async function POST(req: Request) {
       // Menekan "lanjut" dua kali tidak boleh melahirkan dua storyboard dan
       // dua kali biaya gambar.
       const adaSudah = await repo.aktifUntukScript(scriptId, user.id);
-      if (adaSudah) return Response.json({ storyboard_id: adaSudah.id, status: adaSudah.status, existing: true });
+      if (adaSudah) {
+        // BARIS YATIM DIPULIHKAN, BUKAN DIKEMBALIKAN APA ADANYA.
+        //
+        // create() dan enqueue() adalah dua langkah. Kalau yang kedua gagal —
+        // dan itu BENAR-BENAR terjadi pada uji produksi pertama, saat BullMQ
+        // menolak id yang memuat ":" — barisnya tertinggal di PENDING tanpa
+        // ada pekerjaan yang akan mengerjakannya. Dedup lalu mengembalikan
+        // baris mati itu selamanya, dan pengguna melihat storyboard yang tidak
+        // pernah selesai tanpa satu pun pesan galat.
+        //
+        // Mengantre ulang aman: worker melewati scene yang gambarnya sudah ada,
+        // jadi ini tidak membayar dua kali untuk kartu yang sudah jadi.
+        if (adaSudah.status === "PENDING" || adaSudah.status === "FAILED") {
+          await enqueueStoryboard(adaSudah.id);
+        }
+        return Response.json({ storyboard_id: adaSudah.id, status: adaSudah.status, existing: true });
+      }
 
       const params: ParamsStoryboard = {
         format: formatBersih(body.format),
@@ -87,7 +103,15 @@ export async function POST(req: Request) {
         params,
         scenes,
       });
-      await enqueueStoryboard(id);
+      try {
+        await enqueueStoryboard(id);
+      } catch (e) {
+        // Ditandai FAILED, bukan dibiarkan PENDING: PENDING berarti "sedang
+        // menunggu giliran" dan itu bohong kalau tidak ada pekerjaan yang
+        // pernah masuk antrean. FAILED membuat UI menawarkan coba lagi.
+        await repo.setStatus(id, "FAILED", e instanceof Error ? e.message.slice(0, 500) : String(e));
+        throw e;
+      }
       return Response.json({ storyboard_id: id, status: "PENDING", scenes: scenes.length }, { status: 201 });
     } finally {
       await repo.close();
