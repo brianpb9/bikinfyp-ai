@@ -9,6 +9,7 @@ import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { SiteFooter } from "../_components/SiteFooter";
+import { Logo } from "../_components/Logo";
 
 /** Satu paket seperti yang dikirim /api/harga-publik. */
 type PaketPublik = { id: string; label: string; jelas: string; harga_idr: number };
@@ -240,7 +241,7 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
                   disertai angka cuma stiker. Janjinya sekarang ditepati di
                   section "Harga transparan" di bawah, lengkap dengan harga
                   sebenarnya. */}
-              <span className="font-display text-base font-extrabold text-zinc-900">AIUGC.ID <span className="text-amber-500">AI</span></span>
+              <Logo tinggi={30} />
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
               <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
