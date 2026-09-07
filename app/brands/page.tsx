@@ -66,7 +66,7 @@ export default function BrandsLandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/onboarding?audience=brand&next=%2Fdashboard"
+                href="/brands/daftar"
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-7 py-3.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
               >
                 Mulai sekarang <ArrowRight size={16} />
@@ -189,10 +189,10 @@ export default function BrandsLandingPage() {
               Produk pertamamu bisa mulai diproses hari ini
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-zinc-400">
-              Hubungi kami untuk membuka akses organisasi. Kami bantu sampai video pertamamu jadi.
+              Daftarkan brand kamu sekarang — kami tinjau, lalu buka aksesnya. Kami bantu sampai video pertamamu jadi.
             </p>
             <Link
-              href="/onboarding?audience=brand&next=%2Fdashboard"
+              href="/brands/daftar"
               className="mt-8 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-8 py-4 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
             >
               Mulai sekarang <ArrowRight size={16} />
