@@ -206,3 +206,25 @@ test("REFERENCE AUTHORITY hanya muncul saat ada acuan, dan menolak menyalin komp
   assert.doesNotMatch(tanpa, /REFERENCE AUTHORITY/);
   assert.doesNotMatch(tanpa, /attached image/);
 });
+
+test("gambar storyboard dipaksa ke kanvas render yang persis, bukan sekadar 'sudah tegak'", () => {
+  // acuanTegak() punya toleransi 5% dan melewatkan gambar yang sudah mendekati
+  // 9:16. Itu masuk akal saat SEMUA acuan datang dari satu jalur normalisasi.
+  // Sejak storyboard tidak lagi: Seedream mengembalikan 800x1424 (0,5618),
+  // foto produk dinormalkan ke 720x1280 (0,5625) — keduanya lolos toleransi,
+  // provider meniru ukuran acuannya, dan klipnya pulang beda ukuran.
+  const RASIO = 9 / 16;
+  const beda = (l: number, t: number) => Math.abs(l / t - RASIO) / RASIO;
+  assert.ok(beda(800, 1424) < 0.05, "premisnya salah: 800x1424 seharusnya lolos toleransi");
+  assert.ok(beda(720, 1280) < 0.05, "premisnya salah: 720x1280 seharusnya lolos toleransi");
+  // Dua gambar yang sama-sama "lolos toleransi" tetap berbeda ukuran, dan
+  // itulah yang menjatuhkan ffmpeg concat.
+  assert.notEqual(800, 720);
+
+  const w = readFileSync(join(process.cwd(), "lib/postgres/worker.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  const i = w.indexOf("framePertamaDariStoryboard");
+  const blok = w.slice(i, i + 2000);
+  assert.match(blok, /\.resize\(spec\.width, spec\.height/, "gambar storyboard tidak dipaksa ke kanvas render");
+});

@@ -222,8 +222,28 @@ async function framePertamaDariStoryboard(
       try {
         const lokal = await mediaStorage().materialize(kunci);
         if (!lokal) throw new Error(`gambar storyboard hilang: ${kunci}`);
+
+        // DIPAKSA KE KANVAS RENDER YANG PERSIS, bukan sekadar "sudah tegak".
+        //
+        // acuanTegak() punya toleransi 5% dan melewatkan gambar yang sudah
+        // mendekati 9:16 — masuk akal saat SEMUA acuan datang dari satu jalur
+        // normalisasi. Sejak storyboard, tidak lagi: Seedream mengembalikan
+        // 800x1424 (0,5618) sedangkan foto produk dinormalkan ke 720x1280
+        // (0,5625). Keduanya lolos toleransi, provider meniru ukuran acuannya,
+        // dan klipnya pulang 704x1280 dan 720x1280.
+        //
+        // ffmpeg concat menolak sumber yang ukurannya berbeda:
+        //   "Input link in0:v0 parameters (size 704x1280) do not match ...
+        //    (720x1280)"
+        // Job 4bb6ce1a gagal tiga kali karena itu lalu REFUNDED — sesudah dua
+        // klip video dibayar.
+        const rapi = path.join(workDir, `sb-frame-${sh.index}.png`);
+        await (await import("sharp")).default(lokal)
+          .resize(spec.width, spec.height, { fit: "cover", position: "attention" })
+          .png().toFile(rapi);
+
         sudahAda.add(sh.index);
-        return { ...sh, imageRefPath: lokal };
+        return { ...sh, imageRefPath: rapi };
       } catch (err) {
         // Gagal di sini BUKAN kegagalan job: shot ini cuma kehilangan frame
         // yang disetujui dan kembali ke jalur lama.
