@@ -13,10 +13,10 @@
  * per scene. Tanpa batas, satu pengguna bisa menghabiskan margin tier termurah
  * hanya dengan menekan "ganti" berulang kali.
  *
- * Angka margin nyata (lib/config.ts, 7 Sep 2026):
- *     standard  Rp14.000 - Rp6.750  = Rp 7.250
- *     premium   Rp44.000 - Rp23.533 = Rp20.467
- *     ultra     Rp53.000 - Rp23.533 = Rp29.467
+ * Angka margin nyata SESUDAH kenaikan +5 poin (lib/config.ts, 7 Sep 2026):
+ *     standard  Rp15.000 - Rp6.750  = Rp 8.250
+ *     premium   Rp48.000 - Rp23.533 = Rp24.467
+ *     ultra     Rp59.000 - Rp23.533 = Rp35.467
  *
  * KENAPA ADA DUA PAGU, BUKAN SATU
  * -------------------------------
