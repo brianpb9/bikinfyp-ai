@@ -351,7 +351,7 @@ export const config = {
     standard: {
       // Harga jual acuan untuk laporan; harga yang DITAGIH pembeli diatur
       // admin di /admin/paket (tabel harga_kredit_video).
-      priceIdr: 14000,
+      priceIdr: 15000,
       // TERUKUR di 720p, bukan diturunkan dari angka 480p: Grok Imagine lewat
       // kie.ai menghabiskan 27 kredit untuk 6 detik 720p = 4,5 kredit/detik
       // (render berbayar 2 Sep 2026; keluaran 688x1312). Di 480p ia cuma 2,4
@@ -367,7 +367,7 @@ export const config = {
       generateAudio: true,
     },
     premium: {
-      priceIdr: 44000,
+      priceIdr: 48000,
       // TERUKUR: 21.825 token/dtk x 15 dtk x $4,41/1M x Rp16.300 = Rp23.533.
       cogsIdr: 23533,
       byteplusModel: env("BYTEPLUS_MODEL_PREMIUM", "dreamina-seedance-2-0-mini-260615"),
@@ -375,7 +375,7 @@ export const config = {
       generateAudio: true,
     },
     ultra: {
-      priceIdr: 53000,
+      priceIdr: 59000,
       // SAMA PERSIS dengan premium, dan itu bukan kelalaian: diukur langsung
       // ke BytePlus, 2.0-mini dan 2.5 menghabiskan 87.300 token untuk klip 4
       // detik 720p yang sama. Selisih harga Ultra adalah keputusan posisi,

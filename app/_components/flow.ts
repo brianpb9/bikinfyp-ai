@@ -80,6 +80,8 @@ export interface FlowState {
   scripts?: FlowScript[];
   selectedScriptId?: string;
   jobId?: string;
+  /** Storyboard yang sedang ditinjau — gerbang persetujuan pra-render. */
+  storyboardId?: string;
   returnTo?: string;
 }
 

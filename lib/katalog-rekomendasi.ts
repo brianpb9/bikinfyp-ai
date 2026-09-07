@@ -82,11 +82,29 @@ export const MARGIN_TARGET: Record<JenisVideo, number> = {
 /** Batas bawah yang tidak boleh dilanggar paket mana pun. */
 export const MARGIN_MINIMUM = 0.20;
 
-/** Margin satuan sengaja di atas target paket — lihat aturan 2 di atas. */
+/**
+ * Margin satuan sengaja di atas target paket — lihat aturan 2 di atas.
+ *
+ * NAIK 5 POIN 7 Sep 2026 (keputusan Brian) untuk membiayai layer storyboard:
+ * setiap video kini didahului gambar pratinjau per scene sebelum pengguna
+ * membayar, dan gambar itu dibayar ke BytePlus baik videonya jadi dibuat
+ * maupun tidak.
+ *
+ * DINAIKKAN DI SINI, BUKAN DENGAN MENGETIK HARGA BARU. Harga di berkas ini
+ * TURUNAN dari modal dan margin; mengetik angkanya langsung membuat marginnya
+ * berhenti bisa diperiksa, dan itu yang membuat tiga sumber harga tidak lagi
+ * bisa dijaga tetap sama.
+ *
+ * CATATAN JUJUR: biaya gambar storyboard BELUM masuk ke cogsIdr, jadi modal di
+ * bawah masih modal lama. Kenaikan margin inilah yang menutupinya. Begitu tarif
+ * Seedream yang sebenarnya diketahui (lihat BIAYA_GAMBAR_IDR), yang lebih benar
+ * adalah memasukkannya ke cogsIdr dan mengembalikan margin ke angka semula —
+ * supaya harga tetap mencerminkan biaya, bukan menambal.
+ */
 export const MARGIN_SATUAN: Record<JenisVideo, number> = {
-  standard: 0.40,
-  premium: 0.40,
-  ultra: 0.50,
+  standard: 0.45,
+  premium: 0.45,
+  ultra: 0.55,
 };
 
 /** Modal satu video, sudah termasuk beban gagal dan biaya tetap. */

@@ -25,7 +25,7 @@ test("byte pertama datang SEKETIKA, bukan menunggu pekerjaannya", async () => {
   // walau baris pengiriman byte pertama DIHAPUS, karena ia sabar menunggu
   // denyut berikutnya. Tes yang sabar tidak menguji apa pun tentang batas
   // waktu. Terbukti lewat mutasi.
-  let selesaikan: (v: unknown) => void = () => {};
+  let selesaikan: (v: { ok: boolean }) => void = () => {};
   const res = jawabanPanjang(() => new Promise((r) => { selesaikan = r; }) as Promise<{ ok: boolean }>, { jedaMs: 2_000 });
   const reader = res.body!.getReader();
   // Dibalapkan dengan tenggat, bukan ditunggu lalu diukur: kalau byte
@@ -112,7 +112,7 @@ test("pemanggil yang menutup sambungan tidak menjatuhkan proses", async () => {
   // tidak tertangani — dan pada worker Node itu MENJATUHKAN PROSES, bukan cuma
   // menggagalkan satu permintaan. Ditemukan lewat tes ini sendiri: keenam
   // subtes lulus tapi berkasnya gagal.
-  let selesaikan: (v: unknown) => void = () => {};
+  let selesaikan: (v: { ok: boolean }) => void = () => {};
   const res = jawabanPanjang(() => new Promise((r) => { selesaikan = r; }) as Promise<{ ok: boolean }>);
   const reader = res.body!.getReader();
   await reader.read();

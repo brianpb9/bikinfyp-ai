@@ -20,6 +20,9 @@ import type { QualityTier } from "@/lib/providers/types";
 import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import { PgStoryboardRepository } from "@/lib/postgres/storyboard";
+import { getPool } from "@/lib/postgres/pool";
+import { siapDisetujui } from "@/lib/storyboard";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -51,6 +54,38 @@ export async function POST(req: Request) {
 
     // --- GERBANG HITL (aturan keras #5) ---
     if (!script.approved_by_user_at) throw ERR.SCRIPT_NOT_APPROVED();
+
+    // --- GERBANG STORYBOARD (Brian 7 Sep 2026) ---
+    //
+    // Sebelum ini, persetujuan per scene berjalan SESUDAH klip video jadi:
+    // pengguna menyetujui sesuatu yang sudah dibayarkan. Storyboard memindah
+    // gerbang itu ke sebelum uang ditahan.
+    //
+    // Parameter render diambil dari BARIS STORYBOARD, bukan dari body
+    // permintaan. Kalau body yang menang, halaman bisa mengirim durasi atau
+    // kategori kreator yang berbeda dari yang digambar, dan pengguna menerima
+    // video yang bukan yang ia setujui — gerbangnya jadi teater.
+    let storyboardId: string | null = null;
+    if (postgresRuntimeEnabled() && body.storyboard_id) {
+      const sbRepo = new PgStoryboardRepository(config.databaseUrl);
+      try {
+        const sb = await sbRepo.getMilik(String(body.storyboard_id), user.id);
+        if (!sb) throw ERR.NOT_FOUND("Storyboard-nya");
+        if (sb.script_id !== script.id)
+          throw ERR.BAD_REQUEST("Storyboard ini bukan milik skrip tersebut.", "Storyboard/script mismatch.");
+        const scenes = await sbRepo.scenes(sb.id);
+        if (!siapDisetujui(scenes.map((x) => ({ imageKey: x.image_key }))))
+          throw ERR.BAD_REQUEST(
+            "Storyboard-nya belum selesai dibuat. Tunggu semua gambar muncul dulu ya.",
+            "Storyboard still building."
+          );
+        const tersimpan = JSON.parse(sb.params) as Record<string, unknown>;
+        for (const k of ["format", "duration_s", "quality_tier", "creator_category", "avatar_custom_desc"]) {
+          if (tersimpan[k] !== undefined && tersimpan[k] !== null) body[k] = tersimpan[k];
+        }
+        storyboardId = sb.id;
+      } finally { await sbRepo.close(); }
+    }
 
     // --- Filter kata terlarang dicek ulang saat submit render (aturan keras #6 / QC-07 pra-render) ---
     const segments = JSON.parse(script.segments) as SegmentDraft[];
@@ -270,6 +305,21 @@ export async function POST(req: Request) {
       // The deterministic completion fixture belongs only to the disposable
       // smoke.  A real PostgreSQL runtime is completed by the queue worker.
       if (!created.duplicate && postgresSmokeEnabled()) await smokeCompleteJob(created.jobId);
+      // Ikat job ke storyboard yang melahirkannya SEBELUM diantrekan.
+      //
+      // Urutannya penting: worker membaca jobs.storyboard_id untuk memakai
+      // prompt yang disetujui alih-alih merencanakan ulang. Kalau baris ini
+      // ditulis sesudah enqueue, worker yang cepat bisa mengambil job saat
+      // kolomnya masih NULL — dan merender rencana yang berbeda dari kartu
+      // yang barusan disetujui pengguna.
+      if (storyboardId && !created.duplicate) {
+        const sbRepo = new PgStoryboardRepository(config.databaseUrl);
+        try {
+          await sbRepo.tandaiDisetujui(storyboardId, created.jobId);
+          await getPool(config.databaseUrl).query(
+            "UPDATE jobs SET storyboard_id=$2 WHERE id=$1", [created.jobId, storyboardId]);
+        } finally { await sbRepo.close(); }
+      }
       if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId, "retail");
       return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, jenis_video: jenis, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
     }

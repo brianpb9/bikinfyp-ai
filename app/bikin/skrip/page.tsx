@@ -175,7 +175,16 @@ function SkripInner() {
     try {
       const edited = segments.some((s, i) => s.text !== script.segments[i]?.text);
       await apiFetch(`/api/scripts/${script.id}/approve`, { json: { segments, edited } });
-      const job = await apiFetch<{ job_id: string }>("/api/jobs", {
+      // STORYBOARD DULU, BUKAN LANGSUNG JOB (Brian 7 Sep 2026).
+      //
+      // Sampai kini baris ini membuat job — dan job MENAHAN UANG. Artinya
+      // pengguna membayar sebelum melihat satu gambar pun, lalu gerbang
+      // persetujuan per scene menyusul sesudah klip video jadi.
+      //
+      // Sekarang parameter yang sama dikirim ke /api/storyboard. Ia tidak
+      // menahan apa pun; ia menyimpan parameternya dan menggambar kartunya.
+      // Job baru lahir di halaman storyboard, saat pengguna menekan Generate.
+      const sb = await apiFetch<{ storyboard_id: string }>("/api/storyboard", {
         json: {
           script_id: script.id,
           format: loadFlow().format ?? "talking_head",
@@ -189,8 +198,8 @@ function SkripInner() {
           ...(loadFlow().avatarDesc ? { avatar_custom_desc: loadFlow().avatarDesc } : {}),
         },
       });
-      saveFlow({ jobId: job.job_id });
-      router.push(`/bikin/proses?job=${job.job_id}`);
+      saveFlow({ storyboardId: sb.storyboard_id });
+      router.push(`/bikin/storyboard?sb=${sb.storyboard_id}`);
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
         setNoCredits(true);

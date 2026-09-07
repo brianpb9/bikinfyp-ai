@@ -49,6 +49,7 @@ import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots"
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
+import { PgStoryboardRepository } from "./storyboard";
 import { normalizeHookLevel } from "../config/hooks";
 import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR } from "../media/endcard";
@@ -74,6 +75,9 @@ type WorkerRow = {
   no_model: boolean | null;
   tvc_route: string | null;
   record_style: string | null;
+  /** Storyboard yang disetujui pengguna. NULL untuk job lama dan jalur brand
+   *  yang belum lewat gerbang ini. */
+  storyboard_id: string | null;
   template_id: string | null;
   product_claims: string | null;
   ratio: string | null;
@@ -185,7 +189,61 @@ async function tegakkanAcuan(spec: VisualSpec, workDir: string, namaProduk?: str
   return { ...spec, shots };
 }
 
-async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
+/**
+ * Frame pertama dari GAMBAR STORYBOARD yang sudah disetujui.
+ *
+ * ---------------------------------------------------------------------------
+ * SATU GAMBAR, DUA FUNGSI (Brian 7 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * Kartu storyboard dan frame pertama render menjawab pertanyaan yang sama:
+ * "seperti apa detik pertama shot ini". Menggambarnya dua kali berarti membayar
+ * dua kali untuk satu jawaban — dan lebih buruk, dua jawaban yang bisa BERBEDA.
+ * Pengguna menyetujui kartu Seedream lalu videonya dibangun dari frame Gemini
+ * yang tidak pernah ia lihat.
+ *
+ * Karena itu gambar storyboard dipakai apa adanya, dan generateFirstFrame
+ * dilewati sepenuhnya untuk shot yang sudah punya gambar. Yang tidak punya —
+ * job lama tanpa storyboard, atau scene yang gambarnya gagal — tetap jatuh ke
+ * jalur Gemini lama.
+ */
+async function framePertamaDariStoryboard(
+  spec: VisualSpec, workDir: string, jobId: string, storyboardId: string
+): Promise<{ spec: VisualSpec; sudahAda: Set<number> }> {
+  const sbRepo = new PgStoryboardRepository(config.databaseUrl);
+  try {
+    const scenes = await sbRepo.scenes(storyboardId);
+    const perIdx = new Map(scenes.filter((x) => x.image_key).map((x) => [x.idx, x.image_key!]));
+    if (perIdx.size === 0) return { spec, sudahAda: new Set() };
+
+    const sudahAda = new Set<number>();
+    const shots = await Promise.all(spec.shots.map(async (sh) => {
+      const kunci = perIdx.get(sh.index);
+      if (!kunci) return sh;
+      try {
+        const lokal = await mediaStorage().materialize(kunci);
+        if (!lokal) throw new Error(`gambar storyboard hilang: ${kunci}`);
+        sudahAda.add(sh.index);
+        return { ...sh, imageRefPath: lokal };
+      } catch (err) {
+        // Gagal di sini BUKAN kegagalan job: shot ini cuma kehilangan frame
+        // yang disetujui dan kembali ke jalur lama.
+        console.error(`[storyboard] job ${jobId} shot ${sh.index}: gagal memakai gambar —`,
+          err instanceof Error ? err.message : err);
+        return sh;
+      }
+    }));
+    console.log(`[storyboard] job ${jobId}: ${sudahAda.size}/${spec.shots.length} frame pertama dari storyboard`);
+    return { spec: { ...spec, shots }, sudahAda };
+  } finally { await sbRepo.close(); }
+}
+
+async function siapkanFramePertama(
+  spec: VisualSpec, workDir: string, jobId: string,
+  /** Shot yang frame pertamanya SUDAH datang dari storyboard yang disetujui.
+   *  Menggambarnya lagi dengan Gemini berarti membayar dua kali dan membuang
+   *  gambar yang justru sudah dilihat dan disetujui pengguna. */
+  lewati: Set<number> = new Set(),
+): Promise<VisualSpec> {
   // Jatahnya dibatasi MARGIN, bukan kebutuhan: frame ~Rp600 sedangkan margin
   // tier bersuara cuma Rp3.198. Yang dapat jatah lebih dulu adalah shot yang
   // WAJIB menahan produk — tanpa frame buatan shot itu mustahil benar.
@@ -439,7 +497,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
   const format = row.format === "talking_head" || row.format === "vo_broll" || row.format === "tvc" ? row.format : "hands_only";
-  const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
+  let spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
@@ -461,6 +519,41 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: row.template_id,
     recordStyle: row.record_style });
+
+  // --- STORYBOARD MENANG ATAS PERENCANAAN ULANG (Brian 7 Sep 2026) ---
+  //
+  // Kalau job lahir dari storyboard yang disetujui, prompt yang dirender WAJIB
+  // prompt yang dilihat pengguna. planShots() di atas tetap dijalankan karena
+  // spec-nya membawa lebih dari sekadar shot — ukuran, negative prompt, tier
+  // audio — tapi daftar shot-nya ditimpa baris storyboard.
+  //
+  // Tanpa ini gerbang persetujuan cuma tampilan: planShots punya cabang yang
+  // bergantung konfigurasi, dan konfigurasi bisa berubah di antara saat gambar
+  // dibuat dan saat video dirender. Pengguna menyetujui satu hal, menerima yang
+  // lain, dan tidak ada yang bisa membuktikan bedanya.
+  if (row.storyboard_id) {
+    const sbRepo = new PgStoryboardRepository(config.databaseUrl);
+    try {
+      const scenes = await sbRepo.scenes(row.storyboard_id);
+      if (scenes.length > 0) {
+        spec = {
+          ...spec,
+          shots: scenes.map((sc) => ({
+            index: sc.idx,
+            durationSec: sc.duration_sec,
+            prompt: sc.prompt,
+            // Foto produk tetap diturunkan di sini: storyboard menyimpan
+            // PROMPT, bukan jalur berkas lokal yang cuma berlaku di container
+            // yang membuatnya.
+            imageRefPath: primaryRef,
+            startState: sc.start_state ?? undefined,
+            tanpaOrang: sc.tanpa_orang,
+            withholdProduct: sc.withhold_product,
+          })),
+        };
+      }
+    } finally { await sbRepo.close(); }
+  }
 
   // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
   //
@@ -620,7 +713,23 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qcF1 = turunan.qcF1;
     if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
   } else {
-    specSiap = await tegakkanAcuan(await siapkanFramePertama(spec, workDir, row.id), workDir, row.product_name);
+    // GAMBAR STORYBOARD MENANG atas frame Gemini.
+    //
+    // Kartu yang disetujui pengguna DAN frame pertama render menjawab
+    // pertanyaan yang sama. Menggambarnya dua kali berarti membayar dua kali
+    // untuk satu jawaban — dan dua jawaban yang bisa berbeda: pengguna
+    // menyetujui kartu Seedream, videonya dibangun dari frame Gemini yang tak
+    // pernah ia lihat.
+    //
+    // siapkanFramePertama tetap dipanggil sesudahnya: ia melewati shot yang
+    // imageRefPath-nya sudah diganti hanya kalau shot itu ADA di daftar
+    // storyboard, jadi scene yang gambarnya gagal tetap kebagian jalur lama.
+    const dariSb = row.storyboard_id
+      ? await framePertamaDariStoryboard(spec, workDir, row.id, row.storyboard_id)
+      : { spec, sudahAda: new Set<number>() };
+    specSiap = await tegakkanAcuan(
+      await siapkanFramePertama(dariSb.spec, workDir, row.id, dariSb.sudahAda),
+      workDir, row.product_name);
   }
   // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
   // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih

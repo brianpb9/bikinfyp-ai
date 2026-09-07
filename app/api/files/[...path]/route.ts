@@ -101,6 +101,20 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
             AND ((j.org_id IS NULL AND j.user_id=$2)
                  OR EXISTS (SELECT 1 FROM org_members m JOIN organizations org ON org.id=m.org_id
                             WHERE m.org_id=j.org_id AND m.user_id=$2 AND org.status='active'))
+        UNION ALL
+        -- Gambar kartu STORYBOARD (gerbang persetujuan pra-render, 7 Sep 2026).
+        -- Tanpa cabang ini setiap kartu tampil sebagai gambar rusak: HMAC-nya
+        -- sah, tapi fungsi inilah pemeriksa kepemilikan yang sebenarnya dan
+        -- storyboard belum dikenalnya.
+        --
+        -- Dicek ORG juga, dengan alasan yang sama seperti job_shots di atas:
+        -- layar review brand org-scoped, jadi user-only membuat anggota kedua
+        -- melihat kartu kosong semua.
+        SELECT 1 FROM storyboard_scenes ss JOIN storyboards sb ON sb.id=ss.storyboard_id
+          WHERE ss.image_key=$1
+            AND ((sb.org_id IS NULL AND sb.user_id=$2)
+                 OR EXISTS (SELECT 1 FROM org_members m JOIN organizations org ON org.id=m.org_id
+                            WHERE m.org_id=sb.org_id AND m.user_id=$2 AND org.status='active'))
         LIMIT 1`, [relPath, userId]);
       return Boolean(result.rowCount);
     } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
@@ -112,6 +126,8 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
     "SELECT 1 FROM job_shots js JOIN jobs j ON j.id=js.job_id WHERE (js.storage_key=? OR js.thumb_key=?) AND j.user_id=? LIMIT 1"
   ).get(relPath, relPath, userId);
   if (shot) return true;
+  // SQLite tidak punya tabel storyboard — fitur ini khusus runtime PostgreSQL
+  // (lihat app/api/storyboard), jadi memang tidak ada cabang setara di sini.
   const products = db.prepare("SELECT images FROM products WHERE user_id=?").all(userId) as { images: string }[];
   return products.some((product) => {
     try { return (JSON.parse(product.images) as unknown[]).includes(relPath); } catch { return false; }

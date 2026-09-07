@@ -11,6 +11,8 @@ import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
 import { redactWorkerError } from "../lib/worker-log";
 import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
 import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
+import { STORYBOARD_QUEUE_NAME, type TugasStoryboard } from "../lib/storyboard-queue";
+import { prosesStoryboard } from "../lib/postgres/storyboard-worker";
 import { processPromoJob } from "../lib/promo/worker";
 import { mulaiPenyegaranKredensial } from "../lib/kredensial";
 import { mulaiPenyegaranPemetaan } from "../lib/pemetaan-model";
@@ -41,6 +43,31 @@ const worker = new Worker<{ jobId: string }>(
 );
 
 // Video Promosi (non-ecommerce) prototype — separate queue, separate state
+// ANTREAN STORYBOARD — gerbang persetujuan pra-render (Brian 7 Sep 2026).
+//
+// Terpisah dari antrean render karena tidak menyentuh uang sama sekali:
+// storyboard gratis, dan mencampurnya berarti kegagalan menggambar bisa
+// menjatuhkan job ke jalur refund untuk uang yang tidak pernah ditahan.
+//
+// concurrency 3, bukan 1: Seedream butuh ~21 detik per gambar dan pekerjaannya
+// MENUNGGU JARINGAN, bukan memakai CPU seperti ffmpeg. Satu per satu membuat
+// storyboard 3 scene selesai dalam 63 detik alih-alih ~25.
+const storyboardWorker = postgresRuntimeEnabled()
+  ? new Worker<TugasStoryboard>(
+      STORYBOARD_QUEUE_NAME,
+      async (job) => prosesStoryboard(job.data.storyboardId, job.data.idx),
+      { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: 3 }
+    )
+  : null;
+
+storyboardWorker?.on("failed", (job, err) => {
+  console.error(JSON.stringify({
+    event: "storyboard_failed",
+    storyboard_id: job?.data.storyboardId, idx: job?.data.idx,
+    message: err?.message,
+  }));
+});
+
 // machine, no credit ledger/refund entanglement with the queue above. Runs
 // in this same Docker container because that's where ffmpeg/ffprobe live.
 const promoWorker = postgresRuntimeEnabled()
@@ -184,9 +211,11 @@ async function shutdown(signal: string) {
   clearInterval(monitorTimer);
   await worker.close();
   await promoWorker?.close();
+  await storyboardWorker?.close();
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 console.log(`[worker] Redis queue ${config.redisQueueName}; concurrency=${Math.max(1, config.workerConcurrency)}`);
 if (promoWorker) console.log(`[worker] Promo queue ${PROMO_QUEUE_NAME}; concurrency=1`);
+if (storyboardWorker) console.log(`[worker] Storyboard queue ${STORYBOARD_QUEUE_NAME}; concurrency=3`);
