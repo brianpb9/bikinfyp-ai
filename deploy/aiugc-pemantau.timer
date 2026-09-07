@@ -1,0 +1,12 @@
+[Unit]
+Description=Jalankan pemantau aiugc.id tiap menit
+
+[Timer]
+# Tiap menit. Kegagalan yang dilaporkan Brian berlangsung singkat; interval
+# lima menit besar kemungkinan melewatkannya sama sekali.
+OnBootSec=2min
+OnUnitActiveSec=1min
+AccuracySec=10s
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,7 @@
+[Unit]
+Description=Pemantau ketersediaan aiugc.id (tepi vs origin vs tunnel)
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/aiugc-pemantau.sh
