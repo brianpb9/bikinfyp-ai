@@ -8,11 +8,37 @@ import { AccountMenu } from "./AccountMenu";
 
 /** Getar haptic halus tiap tap tombol/link (Android Chrome; iOS mengabaikan
  * navigator.vibrate tanpa error). Bagian dari juice tombol — Brian 2026-08-07:
- * "tekan tombol ga satisfying". Dipasang global sekali di SiteChrome. */
+ * "tekan tombol ga satisfying". Dipasang global sekali di SiteChrome.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA ADA PENJAGA userActivation
+ * ---------------------------------------------------------------------------
+ * Dilaporkan Brian 7 Sep 2026 dari console:
+ *
+ *   [Intervention] Blocked call to navigator.vibrate because user hasn't
+ *   tapped on the frame or any embedded frame yet
+ *
+ * Chrome menolak vibrate() sampai halamannya pernah benar-benar disentuh. Kita
+ * memanggilnya di `pointerdown` — dan pada tap PERTAMA sesudah halaman dimuat,
+ * aktivasi penggunanya belum tercatat. Jadi panggilan itu SELALU ditolak sekali
+ * per halaman.
+ *
+ * try/catch tidak menolongnya: ini bukan lemparan, melainkan intervensi yang
+ * ditulis Chrome ke console. Jadi yang terjadi tiap sesi: satu baris peringatan
+ * yang tidak bisa ditekan, dan tap pertama yang memang tidak pernah bergetar.
+ *
+ * navigator.userActivation.hasBeenActive menjawab persis pertanyaan itu —
+ * "halaman ini sudah pernah disentuh?" — jadi panggilannya dilewati saat kita
+ * sudah tahu ia akan ditolak. Tap kedua dan seterusnya tetap bergetar seperti
+ * sebelumnya. Browser tanpa userActivation (Safari lama) dibiarkan lewat: di
+ * sana vibrate memang tidak ada dan `?.` sudah menanganinya.
+ */
 function useTapHaptics() {
   useEffect(() => {
     const onDown = (e: PointerEvent) => {
       if ((e.target as Element | null)?.closest?.("button, a, [role=button]")) {
+        const aktivasi = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
+        if (aktivasi && !aktivasi.hasBeenActive) return;
         try { navigator.vibrate?.(8); } catch { /* browser tanpa izin vibrate */ }
       }
     };
