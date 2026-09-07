@@ -68,8 +68,26 @@ export function promptGambar(input: {
   prompt: string;
   startState?: string | null;
   ratio?: string;
+  /** Ada acuan produk terlampir? Mengubah kalimat pembukanya. */
+  adaAcuan?: boolean;
 }): string {
   const bagian = [
+    // REFERENCE AUTHORITY — bagian pertama pada spesifikasi Layer 2.5, dan
+    // bukan basa-basi.
+    //
+    // Diukur 7 Sep 2026 dengan prompt shot yang SAMA dan acuan yang SAMA:
+    //   tanpa kalimat ini -> foto produk di atas meja, TANPA TANGAN, walau
+    //                        prompt-nya berbunyi "hands and forearms only"
+    //   dengan kalimat ini -> tangan memegang produk yang benar, adegan baru
+    //
+    // Tanpanya model memperlakukan acuan sebagai "gambar ulang foto ini" alih-
+    // alih "pakai produk ini di adegan baru". Untuk video hands_only itu berarti
+    // setiap kartu jadi foto katalog, dan frame pertama render ikut salah.
+    input.adaAcuan
+      ? "REFERENCE AUTHORITY: the attached image shows ONLY the product. Use it as the authority for the "
+        + "product shape, colour, material and proportions. Do NOT reproduce the reference photo composition, "
+        + "background or framing — build the NEW scene described below."
+      : "",
     // Keadaan yang sudah benar di frame pertama menang atas prompt shot.
     // Prompt shot menggambarkan apa yang TERJADI sepanjang klip; kalau ia
     // dipakai apa adanya, gambar diamnya menggambarkan gerakan.
@@ -129,7 +147,7 @@ export async function generateGambarStoryboard(input: {
     },
     body: JSON.stringify({
       model: MODEL,
-      prompt: promptGambar(input),
+      prompt: promptGambar({ ...input, adaAcuan: Boolean(input.fotoProduk) }),
       // Acuan dikirim sebagai data URI. Diverifikasi terhadap API sungguhan
       // (usage.input_images naik jadi 1), dan output_tokens justru TURUN dari
       // 17.424 ke 4.450 — mengacu pada foto lebih murah daripada mengarang.

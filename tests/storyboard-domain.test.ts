@@ -191,3 +191,18 @@ test("acuan produk dikirim ke Seedream, dan DITAHAN untuk scene withholdProduct"
   // Dan fotonya diambil sekali untuk seluruh storyboard, bukan per scene.
   assert.equal((w.match(/kunciFotoProduk\(/g) ?? []).length, 1, "foto produk diambil berulang");
 });
+
+test("REFERENCE AUTHORITY hanya muncul saat ada acuan, dan menolak menyalin komposisinya", () => {
+  // Diukur 7 Sep 2026, prompt shot SAMA dan acuan SAMA:
+  //   tanpa kalimat ini -> foto produk di atas meja, TANPA TANGAN, walau
+  //                        prompt-nya berbunyi "hands and forearms only"
+  //   dengan kalimat ini -> tangan memegang produk yang benar, adegan baru
+  const dengan = promptGambar({ prompt: "hands holding the product", adaAcuan: true });
+  const tanpa = promptGambar({ prompt: "hands holding the product" });
+
+  assert.match(dengan, /REFERENCE AUTHORITY/);
+  assert.match(dengan, /Do NOT reproduce the reference photo composition/);
+  // Tanpa acuan kalimat itu MENYESATKAN: tidak ada gambar yang dilampirkan.
+  assert.doesNotMatch(tanpa, /REFERENCE AUTHORITY/);
+  assert.doesNotMatch(tanpa, /attached image/);
+});
