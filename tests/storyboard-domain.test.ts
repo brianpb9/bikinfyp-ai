@@ -128,3 +128,20 @@ test("watermark dipaku mati di sumbernya, bukan lewat parameter", () => {
   assert.match(src, /watermark: WATERMARK/);
   assert.doesNotMatch(src, /watermark:\s*(true|input\.|opts\.)/);
 });
+
+test("id antrean BullMQ tidak memuat titik dua", () => {
+  // BullMQ menolak custom id yang memuat ":" dengan "Custom Id cannot contain :".
+  // Penolakannya keluar sebagai 500 di route, bukan sebagai galat antrean, jadi
+  // sebabnya tidak terlihat dari pesan yang diterima pengguna — persis yang
+  // terjadi pada uji produksi pertama fitur ini.
+  const src = readFileSync(join(process.cwd(), "lib/storyboard-queue.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  const ids = [...src.matchAll(/jobId:\s*`([^`]+)`/g)].map((m) => m[1]!);
+  assert.ok(ids.length >= 2, "id antrean tidak ditemukan");
+  for (const id of ids) {
+    // Titik dua di dalam ${...} tidak mungkin ada di sini; yang dicek adalah
+    // pemisah yang kita tulis sendiri.
+    assert.doesNotMatch(id.replace(/\$\{[^}]*\}/g, "X"), /:/, `id antrean "${id}" memuat titik dua`);
+  }
+});

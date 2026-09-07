@@ -43,7 +43,12 @@ export function getStoryboardQueue(): Queue<TugasStoryboard> {
 export async function enqueueStoryboard(storyboardId: string): Promise<void> {
   await getStoryboardQueue().add("build", { storyboardId }, {
     // jobId dedup: menekan "lanjut" dua kali tidak boleh menggandakan biaya.
-    jobId: `sb:${storyboardId}`,
+    //
+    // TANDA HUBUNG, BUKAN TITIK DUA: BullMQ menolak custom id yang memuat ":"
+    // ("Custom Id cannot contain :") — dan penolakannya muncul sebagai 500 di
+    // route, bukan sebagai galat antrean, jadi sebabnya tidak kelihatan dari
+    // pesan yang diterima pengguna. Ketahuan saat uji produksi pertama.
+    jobId: `sb-${storyboardId}`,
     attempts: 3,
     backoff: { type: "fixed", delay: 4_000 },
     removeOnComplete: { age: 3_600, count: 200 },
@@ -56,7 +61,7 @@ export async function enqueueRegenScene(storyboardId: string, idx: number): Prom
     // Kuota sudah dipotong route sebelum ini dipanggil, jadi dedup memakai cap
     // waktu: dua permintaan ganti yang SAH untuk scene yang sama harus
     // benar-benar menghasilkan dua gambar.
-    jobId: `sb:${storyboardId}:${idx}:${Date.now()}`,
+    jobId: `sb-${storyboardId}-${idx}-${Date.now()}`,
     attempts: 2,
     backoff: { type: "fixed", delay: 4_000 },
     removeOnComplete: { age: 3_600, count: 200 },
