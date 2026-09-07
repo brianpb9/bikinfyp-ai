@@ -74,6 +74,17 @@ export async function POST(req: Request) {
         if (sb.script_id !== script.id)
           throw ERR.BAD_REQUEST("Storyboard ini bukan milik skrip tersebut.", "Storyboard/script mismatch.");
         const scenes = await sbRepo.scenes(sb.id);
+        // STATUS IKUT DIPERIKSA, bukan cuma kelengkapan gambar.
+        //
+        // Saat satu kartu sedang diganti, gambar LAMANYA masih tercatat — jadi
+        // siapDisetujui() sendirian mengembalikan true, dan job akan merender
+        // gambar yang justru barusan ditolak pengguna. Mengunci di UI saja
+        // tidak cukup: yang menahan uang adalah route ini.
+        if (sb.status !== "READY")
+          throw ERR.BAD_REQUEST(
+            "Storyboard-nya masih diproses. Tunggu gambarnya selesai dulu ya.",
+            `Storyboard not READY (${sb.status}).`
+          );
         if (!siapDisetujui(scenes.map((x) => ({ imageKey: x.image_key }))))
           throw ERR.BAD_REQUEST(
             "Storyboard-nya belum selesai dibuat. Tunggu semua gambar muncul dulu ya.",

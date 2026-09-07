@@ -145,3 +145,30 @@ test("id antrean BullMQ tidak memuat titik dua", () => {
     assert.doesNotMatch(id.replace(/\$\{[^}]*\}/g, "X"), /:/, `id antrean "${id}" memuat titik dua`);
   }
 });
+
+test("gerbang job menolak storyboard yang masih dibangun, bukan cuma yang gambarnya kurang", () => {
+  // Saat satu kartu sedang diganti, gambar LAMANYA masih tercatat — jadi
+  // siapDisetujui() sendirian mengembalikan true dan job akan merender gambar
+  // yang justru barusan ditolak pengguna. Terlihat pada uji produksi 7 Sep
+  // 2026: status BUILDING dengan siap=true.
+  // Komentar dibuang dulu: blok itu MENJELASKAN kenapa siapDisetujui() saja
+  // tidak cukup, dan kalimat penjelasan itu memuat namanya — cukup untuk
+  // membuat pemeriksaan urutan membaca komentar, bukan kode.
+  const src = readFileSync(join(process.cwd(), "app/api/jobs/route.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  const i = src.indexOf('storyboard_id) {');
+  assert.ok(i > 0, "gerbang storyboard hilang dari route job");
+  const blok = src.slice(i, i + 1600);
+  assert.match(blok, /sb\.status !== "READY"/, "gerbang tidak memeriksa status");
+  // Dan urutannya: status diperiksa SEBELUM kelengkapan gambar, karena status
+  // itulah yang membedakan "sedang diganti" dari "belum pernah dibuat".
+  assert.ok(blok.indexOf('sb.status !== "READY"') < blok.indexOf("siapDisetujui"),
+    "status diperiksa setelah kelengkapan gambar");
+});
+
+test("tombol Generate di UI ikut terkunci selama storyboard dibangun", () => {
+  const src = readFileSync(join(process.cwd(), "app/bikin/storyboard/page.tsx"), "utf8");
+  assert.match(src, /disabled=\{sibuk \|\| !data\.siap \|\| masihBerjalan\}/,
+    "tombol Generate hanya melihat `siap`");
+});

@@ -224,11 +224,17 @@ export default function StoryboardPage() {
       <div className="fixed inset-x-0 bottom-0 mx-auto max-w-md space-y-2 border-t border-zinc-200 bg-white/95 p-4 backdrop-blur">
         <button
           type="button"
-          disabled={sibuk || !data.siap}
+          // masihBerjalan IKUT MENGUNCI, bukan cuma `siap`.
+          //
+          // Saat satu kartu sedang diganti, gambar LAMANYA masih ada — jadi
+          // `siap` tetap true dan tombolnya tetap hidup. Pengguna bisa menekan
+          // Generate dan merender gambar yang barusan ia tolak. Terlihat pada
+          // uji produksi: status BUILDING dengan siap=true.
+          disabled={sibuk || !data.siap || masihBerjalan}
           onClick={() => void generate()}
           className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-zinc-900 px-6 text-base font-bold text-white shadow-lg shadow-zinc-900/20 disabled:bg-zinc-300 disabled:text-zinc-500 disabled:shadow-none"
         >
-          {data.siap ? "Generate video sekarang" : "Menunggu semua gambar…"}
+          {masihBerjalan ? "Menunggu gambar baru…" : data.siap ? "Generate video sekarang" : "Menunggu semua gambar…"}
         </button>
         <button
           type="button"
