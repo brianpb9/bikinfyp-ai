@@ -5,6 +5,7 @@ import { AlertCircle, ArrowRight, Check, Loader2, Sparkles } from "lucide-react"
 import { apiFetch, ApiFail } from "../../_components/api";
 import { buildBrandApproach } from "@/lib/brand-approach";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
+import { LogoBrands } from "../../_components/Logo";
 
 // Onboarding organisasi.
 //
@@ -129,9 +130,7 @@ export default function OnboardingPage() {
       {/* ---------- KIRI: pertanyaan ---------- */}
       <div className="flex min-h-0 flex-col overflow-y-auto px-8 py-10 sm:px-14 lg:px-16">
         <div className="mx-auto flex w-full max-w-lg flex-1 flex-col">
-          <p className="font-display text-sm font-extrabold text-white">
-            AIUGC.ID <span className="text-amber-400">AI</span>
-          </p>
+            <LogoBrands tinggi={22} warnaKata="text-amber-400" />
 
           <div className="mt-10 flex items-center gap-3">
             <div className="flex flex-1 gap-1.5">

@@ -20,12 +20,21 @@ const kode = (rel: string) =>
     .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
 
 test("permukaan brand memakai kunci-mati logo + kata, bukan teks polos", () => {
-  for (const f of ["app/brands/page.tsx", "app/dashboard/_components/DashboardChrome.tsx"]) {
+  // SELURUH permukaan brand, bukan cuma halaman depan. Dua di antaranya
+  // sempat tertinggal karena polanya berbeda sedikit — dan salah satunya
+  // (onboarding organisasi) bahkan masih memakai wording RETAIL "AIUGC.ID AI"
+  // di layar yang hanya dilihat brand.
+  for (const f of [
+    "app/brands/page.tsx",
+    "app/dashboard/_components/DashboardChrome.tsx",
+    "app/dashboard/request-access/page.tsx",
+    "app/dashboard/onboarding/page.tsx",
+  ]) {
     const src = kode(f);
     assert.match(src, /<LogoBrands/, `${f} tidak memakai kunci-mati`);
     // Wordmark yang diketik tangan tidak boleh kembali: ia yang dulu tertinggal
     // saat merek berganti.
-    assert.doesNotMatch(src, /AIUGC\.ID <span[^>]*>Brands</, `${f} kembali mengetik wordmark sendiri`);
+    assert.doesNotMatch(src, /AIUGC\.ID <span/, `${f} kembali mengetik wordmark sendiri`);
   }
 });
 

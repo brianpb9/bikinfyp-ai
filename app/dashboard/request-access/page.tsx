@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 import { config } from "@/lib/config";
 import { FormAkses } from "./FormAkses";
+import { LogoBrands } from "../../_components/Logo";
 
 export const dynamic = "force-dynamic";
 
@@ -38,9 +39,7 @@ export default async function RequestAccessPage() {
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-amber-400">
           <Building2 size={22} />
         </div>
-        <p className="text-lg font-bold tracking-tight">
-          AIUGC.ID <span className="text-amber-400">Brands</span>
-        </p>
+        <LogoBrands tinggi={26} warnaKata="text-amber-400" className="mx-auto" />
         <h1 className="font-display text-xl font-bold">Akun kamu belum terhubung ke organisasi</h1>
         <p className="text-sm text-zinc-400">
           Dashboard ini khusus brand/agency. Sejak 6 Sep 2026 brand bisa mendaftar sendiri —
