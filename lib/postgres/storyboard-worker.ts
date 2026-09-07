@@ -18,11 +18,16 @@ export function kunciGambarStoryboard(storyboardId: string, idx: number, versi: 
 async function gambarSatuScene(
   repo: PgStoryboardRepository,
   storyboardId: string,
-  scene: BarisScene
+  scene: BarisScene,
+  fotoProduk: Buffer | null
 ): Promise<void> {
   const gambar = await generateGambarStoryboard({
     prompt: scene.prompt,
     startState: scene.start_state,
+    // Scene yang WAJIB menahan produk tidak menerima acuannya: menyertakannya
+    // di situ justru memunculkan produk di shot yang seharusnya belum
+    // memperlihatkannya.
+    fotoProduk: scene.withhold_product ? null : fotoProduk,
   });
   // Versi memakai regen_count supaya gambar lama TIDAK ditimpa. Browser sudah
   // memegang URL lama di cache; menulis ke kunci yang sama membuat kartu
@@ -64,7 +69,17 @@ export async function prosesStoryboard(storyboardId: string, idx?: number): Prom
 
     if (idx === undefined) await repo.setStatus(storyboardId, "BUILDING", null);
 
-    const hasil = await Promise.allSettled(target.map((s) => gambarSatuScene(repo, storyboardId, s)));
+    // Foto produk diambil SEKALI untuk seluruh storyboard, bukan per scene:
+    // isinya sama dan materialize() menyentuh storage tiap kali dipanggil.
+    let fotoProduk: Buffer | null = null;
+    const kunciFoto = await repo.kunciFotoProduk(storyboardId);
+    if (kunciFoto) {
+      const obj = await mediaStorage().get(kunciFoto).catch(() => null);
+      fotoProduk = obj?.body ?? null;
+      if (!fotoProduk) console.warn(`[storyboard] ${storyboardId}: foto produk ${kunciFoto} tidak terbaca — kartu digambar tanpa acuan`);
+    }
+
+    const hasil = await Promise.allSettled(target.map((s) => gambarSatuScene(repo, storyboardId, s, fotoProduk)));
     const gagal = hasil.filter((h) => h.status === "rejected") as PromiseRejectedResult[];
 
     if (gagal.length > 0) {

@@ -164,6 +164,27 @@ export class PgStoryboardRepository {
     return (r.rowCount ?? 0) > 0;
   }
 
+  /**
+   * Kunci storage foto produk pertama untuk storyboard ini.
+   *
+   * Ditelusuri lewat script -> product, bukan disimpan ulang di baris
+   * storyboard: foto produk bisa diganti pengguna, dan menyalinnya berarti
+   * kartu digambar dari foto yang sudah tidak dipakai lagi.
+   */
+  async kunciFotoProduk(storyboardId: string): Promise<string | null> {
+    const r = await this.pool.query<{ images: string }>(
+      `SELECT p.images FROM storyboards sb
+         JOIN scripts s ON s.id = sb.script_id
+         JOIN products p ON p.id = s.product_id
+        WHERE sb.id = $1`, [storyboardId]);
+    const mentah = r.rows[0]?.images;
+    if (!mentah) return null;
+    try {
+      const daftar = JSON.parse(mentah) as string[];
+      return daftar[0] ?? null;
+    } catch { return null; }
+  }
+
   /** Storyboard aktif untuk sebuah skrip — supaya menekan "lanjut" dua kali
    *  tidak melahirkan dua storyboard dan dua kali biaya gambar. */
   async aktifUntukScript(scriptId: string, userId: string): Promise<BarisStoryboard | undefined> {

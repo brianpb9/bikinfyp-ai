@@ -172,3 +172,22 @@ test("tombol Generate di UI ikut terkunci selama storyboard dibangun", () => {
   assert.match(src, /disabled=\{sibuk \|\| !data\.siap \|\| masihBerjalan\}/,
     "tombol Generate hanya melihat `siap`");
 });
+
+test("acuan produk dikirim ke Seedream, dan DITAHAN untuk scene withholdProduct", () => {
+  // Uji produksi 7 Sep 2026: produknya pouch lipat hijau zaitun, kartu
+  // storyboard menampilkan TAS BATIK COKELAT. Panggilan Seedream saya cuma
+  // mengirim teks, jadi model menggambar produk dari nol. Kartu itu lalu jadi
+  // frame pertama render, videonya menjual barang yang tidak pernah dimiliki
+  // pengguna, dan QC-03 menjatuhkannya SESUDAH uang ditahan.
+  const sr = readFileSync(join(process.cwd(), "lib/media/seedream.ts"), "utf8");
+  assert.match(sr, /input\.fotoProduk \? \{ image:/, "acuan produk tidak dikirim ke API");
+
+  const w = readFileSync(join(process.cwd(), "lib/postgres/storyboard-worker.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  // Scene yang menahan produk TIDAK boleh menerima acuannya — kalau tidak,
+  // produk muncul di shot yang seharusnya belum memperlihatkannya.
+  assert.match(w, /scene\.withhold_product \? null : fotoProduk/, "withholdProduct tetap menerima acuan");
+  // Dan fotonya diambil sekali untuk seluruh storyboard, bukan per scene.
+  assert.equal((w.match(/kunciFotoProduk\(/g) ?? []).length, 1, "foto produk diambil berulang");
+});

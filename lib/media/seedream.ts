@@ -81,6 +81,14 @@ export function promptGambar(input: {
   return bagian.filter(Boolean).join(" ");
 }
 
+/** Tipe acuan dibaca dari isi berkasnya, bukan dari nama berkas: foto produk
+ *  disimpan sebagai .webp maupun .jpg tergantung jalur unggahnya. */
+function mimeAcuan(b: Buffer): string {
+  if (b.length > 12 && b.subarray(0, 4).toString("hex") === "89504e47") return "image/png";
+  if (b.length > 12 && b.subarray(8, 12).toString("ascii") === "WEBP") return "image/webp";
+  return "image/jpeg";
+}
+
 interface JawabanArk {
   data?: { url?: string; b64_json?: string }[];
   error?: { message?: string; code?: string };
@@ -93,6 +101,22 @@ export async function generateGambarStoryboard(input: {
   prompt: string;
   startState?: string | null;
   ratio?: string;
+  /**
+   * Foto produk ASLI pengguna sebagai acuan gambar.
+   *
+   * WAJIB DIISI untuk scene yang menampilkan produk. Tanpa ini Seedream
+   * menggambar produk dari nol berdasarkan teks, dan hasilnya barang yang
+   * BERBEDA — terbukti pada uji produksi 7 Sep 2026: produknya pouch lipat
+   * hijau zaitun, kartu storyboard menampilkan tas batik cokelat. Kartu itu
+   * lalu dipakai sebagai frame pertama render, jadi videonya ikut menjual
+   * barang yang tidak pernah dimiliki pengguna, dan QC-03 (identitas produk)
+   * menjatuhkannya sesudah uang ditahan.
+   *
+   * Dikosongkan HANYA untuk scene yang memang harus menahan produk
+   * (withholdProduct) — di situ menyertakan acuannya justru membuat produk
+   * muncul di shot yang seharusnya belum memperlihatkannya.
+   */
+  fotoProduk?: Buffer | null;
   signal?: AbortSignal;
 }): Promise<GambarStoryboard> {
   if (!config.byteplusApiKey) throw new SeedreamError("BYTEPLUS_ARK_API_KEY belum diisi.");
@@ -106,6 +130,10 @@ export async function generateGambarStoryboard(input: {
     body: JSON.stringify({
       model: MODEL,
       prompt: promptGambar(input),
+      // Acuan dikirim sebagai data URI. Diverifikasi terhadap API sungguhan
+      // (usage.input_images naik jadi 1), dan output_tokens justru TURUN dari
+      // 17.424 ke 4.450 — mengacu pada foto lebih murah daripada mengarang.
+      ...(input.fotoProduk ? { image: `data:${mimeAcuan(input.fotoProduk)};base64,${input.fotoProduk.toString("base64")}` } : {}),
       response_format: "url",
       size: UKURAN,
       stream: false,
