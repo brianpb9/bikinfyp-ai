@@ -48,9 +48,9 @@ export default function DaftarBrandPage() {
   }
 
   return (
-    <main className="mx-auto min-h-dvh max-w-md space-y-6 bg-gradient-to-b from-indigo-50/60 via-white to-white px-4 pb-24 pt-8">
+    <main className="mx-auto min-h-dvh max-w-md space-y-6 bg-gradient-to-b from-amber-50/60 via-white to-white px-4 pb-24 pt-8">
       <header className="space-y-1">
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">AIUGC.ID Brands</p>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">AIUGC.ID Brands</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Daftarkan brand kamu</h1>
         <p className="text-sm leading-6 text-zinc-600">
           Kami tinjau dulu sebelum membuka aksesnya. Biasanya tidak lama, dan kami kabari lewat email.

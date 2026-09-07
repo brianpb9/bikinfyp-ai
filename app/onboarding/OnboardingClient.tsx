@@ -262,7 +262,7 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
                   <h1 className="text-center font-display text-[2.1rem] font-extrabold leading-[1.1] tracking-tight text-zinc-900">
                     Masuk ke
                     <br />
-                    <span className="text-indigo-600">AIUGC.ID Brands</span>
+                    <span className="text-amber-500">AIUGC.ID Brands</span>
                   </h1>
                   <p className="text-center text-base leading-snug text-zinc-600">
                     Buat akun dulu, lalu daftarkan brand kamu. Kami tinjau pendaftarannya sebelum
@@ -297,7 +297,18 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
                 }}
                 aria-disabled={kesiapan === "memuat"}
                 className="mx-auto flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600"
-                style={brand ? { backgroundColor: "#4f46e5", boxShadow: "0 10px 15px -3px rgb(79 70 229 / 0.25)" } : undefined}
+                // WARNA TOMBOL BRAND = zinc-900, BUKAN indigo.
+                //
+                // Indigo adalah karangan saya, dan Brian menolaknya 7 Sep 2026:
+                // logo AIUGC.ID oranye, jadi biru bertabrakan dengannya. Halaman
+                // depan brand (/brands) sendiri TIDAK memakai indigo sama sekali —
+                // paletnya zinc-900 untuk tombol utama dan amber-500 untuk aksen.
+                //
+                // zinc-900 dipilih, bukan amber: tombol yang setara di /brands
+                // ("Masuk", di header) memakai zinc-900, dan halaman ini adalah
+                // tujuan tombol itu. Ia juga tetap membedakan diri dari tombol
+                // amber milik retail tanpa memakai warna yang asing bagi mereknya.
+                style={brand ? { backgroundColor: "#18181b", boxShadow: "0 10px 15px -3px rgb(24 24 27 / 0.25)" } : undefined}
               >
                 {/* Label CTA untuk brand TIDAK boleh memakai ajakan() apa adanya:
                     seluruh variannya menjanjikan "gratis — 1 video demo", dan
