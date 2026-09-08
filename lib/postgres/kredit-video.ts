@@ -115,12 +115,37 @@ export class PgKreditVideo {
     return r.rows;
   }
 
+  /** Sisa jatah dompet ORGANISASI. Tidak menyentuh langganan — paket langganan
+   *  dijual per pengguna retail; lihat catatan orgId pada pakaiDenganClient. */
+  async sisaOrg(orgId: string): Promise<SisaKredit> {
+    const r = await this.pool.query<{ jenis: JenisVideo; sisa: string }>(
+      "SELECT jenis, COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE org_id = $1 AND ember = 'topup' GROUP BY jenis",
+      [orgId],
+    );
+    const topup: Partial<Record<JenisVideo, number>> = {};
+    for (const b of r.rows) topup[b.jenis] = Number(b.sisa);
+    return susunSisa({}, topup);
+  }
+
+  /** Beri jatah ke dompet organisasi. user_id diisi sebagai jejak audit siapa
+   *  yang bertanggung jawab, sama seperti credit_ledger. */
+  async beriOrg(orgId: string, ownerUserId: string, jenis: JenisVideo, jumlah: number, catatan: string): Promise<void> {
+    await this.pool.query(
+      `INSERT INTO kredit_video (id,user_id,org_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+       VALUES ($1,$2,$3,$4,'topup',$5,'bonus',NULL,NULL,NULL,$6,$7)`,
+      [this.uuid(), ownerUserId, orgId, jenis, jumlah, catatan.slice(0, 200), this.now()],
+    );
+  }
+
   async sisa(userId: string): Promise<SisaKredit> {
     const sekarang = this.now();
     const [langgananRows, topupRows] = await Promise.all([
       this.langgananAktifPada(this.pool, userId, sekarang),
       this.pool.query<{ jenis: JenisVideo; sisa: string }>(
-        "SELECT jenis, COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE user_id = $1 AND ember = 'topup' GROUP BY jenis",
+        // "org_id IS NULL" WAJIB — tanpanya, anggota yang juga punya organisasi
+        // melihat jatah pribadinya KETAMBAHAN jatah org. Bug yang persis pernah
+        // terjadi pada credit_ledger; tidak diulang di sini.
+        "SELECT jenis, COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE user_id = $1 AND org_id IS NULL AND ember = 'topup' GROUP BY jenis",
         [userId],
       ),
     ]);
@@ -196,10 +221,14 @@ export class PgKreditVideo {
    * melempar galat untuk jatah habis: itu keadaan normal yang harus dijawab
    * dengan kalimat, bukan dengan 500.
    */
-  async pakai(userId: string, jenis: JenisVideo, jobId: string): Promise<Ember | null> {
+  async pakai(userId: string, jenis: JenisVideo, jobId: string, orgId?: string | null): Promise<Ember | null> {
     return this.transaction(async (client) => {
-      await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
-      return pakaiDenganClient(client, userId, jenis, jobId, this.now(), this.uuid());
+      // Baris yang dikunci mengikuti DOMPETNYA: dua anggota org yang menekan
+      // bersamaan harus berbaris di baris organisasi, bukan di baris pengguna
+      // masing-masing — mengunci baris berbeda tidak menghalangi siapa pun.
+      if (orgId) await client.query("SELECT id FROM organizations WHERE id = $1 FOR UPDATE", [orgId]);
+      else await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
+      return pakaiDenganClient(client, userId, jenis, jobId, this.now(), this.uuid(), orgId ?? null);
     });
   }
 
@@ -500,6 +529,18 @@ export async function pakaiDenganClient(
   jobId: string,
   sekarang: string,
   idBaru: string,
+  /**
+   * Dompet ORGANISASI, bila job ini milik brand.
+   *
+   * Polanya sama persis dengan credit_ledger: user_id tetap diisi sebagai jejak
+   * audit siapa yang membelanjakan, org_id yang menentukan dompet mana yang
+   * berkurang. Lihat migrations/postgres/0041_kredit_video_org.sql.
+   *
+   * LANGGANAN SENGAJA TIDAK BERLAKU untuk org: paket langganan dijual per
+   * pengguna retail, dan mencampurkannya berarti jatah pribadi seorang anggota
+   * bisa terpakai diam-diam untuk pekerjaan organisasi.
+   */
+  orgId?: string | null,
 ): Promise<Ember | null> {
   const sudah = await client.query<{ ember: Ember }>(
     "SELECT ember FROM kredit_video WHERE job_id = $1 AND tipe = 'pakai'", [jobId],
@@ -507,13 +548,22 @@ export async function pakaiDenganClient(
   // Idempoten — percobaan ulang pembuatan job bukan pembayaran kedua.
   if (sudah.rowCount) return sudah.rows[0].ember;
 
-  const langganan = await client.query<BarisLangganan>(SQL_LANGGANAN_AKTIF, [userId, sekarang]);
+  // Org tidak punya langganan — lihat catatan pada parameter orgId.
+  const langganan = orgId
+    ? { rows: [] as BarisLangganan[] }
+    : await client.query<BarisLangganan>(SQL_LANGGANAN_AKTIF, [userId, sekarang]);
   const kunci = `sisa_${jenis}` as const;
   const sisaLangganan = langganan.rows.reduce((n, r) => n + Number(r[kunci as keyof BarisLangganan]), 0);
-  const topup = await client.query<{ sisa: string }>(
-    "SELECT COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE user_id = $1 AND ember = 'topup' AND jenis = $2",
-    [userId, jenis],
-  );
+  // "org_id IS NULL" PADA JALUR RETAIL WAJIB ADA. Tanpanya, anggota yang juga
+  // punya organisasi melihat jatah pribadinya KETAMBAHAN jatah org — bug yang
+  // persis pernah terjadi pada credit_ledger, dan tidak perlu diulang di sini.
+  const topup = orgId
+    ? await client.query<{ sisa: string }>(
+        "SELECT COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE org_id = $1 AND ember = 'topup' AND jenis = $2",
+        [orgId, jenis])
+    : await client.query<{ sisa: string }>(
+        "SELECT COALESCE(SUM(delta), 0) AS sisa FROM kredit_video WHERE user_id = $1 AND org_id IS NULL AND ember = 'topup' AND jenis = $2",
+        [userId, jenis]);
   const ember = emberUntukPakai(susunSisa({ [jenis]: sisaLangganan }, { [jenis]: Number(topup.rows[0].sisa) }), jenis);
   if (!ember) return null;
 
@@ -524,9 +574,9 @@ export async function pakaiDenganClient(
   if (ember === "langganan" && !dipakai) return null;
 
   await client.query(
-    `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
-     VALUES ($1,$2,$3,$4,-1,'pakai',$5,$6,NULL,NULL,$7)`,
-    [idBaru, userId, jenis, ember, dipakai?.id ?? null, jobId, sekarang],
+    `INSERT INTO kredit_video (id,user_id,org_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+     VALUES ($1,$2,$3,$4,$5,-1,'pakai',$6,$7,NULL,NULL,$8)`,
+    [idBaru, userId, orgId ?? null, jenis, ember, dipakai?.id ?? null, jobId, sekarang],
   );
   return ember;
 }
@@ -548,18 +598,25 @@ export async function kembalikanDenganClient(
 ): Promise<boolean> {
   const sudah = await client.query("SELECT id FROM kredit_video WHERE job_id = $1 AND tipe = 'kembali'", [jobId]);
   if (sudah.rowCount) return false;
-  const asal = await client.query<{ jenis: JenisVideo; ember: Ember; langganan_id: string | null }>(
-    "SELECT jenis, ember, langganan_id FROM kredit_video WHERE job_id = $1 AND tipe = 'pakai'", [jobId],
+  const asal = await client.query<{ jenis: JenisVideo; ember: Ember; langganan_id: string | null; org_id: string | null }>(
+    "SELECT jenis, ember, langganan_id, org_id FROM kredit_video WHERE job_id = $1 AND tipe = 'pakai'", [jobId],
   );
   if (!asal.rowCount) return false;
-  const { jenis, ember, langganan_id } = asal.rows[0];
+  // DOMPETNYA DIBACA DARI BARIS 'pakai', bukan dari parameter pemanggil.
+  //
+  // Yang mengembalikan jatah adalah failJob, dan ia tahu job-nya tapi tidak
+  // selalu tahu dompet mana yang tadi dipotong. Mengambilnya dari baris
+  // pemotongan membuat kembalian mustahil mendarat di dompet yang salah —
+  // termasuk mustahil mengembalikan jatah organisasi ke kantong pribadi
+  // anggota yang kebetulan menekan tombolnya.
+  const { jenis, ember, langganan_id, org_id } = asal.rows[0];
   // Dikembalikan ke ember dan periode YANG SAMA. Kalau tidak, jatah langganan
   // yang gagal berubah jadi jatah abadi — cara pelan membocorkan barang, dan
   // cara cepat membuat pembukuan periode tidak pernah cocok.
   await client.query(
-    `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
-     VALUES ($1,$2,$3,$4,1,'kembali',$5,$6,NULL,$7,$8)`,
-    [idBaru, userId, jenis, ember, langganan_id, jobId, "job gagal / dibatalkan", sekarang],
+    `INSERT INTO kredit_video (id,user_id,org_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+     VALUES ($1,$2,$3,$4,$5,1,'kembali',$6,$7,NULL,$8,$9)`,
+    [idBaru, userId, org_id, jenis, ember, langganan_id, jobId, "job gagal / dibatalkan", sekarang],
   );
   return true;
 }

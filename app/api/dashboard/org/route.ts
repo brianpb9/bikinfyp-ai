@@ -3,6 +3,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
 import { pgGetOrgBalance } from "@/lib/postgres/org";
+import { pgSisaOrg } from "@/lib/kredit-video-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,10 +29,21 @@ export async function GET(req: Request) {
       ? await pgGetOrgBalance(membership.org_id)
       : getOrgBalance(membership.org_id);
 
+    // SISA JATAH PER JENIS — ini yang menjawab pertanyaan brand sebenarnya
+    // ("sisa berapa video?"), bukan angka rupiah yang harus ia bagi sendiri
+    // dengan harga yang mungkin tidak ia hafal (Brian 9 Sep 2026).
+    //
+    // balance_idr DIPERTAHANKAN untuk sementara: ada job lama yang masih
+    // memegang hold rupiah, dan mencabut medannya sekarang membuat layar yang
+    // membacanya menampilkan "undefined" alih-alih angka. Ia akan nol sendiri
+    // begitu job-job itu selesai.
+    const sisa = postgresRuntimeEnabled() ? await pgSisaOrg(membership.org_id) : null;
+
     return Response.json({
       org: { id: membership.org_id, name: membership.org_name, slug: membership.org_slug, status: membership.org_status },
       role: membership.role,
       balance_idr: balance,
+      sisa_video: sisa,
     });
   } catch (err) {
     return errorResponse(err);

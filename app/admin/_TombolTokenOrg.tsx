@@ -22,14 +22,17 @@ import { useState } from "react";
  * Konfirmasinya menampilkan jumlah yang sudah diformat rupiah, karena "5000000"
  * dan "Rp5.000.000" dibaca sangat berbeda oleh mata yang sedang terburu-buru.
  */
-const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
+/** Jenis yang dijual. Sama persis dengan retail — itu seluruh maksud
+ *  perubahan ini (Brian 9 Sep 2026). */
+const JENIS = ["standard", "premium", "ultra"] as const;
 
-/** Nominal yang paling sering dipakai. Tombol cepat mengurangi pengetikan, dan
+/** Jumlah yang paling sering dipakai. Tombol cepat mengurangi pengetikan, dan
  *  mengetik lebih sedikit berarti lebih sedikit peluang salah nol. */
-const CEPAT = [50_000, 100_000, 500_000, 1_000_000];
+const CEPAT = [5, 10, 20, 50];
 
 export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string }) {
   const [buka, setBuka] = useState(false);
+  const [jenis, setJenis] = useState<(typeof JENIS)[number]>("standard");
   const [jumlah, setJumlah] = useState("");
   const [catatan, setCatatan] = useState("");
   const [konfirmasi, setKonfirmasi] = useState(false);
@@ -46,7 +49,7 @@ export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string })
       const res = await fetch("/api/admin/org-token", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ org_id: orgId, jumlah_idr: angka, catatan }),
+        body: JSON.stringify({ org_id: orgId, jenis, jumlah: angka, catatan }),
       });
       if (!res.ok) {
         const d = (await res.json().catch(() => ({}))) as { message_id?: string };
@@ -67,14 +70,32 @@ export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string })
         onClick={() => setBuka(true)}
         className="rounded-lg border border-zinc-300 px-2 py-1 text-[11px] font-semibold text-zinc-700 hover:bg-zinc-50"
       >
-        + Token
+        + Video
       </button>
     );
   }
 
   return (
     <div className="w-52 space-y-1.5 rounded-lg border border-zinc-300 bg-white p-2 shadow-sm">
-      <p className="text-[11px] font-bold text-zinc-900">Isi token · {nama}</p>
+      <p className="text-[11px] font-bold text-zinc-900">Isi jatah video · {nama}</p>
+
+      {/* JENIS dipilih lebih dulu: jumlahnya tidak berarti apa-apa tanpa tahu
+          jenis apa. Menaruhnya di bawah membuat admin mengetik angka lalu baru
+          sadar ia memilih tier yang salah. */}
+      <div className="flex gap-1">
+        {JENIS.map((j) => (
+          <button
+            key={j}
+            type="button"
+            onClick={() => { setJenis(j); setKonfirmasi(false); }}
+            className={`flex-1 rounded px-1 py-1 text-[10px] font-semibold capitalize ${
+              jenis === j ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
+            }`}
+          >
+            {j}
+          </button>
+        ))}
+      </div>
 
       <div className="flex flex-wrap gap-1">
         {CEPAT.map((n) => (
@@ -86,7 +107,7 @@ export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string })
               angka === n ? "bg-zinc-900 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
             }`}
           >
-            {n >= 1_000_000 ? `${n / 1_000_000}jt` : `${n / 1_000}rb`}
+            {n}×
           </button>
         ))}
       </div>
@@ -95,7 +116,7 @@ export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string })
         inputMode="numeric"
         value={jumlah}
         onChange={(e) => { setJumlah(e.target.value.replace(/\D/g, "")); setKonfirmasi(false); }}
-        placeholder="Jumlah (Rp)"
+        placeholder="Jumlah video"
         className="w-full rounded border border-zinc-300 px-1.5 py-1 text-[11px]"
       />
       <input
@@ -109,11 +130,10 @@ export function TombolTokenOrg({ orgId, nama }: { orgId: string; nama: string })
 
       {konfirmasi ? (
         <>
-          {/* Angkanya disebut ulang dalam format rupiah — "5000000" dan
-              "Rp5.000.000" dibaca sangat berbeda oleh mata yang terburu-buru,
-              dan ledger-nya append-only jadi tidak ada tombol undo. */}
+          {/* Jenis DAN jumlah disebut ulang: keduanya salah dengan cara yang
+              berbeda, dan kredit_video append-only jadi tidak ada tombol undo. */}
           <p className="text-[11px] leading-snug text-zinc-800">
-            Tambah <b>{rupiah(angka)}</b> ke <b>{nama}</b>? Tidak bisa dibatalkan.
+            Tambah <b>{angka} video {jenis}</b> ke <b>{nama}</b>? Tidak bisa dibatalkan.
           </p>
           <div className="flex gap-1">
             <button

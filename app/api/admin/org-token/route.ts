@@ -1,5 +1,5 @@
 /**
- * POST /api/admin/org-token — isi token dompet organisasi dari UI admin.
+ * POST /api/admin/org-token — isi JATAH VIDEO dompet organisasi dari UI admin.
  *
  * ---------------------------------------------------------------------------
  * KENAPA ADA
@@ -9,6 +9,17 @@
  * setujui di UI, lalu buka terminal. Setiap brand baru menuntut akses shell
  * produksi, dan itu langkah yang paling mudah tertunda — brand duduk dengan
  * saldo nol sesudah "disetujui".
+ *
+ * ---------------------------------------------------------------------------
+ * JATAH PER JENIS, BUKAN RUPIAH (Brian 9 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * Versi pertama route ini memberi RUPIAH ke credit_ledger, karena itulah yang
+ * dipakai brand saat itu. Brian menemukan bahwa retail sudah lama pindah ke
+ * jatah per jenis (standard/premium/ultra) dan brand tertinggal.
+ *
+ * Sekarang keduanya memakai kredit_video. Yang diberikan adalah JUMLAH VIDEO,
+ * bukan sejumlah uang — dan itu juga yang bisa dijawab saat brand bertanya
+ * "sisa berapa?": "5 video standard", bukan "Rp75.000".
  *
  * ---------------------------------------------------------------------------
  * MENAMBAH, BUKAN MENETAPKAN
@@ -29,29 +40,34 @@ import { pgAudit } from "@/lib/postgres/smoke-runtime";
 import { emailTokenMasuk } from "@/lib/email-brand";
 import { urlDashboardBrand } from "@/lib/asal-brand";
 import crypto from "node:crypto";
+import { JENIS_VIDEO, type JenisVideo } from "@/lib/kredit-video";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 /** Pagu satu transaksi. Bukan kebijakan harga — pengaman salah ketik.
- *  Menambah satu nol pada 500.000 menghasilkan 5.000.000, dan credit_ledger
- *  APPEND-ONLY: baris salah tidak bisa dihapus, hanya dilawan baris baru. */
-const MAKS_SEKALI_IDR = 5_000_000;
+ *  Menambah satu nol pada 20 menghasilkan 200, dan kredit_video sama
+ *  APPEND-ONLY-nya: baris salah dilawan baris baru, tidak dihapus. */
+const MAKS_SEKALI_VIDEO = 200;
 
 export async function POST(req: Request) {
   try {
     await wajibAdminApi(req);
-    const body = (await req.json().catch(() => ({}))) as { org_id?: unknown; jumlah_idr?: unknown; catatan?: unknown };
+    const body = (await req.json().catch(() => ({}))) as
+      { org_id?: unknown; jenis?: unknown; jumlah?: unknown; catatan?: unknown };
     const orgId = typeof body.org_id === "string" ? body.org_id : "";
-    const jumlah = Number(body.jumlah_idr);
+    const jenis = String(body.jenis ?? "") as JenisVideo;
+    const jumlah = Number(body.jumlah);
     const catatan = typeof body.catatan === "string" ? body.catatan.slice(0, 200) : "";
 
     if (!orgId) throw ERR.BAD_REQUEST("org_id wajib diisi.", "org_id required.");
+    if (!JENIS_VIDEO.includes(jenis))
+      throw ERR.BAD_REQUEST(`Jenisnya harus salah satu dari: ${JENIS_VIDEO.join(", ")}.`, "Invalid jenis.");
     if (!Number.isInteger(jumlah) || jumlah <= 0)
-      throw ERR.BAD_REQUEST("Jumlahnya harus bilangan bulat positif.", "jumlah_idr must be a positive integer.");
-    if (jumlah > MAKS_SEKALI_IDR)
+      throw ERR.BAD_REQUEST("Jumlah videonya harus bilangan bulat positif.", "jumlah must be a positive integer.");
+    if (jumlah > MAKS_SEKALI_VIDEO)
       throw ERR.BAD_REQUEST(
-        `Sekali isi maksimal Rp${MAKS_SEKALI_IDR.toLocaleString("id-ID")}. Ulangi kalau memang perlu lebih.`,
+        `Sekali isi maksimal ${MAKS_SEKALI_VIDEO} video. Ulangi kalau memang perlu lebih.`,
         "Amount exceeds single-transaction cap."
       );
 
@@ -76,29 +92,32 @@ export async function POST(req: Request) {
       // user_id TETAP diisi meski dompetnya milik org — itu jejak audit siapa
       // penanggung jawabnya, dan saldo org dibaca lewat org_id.
       await client.query(
-        `INSERT INTO credit_ledger (id, user_id, org_id, delta, type, job_id, payment_id, created_at)
-         VALUES ($1,$2,$3,$4,'bonus',NULL,NULL,$5)`,
-        [crypto.randomUUID(), owner.rows[0].user_id, orgId, jumlah, new Date().toISOString()]);
+        `INSERT INTO kredit_video (id,user_id,org_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+         VALUES ($1,$2,$3,$4,'topup',$5,'bonus',NULL,NULL,NULL,$6,$7)`,
+        [crypto.randomUUID(), owner.rows[0].user_id, orgId, jenis, jumlah,
+         catatan || "top-up admin", new Date().toISOString()]);
 
-      const saldo = await client.query<{ b: string }>(
-        "SELECT COALESCE(SUM(delta),0)::text AS b FROM credit_ledger WHERE org_id = $1", [orgId]);
+      const saldo = await client.query<{ jenis: JenisVideo; sisa: string }>(
+        "SELECT jenis, COALESCE(SUM(delta),0)::text AS sisa FROM kredit_video WHERE org_id = $1 AND ember = 'topup' GROUP BY jenis",
+        [orgId]);
       await client.query("COMMIT");
 
-      const saldoIdr = Number(saldo.rows[0]!.b);
+      const sisa: Record<string, number> = {};
+      for (const b of saldo.rows) sisa[b.jenis] = Number(b.sisa);
       await pgAudit("admin", "org.token", "organizations", orgId,
-        { delta_idr: jumlah, saldo_idr: saldoIdr, owner_user_id: owner.rows[0].user_id, catatan });
+        { jenis, jumlah, sisa, owner_user_id: owner.rows[0].user_id, catatan });
 
       // Kegagalan email tidak membatalkan pengisian — tokennya sudah masuk.
       try {
         await emailTokenMasuk({
           ke: owner.rows[0].email, namaBrand: org.rows[0].name,
-          jumlahIdr: jumlah, saldoIdr, url: urlDashboardBrand(),
+          jenis, jumlah, sisa, url: urlDashboardBrand(),
         });
       } catch (e) {
         console.error(`[org-token] ${orgId}: email gagal —`, e instanceof Error ? e.message : e);
       }
 
-      return Response.json({ ok: true, nama: org.rows[0].name, ditambah_idr: jumlah, saldo_idr: saldoIdr });
+      return Response.json({ ok: true, nama: org.rows[0].name, jenis, ditambah: jumlah, sisa });
     } catch (e) {
       await client.query("ROLLBACK").catch(() => {});
       throw e;

@@ -212,7 +212,16 @@ async function ambilPengguna() {
             -- selalu mengisi user_id dengan owner-nya (jejak audit siapa yang
             -- belanja), jadi menjumlahkan per user akan mencampur saldo pribadi
             -- owner dengan saldo organisasinya.
-            COALESCE((SELECT SUM(delta) FROM credit_ledger c WHERE c.org_id = org.id), 0)::text AS org_saldo
+            -- Sisa JATAH VIDEO per jenis, bukan rupiah (Brian 9 Sep 2026). Dibaca
+          -- lewat org_id: baris org selalu mengisi user_id dengan pelakunya
+          -- (jejak audit), jadi menjumlahkan per user mencampur dompet pribadi
+          -- anggota dengan dompet organisasinya.
+          COALESCE((
+            SELECT string_agg(x.jenis || ':' || x.sisa, ',' ORDER BY x.jenis)
+            FROM (SELECT k.jenis, SUM(k.delta)::int AS sisa FROM kredit_video k
+                   WHERE k.org_id = org.id AND k.ember = 'topup'
+                   GROUP BY k.jenis HAVING SUM(k.delta) > 0) x
+          ), '') AS org_saldo
        -- JENIS PENGGUNA DITURUNKAN, BUKAN DISIMPAN.
        --
        -- Tidak ada kolom "retail"/"brand" di tabel users, dan tidak perlu ada:
@@ -647,7 +656,9 @@ async function Pengguna({ jenis }: { jenis: JenisSaring }) {
                         lain: yang memutuskan mengisi token butuh tahu saldo
                         sekarang pada saat yang sama ia menekan tombolnya. */}
                     <span className="text-[10px] tabular-nums text-zinc-500">
-                      Rp{Number(u.org_saldo ?? "0").toLocaleString("id-ID")}
+                      {u.org_saldo
+                        ? u.org_saldo.split(",").map((x) => x.replace(":", " ")).join(" · ")
+                        : "0 video"}
                     </span>
                     <TombolTokenOrg orgId={u.org_id} nama={u.org_nama ?? "brand"} />
                   </span>

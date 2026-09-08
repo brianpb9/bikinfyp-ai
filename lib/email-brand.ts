@@ -97,23 +97,33 @@ export async function emailBrandDitangguhkan(opts: { ke: string; namaBrand: stri
   );
 }
 
-/** Token masuk ke dompet organisasi. */
+/**
+ * Jatah video masuk ke dompet organisasi.
+ *
+ * Menyebut JUMLAH VIDEO, bukan rupiah (Brian 9 Sep 2026). "5 video standard"
+ * menjawab pertanyaan yang sebenarnya dipunyai penerimanya; "Rp75.000" memaksa
+ * ia membagi sendiri dengan harga yang mungkin tidak ia hafal.
+ */
 export async function emailTokenMasuk(opts: {
-  ke: string; namaBrand: string; jumlahIdr: number; saldoIdr: number; url: string;
+  ke: string; namaBrand: string; jenis: string; jumlah: number;
+  sisa: Record<string, number>; url: string;
 }): Promise<void> {
-  const rp = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
+  const rincian = Object.entries(opts.sisa)
+    .filter(([, n]) => n > 0)
+    .map(([j, n]) => `${n} video ${j}`)
+    .join(" · ") || "belum ada sisa";
   await kirim(
     opts.ke,
-    `Token ${opts.namaBrand} sudah ditambahkan`,
-    bungkus("Token sudah masuk", `
+    `${opts.jumlah} video ${opts.jenis} untuk ${opts.namaBrand}`,
+    bungkus("Jatah video sudah masuk", `
       <p style="font-size:14px;line-height:1.6;margin:0 0 12px">
-        Kami menambahkan <b>${rp(opts.jumlahIdr)}</b> token ke akun <b>${opts.namaBrand}</b>.
-        Saldo sekarang <b>${rp(opts.saldoIdr)}</b>.
+        Kami menambahkan <b>${opts.jumlah} video ${opts.jenis}</b> ke akun <b>${opts.namaBrand}</b>.
+        Sisa sekarang: <b>${rincian}</b>.
       </p>
       <p style="margin:0">
         <a href="${opts.url}" style="display:inline-block;background:#18181b;color:#fff;text-decoration:none;
            padding:12px 20px;border-radius:12px;font-size:14px;font-weight:600">Mulai bikin video</a>
       </p>`),
-    "brand_token_masuk"
+    "brand_jatah_masuk"
   );
 }

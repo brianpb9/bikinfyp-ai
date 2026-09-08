@@ -23,6 +23,8 @@ import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import type { QualityTier } from "@/lib/providers/types";
+import { jenisUntukTier } from "@/lib/kredit-video";
+import { pakaiKreditOrg } from "@/lib/kredit-video-runtime";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -189,10 +191,21 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     client.release();
   }
 
-  const held = await creditsRepo.holdCredits({ userId: sel.userId, orgId: sel.orgId }, jobId, priceIdr);
-  if (!held) {
-    await jobsRepo.failJob(jobId, "Kredit organisasi tidak cukup.");
-    return gagal("Kredit organisasi tidak cukup.");
+  // JATAH VIDEO PER JENIS, BUKAN RUPIAH (Brian 9 Sep 2026).
+  //
+  // Sampai kini brand ditagih rupiah lewat credit_ledger (hold -> capture saat
+  // READY -> release saat gagal), sementara retail sudah memakai jatah per
+  // jenis. Dua sistem uang untuk satu produk berarti dua tempat yang bisa
+  // menyimpang, dan brand tidak pernah bisa diberi tahu "sisa 5 video standard"
+  // — hanya "sisa Rp75.000", angka yang tidak menjawab pertanyaannya.
+  //
+  // TIDAK ADA LAGI HOLD/CAPTURE. Jatah dipotong sekarang dan dikembalikan
+  // failJob kalau job gagal — persis semantik retail, satu potong satu video.
+  const ember = await pakaiKreditOrg(sel.userId, jenisUntukTier(tier), jobId, sel.orgId);
+  if (!ember) {
+    const kurang = `Jatah video ${jenisUntukTier(tier)} organisasi habis.`;
+    await jobsRepo.failJob(jobId, kurang);
+    return gagal(kurang);
   }
 
   // Snapshot Skor FYP BEKU (pre-render) — bahan loop predicted-vs-actual.

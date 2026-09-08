@@ -46,10 +46,12 @@ test("admin punya saringan dan hitungan 'menunggu'", () => {
 // ── 3. TOP-UP TOKEN LEWAT UI ────────────────────────────────────────────────
 test("top-up MENAMBAH, tidak menetapkan saldo", () => {
   // Skrip CLI-nya menetapkan saldo TARGET. Untuk tombol UI itu berbahaya:
-  // admin yang mengetik 50000 bermaksud MENAMBAH; kalau ditafsirkan sebagai
-  // target dan saldonya sudah 200rb, tafsir itu MENGHAPUS 150rb milik orang.
+  // admin yang mengetik 20 bermaksud MENAMBAH; kalau ditafsirkan sebagai target
+  // dan sisanya sudah 50, tafsir itu MENGHAPUS 30 video milik orang.
+  //
+  // 9 Sep 2026: yang ditambahkan kini JATAH VIDEO per jenis, bukan rupiah.
   const r = kode("app/api/admin/org-token/route.ts");
-  assert.match(r, /INSERT INTO credit_ledger/, "tidak menulis baris ledger");
+  assert.match(r, /INSERT INTO kredit_video/, "tidak menulis baris jatah");
   assert.doesNotMatch(r, /targetBalance|saldo target/i, "masih memakai semantik target");
   assert.match(r, /jumlah <= 0/, "jumlah non-positif tidak ditolak");
 });
@@ -59,13 +61,13 @@ test("top-up mengunci baris organisasi sebelum menghitung saldo", () => {
   // saldo lama.
   const r = kode("app/api/admin/org-token/route.ts");
   assert.match(r, /FOR UPDATE/, "baris organisasi tidak dikunci");
-  assert.ok(r.indexOf("FOR UPDATE") < r.indexOf("INSERT INTO credit_ledger"),
+  assert.ok(r.indexOf("FOR UPDATE") < r.indexOf("INSERT INTO kredit_video"),
     "kunci diambil setelah menulis");
 });
 
-test("ada pagu satu transaksi — ledger append-only tidak punya undo", () => {
+test("ada pagu satu transaksi — buku jatah append-only tidak punya undo", () => {
   const r = kode("app/api/admin/org-token/route.ts");
-  assert.match(r, /MAKS_SEKALI_IDR/, "tidak ada pagu salah ketik");
+  assert.match(r, /MAKS_SEKALI_VIDEO/, "tidak ada pagu salah ketik");
 });
 
 // ── 4. FOTO SCRAPING ────────────────────────────────────────────────────────

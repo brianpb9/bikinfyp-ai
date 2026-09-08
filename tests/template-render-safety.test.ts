@@ -47,14 +47,17 @@ for (const rel of ROUTE_PEMAKAI_SEL) {
   });
 }
 
+  // "holdCredits" -> "pakaiKreditOrg" (9 Sep 2026): brand pindah dari saldo
+  // rupiah ke jatah video per jenis, sama seperti retail. Yang dijaga tes ini
+  // tidak berubah — aturan uang harus punya SATU salinan, di sel bersama.
 test("side effect render hanya hidup di sel bersama, bukan tersebar di route", () => {
   const sel = readFileSync(new URL("../lib/dashboard/render-cell.ts", import.meta.url), "utf8");
-  for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+  for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await pakaiKreditOrg(", "await enqueueJob("]) {
     assert.ok(sel.includes(jejak), `${jejak} harus ada di sel render bersama`);
   }
   for (const rel of ROUTE_PEMAKAI_SEL) {
     const source = readFileSync(new URL(rel, import.meta.url), "utf8");
-    for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+    for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await pakaiKreditOrg(", "await enqueueJob("]) {
       assert.ok(!source.includes(jejak), `${rel} menyalin ulang "${jejak}" — aturan uang harus satu salinan`);
     }
   }

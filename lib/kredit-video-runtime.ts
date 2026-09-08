@@ -67,6 +67,30 @@ export async function langgananAktif(userId: string): Promise<LanggananRingkas[]
   return (await sq()).langgananAktif(userId);
 }
 
+/**
+ * Potong jatah dompet ORGANISASI.
+ *
+ * Dipisah dari pakaiKredit() supaya jalur retail tidak perlu tahu apa-apa soal
+ * organisasi — dan supaya mustahil memanggilnya tanpa sengaja dengan orgId
+ * kosong lalu diam-diam memotong kantong pribadi seorang anggota.
+ *
+ * Hanya ada di runtime PostgreSQL: dashboard brand memang tidak berjalan di
+ * jalur SQLite.
+ */
+/** Sisa jatah dompet organisasi, per jenis. */
+export async function pgSisaOrg(orgId: string) {
+  if (!postgresRuntimeEnabled()) return null;
+  return (await pg()).sisaOrg(orgId);
+}
+
+export async function pakaiKreditOrg(
+  userId: string, jenis: JenisVideo, jobId: string, orgId: string,
+): Promise<Ember | null> {
+  if (!orgId) throw new Error("pakaiKreditOrg membutuhkan orgId.");
+  if (!postgresRuntimeEnabled()) throw new Error("Jatah organisasi butuh runtime PostgreSQL.");
+  return (await pg()).pakai(userId, jenis, jobId, orgId);
+}
+
 export async function pakaiKredit(userId: string, jenis: JenisVideo, jobId: string): Promise<Ember | null> {
   return postgresRuntimeEnabled() ? (await pg()).pakai(userId, jenis, jobId) : (await sq()).pakaiKredit(userId, jenis, jobId);
 }
