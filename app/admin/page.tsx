@@ -201,7 +201,7 @@ async function ambilPengguna() {
           --
           -- Tipe barisnya mendeklarasikan org_id sejak a117a17, tapi kueri ini
           -- tidak pernah memilihnya — jadi u.org_id selalu undefined, dan
-          -- penjaga `{u.org_id && u.org_status && (...)}` membuat tombol
+          -- penjaganya (u.org_id && u.org_status) selalu false, jadi tombol
           -- Setujui TIDAK PERNAH DIRENDER SEKALI PUN. Fiturnya ada di kode dan
           -- mati di layar. Ketahuan 8 Sep 2026 saat verifikasi produksi:
           -- halaman menampilkan "(pending)" tanpa satu tombol pun di sebelahnya.
