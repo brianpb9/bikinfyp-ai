@@ -152,3 +152,26 @@ test("event pemasangan dipakai sekali, dan bilah bawaan Chrome dicegah", () => {
   const i = src.indexOf("async function pasang");
   assert.match(src.slice(i, i + 600), /setEv\(null\)/, "event tidak dibuang setelah dipakai");
 });
+
+test("beforeinstallprompt ditangkap SEBELUM React siap", () => {
+  // Chrome menyalakan event ini di sekitar page-load — lebih dulu daripada
+  // hydration — dan tidak pernah mengulanginya. Listener yang cuma ada di
+  // useEffect memasang diri sesudahnya dan tidak pernah kebagian.
+  //
+  // Terbukti di produksi 9 Sep 2026: service worker aktif, manifest lolos,
+  // tidak ditunda, tidak standalone — dan tombolnya tetap tidak muncul karena
+  // eventnya sudah lewat. Bentuk kegagalan yang tidak menghasilkan galat apa
+  // pun; yang terlihat cuma fitur yang "tidak jalan".
+  const layout = readFileSync(join(process.cwd(), "app/layout.tsx"), "utf8");
+  assert.match(layout, /beforeinstallprompt/, "penangkap awal tidak ada di layout");
+  assert.match(layout, /__aiugcPasang/, "event tidak dititipkan ke window");
+  assert.match(layout, /e\.preventDefault\(\)/, "bilah bawaan Chrome tidak dicegah di penangkap awal");
+  // Harus di <head>, bukan di akhir <body>: gunanya justru jalan lebih dulu.
+  assert.ok(layout.indexOf("beforeinstallprompt") < layout.indexOf("<body"),
+    "penangkap dipasang setelah <body> — terlalu lambat");
+
+  const komp = readFileSync(join(process.cwd(), "app/_components/AjakPasang.tsx"), "utf8");
+  assert.match(komp, /__aiugcPasang/, "komponen tidak membaca titipan");
+  // Tetap mendengar langsung juga — sebagian browser menyalakannya belakangan.
+  assert.match(komp, /addEventListener\("beforeinstallprompt"/, "listener langsung dilepas");
+});

@@ -79,6 +79,30 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="id" className={`${inter.variable} ${sora.variable}`}>
+      <head>
+        {/* MENANGKAP beforeinstallprompt SEBELUM REACT SIAP.
+            
+            Chrome menyalakan event ini di sekitar page-load — LEBIH DULU
+            daripada hydration. Listener di dalam useEffect memasang diri
+            sesudahnya, jadi ia tidak pernah kebagian: event itu hanya menyala
+            sekali dan tidak diulang.
+            
+            Terbukti di produksi 9 Sep 2026: service worker aktif, manifest
+            lolos, tidak ditunda, tidak standalone — dan tombolnya tetap tidak
+            muncul karena eventnya sudah lewat.
+            
+            Skrip ini kecil dan sinkron di <head> supaya jalan sebelum apa pun.
+            preventDefault() menahan bilah bawaan Chrome; tanpa itu pengguna
+            melihat DUA ajakan. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html:
+              "window.addEventListener('beforeinstallprompt',function(e){" +
+              "e.preventDefault();window.__aiugcPasang=e;" +
+              "window.dispatchEvent(new Event('aiugc:pasang-siap'));});",
+          }}
+        />
+      </head>
       <body className="bg-zinc-100 text-zinc-900 antialiased">
         <SiteChrome>{children}</SiteChrome>
         <DaftarSW />

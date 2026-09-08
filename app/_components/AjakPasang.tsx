@@ -32,6 +32,9 @@ interface EventPasang extends Event {
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
+/** Titipan dari skrip penangkap di app/layout.tsx. */
+type WindowPasang = Window & { __aiugcPasang?: EventPasang };
+
 /** Jeda sebelum muncul. Cukup untuk halaman selesai dan mata orang mendarat. */
 const JEDA_MS = 6_000;
 
@@ -46,15 +49,39 @@ export function AjakPasang() {
   // dan disimpan. Tanpa preventDefault(), Chrome menampilkan bilahnya sendiri
   // dan kita berakhir punya dua ajakan sekaligus.
   useEffect(() => {
+    // EVENTNYA SUDAH DITANGKAP DI <head>, sebelum React ada.
+    //
+    // Chrome menyalakan beforeinstallprompt di sekitar page-load — lebih dulu
+    // daripada hydration — dan tidak pernah mengulanginya. Listener di sini
+    // saja berarti tombolnya nyaris tidak pernah muncul; terbukti di produksi
+    // 9 Sep 2026. Skrip di app/layout.tsx menyimpannya ke window.__aiugcPasang
+    // dan memberi tahu lewat event sendiri.
+    const ambil = () => {
+      const t = (window as WindowPasang).__aiugcPasang;
+      if (t) setEv(t);
+    };
+    ambil();
+    window.addEventListener("aiugc:pasang-siap", ambil);
+
+    // Tetap didengar langsung juga: sebagian browser menyalakannya belakangan
+    // (mis. sesudah interaksi pertama), dan di situ skrip <head> sudah selesai.
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setEv(e as EventPasang);
     };
     window.addEventListener("beforeinstallprompt", onPrompt);
-    const onPasang = () => { setEv(null); setTampil(false); };
+
+    const onPasang = () => {
+      setEv(null);
+      setTampil(false);
+      // Dibersihkan supaya ketukan berikutnya tidak memakai event basi.
+      delete (window as WindowPasang).__aiugcPasang;
+    };
     window.addEventListener("appinstalled", onPasang);
+
     setIos(deteksiIosSafari(navigator.userAgent, navigator.vendor ?? ""));
     return () => {
+      window.removeEventListener("aiugc:pasang-siap", ambil);
       window.removeEventListener("beforeinstallprompt", onPrompt);
       window.removeEventListener("appinstalled", onPasang);
     };
@@ -99,6 +126,7 @@ export function AjakPasang() {
     // Event pemasangan hanya boleh dipakai SEKALI. Menyimpannya membuat
     // ketukan kedua gagal diam-diam.
     setEv(null);
+    delete (window as WindowPasang).__aiugcPasang;
     setTampil(false);
   }
 
