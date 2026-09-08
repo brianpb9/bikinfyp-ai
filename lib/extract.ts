@@ -325,6 +325,57 @@ export function parseJsonLdImages(html: string): string[] {
  * signature utuh), lalu dedup per content-hash (tiap foto muncul berkali-kali
  * sebagai varian resize/white-p di mirror p16/p19). URL rusak/terpotong tidak
  * berbahaya: downloadImages memverifikasi via decoder sharp sebelum dipakai. */
+/**
+ * Galeri foto produk Shopee dari state halaman.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA PERLU PEMINDAI SENDIRI
+ * ---------------------------------------------------------------------------
+ * parseInlineProductImages di bawah mencari URL PENUH bergaya Bytedance
+ * (~tplv). Shopee tidak menaruh URL sama sekali — ia menaruh HASH TELANJANG:
+ *
+ *     "images":["id-11134207-81zti-mfkljll...","id-11134207-81ztg-mfathi..."]
+ *
+ * Jadi pemindai lama buta terhadapnya, dan produk Shopee selalu pulang dengan
+ * TEPAT SATU foto: og:image. Diverifikasi pada link yang Brian kirim 8 Sep 2026
+ * (iPhone 17 Pro): HTML-nya 756 KB dan memuat 254 URL susercontent unik, tapi
+ * ekstraksi kita mengembalikan 1.
+ *
+ * ---------------------------------------------------------------------------
+ * BLOK MANA YANG MILIK PRODUKNYA
+ * ---------------------------------------------------------------------------
+ * Halaman itu punya DELAPAN blok "images":[...] — sebagian milik produk lain
+ * ("kamu mungkin suka"), sebagian variasi. Yang membedakan bukan urutan dan
+ * bukan panjangnya, melainkan: blok produk MEMUAT hash og:image.
+ *
+ * og:image adalah pernyataan Shopee sendiri tentang "foto utama produk ini",
+ * jadi memakainya sebagai jangkar bukan tebakan — ia satu-satunya penanda di
+ * halaman itu yang otoritatif. Pada link uji: blok 3-hash TIDAK memuatnya,
+ * blok 10-hash memuatnya, dan yang 10 itulah galeri produknya.
+ *
+ * Basis CDN diturunkan DARI og:image, bukan dipaku: Shopee memakai host per
+ * wilayah (down-id, down-sg, ...), dan memaku "down-id" membuat pemindai ini
+ * diam-diam gagal begitu tokonya bukan Indonesia.
+ */
+export function parseShopeeStateImages(html: string, ogImageUrl: string | null | undefined): string[] {
+  if (!ogImageUrl) return [];
+  const m = /^(https?:\/\/[^/]+\/file\/)([A-Za-z0-9][A-Za-z0-9_-]{15,})/.exec(ogImageUrl);
+  if (!m) return [];
+  const basis = m[1]!;
+  const ogHash = m[2]!;
+
+  for (const blok of html.matchAll(/"images?"\s*:\s*\[([^\]]{10,4000})\]/g)) {
+    const isi = blok[1]!;
+    if (!isi.includes(ogHash)) continue;
+    const hash = [...isi.matchAll(/"([A-Za-z0-9][A-Za-z0-9_-]{15,})"/g)].map((x) => x[1]!);
+    if (hash.length === 0) continue;
+    // og:image didahulukan: ia foto utama menurut Shopee sendiri, dan urutan di
+    // sini menentukan mana yang berpeluang jadi acuan render.
+    return [ogHash, ...hash.filter((h) => h !== ogHash)].map((h) => `${basis}${h}`);
+  }
+  return [];
+}
+
 export function parseInlineProductImages(html: string): string[] {
   const unescaped = html.replace(/\\\//g, "/").replace(/\\u002F/gi, "/").replace(/\\u0026/gi, "&");
   const matches = unescaped.match(/https:\/\/[a-z0-9.-]+\/[^"'\s<>\\]+~tplv[^"'\s<>\\]*/g) ?? [];
@@ -508,6 +559,10 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   const candidates = [
     ...(fotoUrl ? [fotoUrl] : []),
     ...parseJsonLdImages(html),
+    // Shopee: hash telanjang di state halaman — lihat parseShopeeStateImages.
+    // Ditaruh SEBELUM pemindai inline karena ia sudah tahu blok mana yang milik
+    // produknya, sementara pemindai inline menyapu seluruh halaman.
+    ...parseShopeeStateImages(html, fotoUrl),
     ...parseInlineProductImages(html),
   ].map((u) => absolutize(u, rawUrl));
   const seenHash = new Set<string>();

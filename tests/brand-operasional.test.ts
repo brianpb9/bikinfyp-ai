@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { skorFoto, urutkanFoto, RASIO_BANNER, MIN_SISI_PX } from "../lib/foto-produk-pilih";
 import { MAX_IMAGES } from "../lib/product-images";
+import { parseShopeeStateImages } from "../lib/extract";
 
 const kode = (rel: string) =>
   readFileSync(join(process.cwd(), rel), "utf8")
@@ -140,4 +141,50 @@ test("kueri admin MEMILIH org_id — tanpa itu tombol Setujui tidak pernah diren
   for (const kolom of ["org_id", "org_status", "org_nama", "org_saldo"]) {
     assert.match(kode, new RegExp(`AS ${kolom}`), `kolom ${kolom} dipakai JSX tapi tidak dipilih kueri`);
   }
+});
+
+// ── SHOPEE: HASH TELANJANG DI STATE HALAMAN ─────────────────────────────────
+test("galeri Shopee diambil dari blok yang MEMUAT hash og:image", () => {
+  // Diverifikasi pada link nyata Brian 8 Sep 2026 (iPhone 17 Pro): halaman
+  // punya DELAPAN blok "images":[...] — sebagian milik produk lain. Yang
+  // membedakan bukan urutan dan bukan panjangnya, melainkan memuat hash
+  // og:image, satu-satunya penanda otoritatif di halaman itu.
+  const og = "https://down-id.img.susercontent.com/file/id-A11111111111111111";
+  const html = `
+    <meta property="og:image" content="${og}"/>
+    {"images":["id-ZZZZZZZZZZZZZZZZZZ","id-YYYYYYYYYYYYYYYYYY"]}
+    {"images":["id-B22222222222222222","id-A11111111111111111","id-C33333333333333333"]}
+  `;
+  const hasil = parseShopeeStateImages(html, og);
+  assert.equal(hasil.length, 3, "blok produk tidak ditemukan");
+  // og:image DIDAHULUKAN — ia foto utama menurut Shopee sendiri, dan urutan
+  // menentukan mana yang berpeluang jadi acuan render.
+  //
+  // Fixture sengaja menaruhnya di posisi KEDUA: kalau ia sudah pertama,
+  // pengurutan kita tidak teruji dan mutasi yang menghapusnya lolos diam-diam.
+  assert.equal(hasil[0], og, "og:image tidak dinaikkan ke depan");
+  assert.equal(hasil.length, new Set(hasil).size, "ada URL ganda");
+  assert.ok(hasil.every((u) => u.startsWith("https://down-id.img.susercontent.com/file/")));
+  // Blok produk LAIN tidak ikut terbawa.
+  assert.ok(!hasil.some((u) => u.includes("ZZZZ")), "blok produk lain ikut terambil");
+});
+
+test("basis CDN diturunkan dari og:image, tidak dipaku ke down-id", () => {
+  // Shopee memakai host per wilayah. Memaku "down-id" membuat pemindai ini
+  // diam-diam gagal begitu tokonya bukan Indonesia — kegagalan yang tidak
+  // menghasilkan galat apa pun, cuma satu foto lagi seperti sebelumnya.
+  const og = "https://down-sg.img.susercontent.com/file/sg-A11111111111111111";
+  const html = `{"images":["sg-A11111111111111111","sg-B22222222222222222"]}`;
+  const hasil = parseShopeeStateImages(html, og);
+  assert.equal(hasil.length, 2);
+  assert.ok(hasil.every((u) => u.startsWith("https://down-sg.img.susercontent.com/file/")));
+});
+
+test("halaman tanpa blok yang cocok mengembalikan kosong, bukan menebak", () => {
+  const og = "https://down-id.img.susercontent.com/file/id-A11111111111111111";
+  assert.deepEqual(parseShopeeStateImages(`{"images":["id-QQQQQQQQQQQQQQQQQQ"]}`, og), []);
+  assert.deepEqual(parseShopeeStateImages("<html></html>", og), []);
+  // og:image bukan URL Shopee -> bukan urusan pemindai ini.
+  assert.deepEqual(parseShopeeStateImages(`{"images":["x"]}`, "https://cdn.lain.com/a.jpg"), []);
+  assert.deepEqual(parseShopeeStateImages(`{"images":["x"]}`, null), []);
 });
