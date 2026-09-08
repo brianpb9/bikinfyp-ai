@@ -123,6 +123,12 @@ export const config = {
     //
     // Aturan ekstensi ditambahkan supaya aset statis berikutnya tidak
     // mengulang jebakan yang sama hanya karena lupa didaftarkan.
-    "/((?!api|_next/static|_next/image|favicon.ico|onboarding|legal|demo|showcase|manifest.json|icons|previews|apple-touch-icon.png|\\.well-known|.*\\.(?:mp4|webm|mov|png|jpg|jpeg|webp|avif|svg|ico|gif|woff2?|txt|xml|json)$).*)",
+    //
+    // `js` dan `html` ditambahkan 8 Sep 2026 untuk /sw.js dan /offline.html.
+    // Tanpa keduanya middleware menjawab 307 ke /onboarding, pendaftaran
+    // service worker gagal, dan aplikasinya tidak pernah bisa dipasang —
+    // TANPA satu pesan galat pun di layar. Persis jebakan yang catatan di atas
+    // ini bilang ingin dicegah, terulang karena dua ekstensi terlupa.
+    "/((?!api|_next/static|_next/image|favicon.ico|onboarding|legal|demo|showcase|manifest.json|icons|previews|apple-touch-icon.png|\\.well-known|.*\\.(?:mp4|webm|mov|png|jpg|jpeg|webp|avif|svg|ico|gif|woff2?|txt|xml|json|js|html)$).*)",
   ],
 };

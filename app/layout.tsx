@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { SiteChrome } from "./_components/SiteChrome";
+import { DaftarSW } from "./_components/DaftarSW";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600", "700", "800"] });
@@ -62,6 +63,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  // Warna bilah status aplikasi terpasang. Manifest sudah memuatnya, tapi
+  // manifest hanya dibaca SAAT dipasang — bilah status browser biasa membaca
+  // meta ini, dan tanpanya aplikasi terpasang membuka dengan bilah putih polos
+  // yang terlihat seperti halaman web setengah jadi.
+  themeColor: "#f59e0b",
   // maximumScale: 1 DIHAPUS. Ia memblokir pinch-zoom, jadi siapa pun yang perlu
   // memperbesar teks — mata lelah, layar kecil, penglihatan terbatas — tidak
   // bisa. Alasan aslinya biasanya mencegah iOS melompat-zoom saat fokus ke
@@ -74,6 +80,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="id" className={`${inter.variable} ${sora.variable}`}>
       <body className="bg-zinc-100 text-zinc-900 antialiased">
         <SiteChrome>{children}</SiteChrome>
+        <DaftarSW />
       </body>
     </html>
   );

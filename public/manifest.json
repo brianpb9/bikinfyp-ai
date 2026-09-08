@@ -2,7 +2,7 @@
   "name": "AIUGC.ID",
   "short_name": "AIUGC.ID",
   "description": "Bikin video jualan AI dari foto produk — tanpa syuting, langsung siap posting.",
-  "start_url": "/",
+  "start_url": "/onboarding",
   "display": "standalone",
   "background_color": "#fbfcf6",
   "theme_color": "#f59e0b",
@@ -68,5 +68,7 @@
       "type": "image/png",
       "purpose": "maskable"
     }
-  ]
+  ],
+  "scope": "/",
+  "id": "/"
 }
