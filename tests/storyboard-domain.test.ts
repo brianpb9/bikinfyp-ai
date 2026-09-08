@@ -228,3 +228,30 @@ test("gambar storyboard dipaksa ke kanvas render yang persis, bukan sekadar 'sud
   const blok = w.slice(i, i + 2000);
   assert.match(blok, /\.resize\(spec\.width, spec\.height/, "gambar storyboard tidak dipaksa ke kanvas render");
 });
+
+test("kartu berwajah TIDAK dikirim ke mesin video sebagai acuan", () => {
+  // Produksi 8 Sep 2026, job b95da10d (talking_head, premium):
+  //   HTTP 400: input image 'content[3]' may contain sensitive information
+  // Tiga percobaan ditolak di titik yang sama, lalu refund. Penggunanya membaca
+  // "hasilnya belum bagus, coba ganti fotonya" — padahal fotonya tidak salah
+  // dan tidak ada satu klip pun yang pernah dibuat.
+  //
+  // BytePlus menolak acuan berwajah; aturannya sudah ada di
+  // config.seedanceFaceRef dan dihormati seluruh jalur render lain. Jalur
+  // storyboard melewatinya.
+  const w = readFileSync(join(process.cwd(), "lib/postgres/worker.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  const i = w.indexOf("async function framePertamaDariStoryboard");
+  const blok = w.slice(i, i + 3200);
+
+  // Gerbang format: talking_head keluar SEBELUM menyentuh baris storyboard.
+  assert.match(blok, /format === "talking_head" && !config\.seedanceFaceRef/,
+    "format berwajah tidak digerbang");
+  assert.ok(blok.indexOf("seedanceFaceRef") < blok.indexOf("sbRepo.scenes"),
+    "gerbang format dijalankan setelah kartu diambil");
+
+  // Pertahanan kedua: format lain pun disaring, karena kartu bisa memuat wajah
+  // tanpa diminta.
+  assert.match(blok, /personSafeReferencePhotos\(\[rapi\]/, "kartu tidak disaring aman-orang");
+});

@@ -207,8 +207,23 @@ async function tegakkanAcuan(spec: VisualSpec, workDir: string, namaProduk?: str
  * jalur Gemini lama.
  */
 async function framePertamaDariStoryboard(
-  spec: VisualSpec, workDir: string, jobId: string, storyboardId: string
+  spec: VisualSpec, workDir: string, jobId: string, storyboardId: string, format: string
 ): Promise<{ spec: VisualSpec; sudahAda: Set<number> }> {
+  // FORMAT BERWAJAH TIDAK MEMAKAI KARTU SEBAGAI ACUAN RENDER.
+  //
+  // Kartu talking_head memang berisi wajah presenter — itu justru gunanya bagi
+  // pengguna. Tapi BytePlus menolak acuan berwajah (config.seedanceFaceRef,
+  // terdokumentasi sejak 17 Agu 2026), dan jalur lama menanganinya dengan
+  // membuat frame TANPA wajah yang dirancang khusus untuk shot itu — bukan
+  // dengan memotong wajah dari potret, yang cuma menghasilkan crop torso.
+  //
+  // Jadi untuk format ini kartunya tetap ditampilkan dan tetap jadi gerbang
+  // persetujuan, tapi rendernya memakai jalur yang sudah terbukti.
+  if (format === "talking_head" && !config.seedanceFaceRef) {
+    console.log(`[storyboard] job ${jobId}: format berwajah — kartu dipakai untuk review saja, render lewat jalur lama`);
+    return { spec, sudahAda: new Set() };
+  }
+
   const sbRepo = new PgStoryboardRepository(config.databaseUrl);
   try {
     const scenes = await sbRepo.scenes(storyboardId);
@@ -242,8 +257,32 @@ async function framePertamaDariStoryboard(
           .resize(spec.width, spec.height, { fit: "cover", position: "attention" })
           .png().toFile(rapi);
 
+        // LEWAT PENYARING AMAN-ORANG, sama seperti foto produk pengguna.
+        //
+        // BytePlus MENOLAK acuan berwajah — aturan yang sudah terdokumentasi di
+        // config.seedanceFaceRef dan dihormati seluruh jalur render lain. Jalur
+        // storyboard yang saya tulis melewatinya, dan untuk talking_head kartu
+        // memang berisi wajah presenter. Akibatnya, produksi 8 Sep 2026:
+        //
+        //   HTTP 400: input image 'content[3]' may contain sensitive information
+        //
+        // Tiga percobaan, semuanya ditolak di titik yang sama, lalu refund.
+        // Penggunanya membaca "hasilnya belum bagus, coba ganti fotonya" —
+        // padahal fotonya tidak salah dan tidak ada video yang pernah dibuat.
+        //
+        // Kartunya TETAP ditampilkan ke pengguna apa adanya; yang disaring
+        // hanya salinan yang dikirim ke mesin video.
+        const aman = await personSafeReferencePhotos([rapi], workDir);
+        if (aman.safe.length === 0) {
+          // Tidak ada versi aman: shot ini kembali ke jalur lama, bukan
+          // menjatuhkan job. Kehilangan frame yang disetujui lebih baik
+          // daripada kehilangan seluruh video.
+          console.warn(`[storyboard] job ${jobId} shot ${sh.index}: kartu tidak lolos saring aman-orang, pakai jalur lama`);
+          return sh;
+        }
+
         sudahAda.add(sh.index);
-        return { ...sh, imageRefPath: rapi };
+        return { ...sh, imageRefPath: aman.safe[0]! };
       } catch (err) {
         // Gagal di sini BUKAN kegagalan job: shot ini cuma kehilangan frame
         // yang disetujui dan kembali ke jalur lama.
@@ -745,7 +784,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // imageRefPath-nya sudah diganti hanya kalau shot itu ADA di daftar
     // storyboard, jadi scene yang gambarnya gagal tetap kebagian jalur lama.
     const dariSb = row.storyboard_id
-      ? await framePertamaDariStoryboard(spec, workDir, row.id, row.storyboard_id)
+      ? await framePertamaDariStoryboard(spec, workDir, row.id, row.storyboard_id, format)
       : { spec, sudahAda: new Set<number>() };
     specSiap = await tegakkanAcuan(
       await siapkanFramePertama(dariSb.spec, workDir, row.id, dariSb.sudahAda),
