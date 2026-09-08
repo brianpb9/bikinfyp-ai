@@ -3,6 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { bolehTampil, waktuTunda, deteksiIosSafari, DIAM_HARI } from "../lib/pwa-pasang";
 
 const baca = (rel: string) => readFileSync(join(process.cwd(), rel), "utf8");
 
@@ -82,4 +83,72 @@ test("halaman offline menyebut nasib job yang sedang jalan", () => {
   // mengira prosesnya ikut berhenti.
   const h = baca("public/offline.html");
   assert.match(h, /tetap jalan di server/i);
+});
+
+// ── AJAKAN PASANG ───────────────────────────────────────────────────────────
+test("ajakan TIDAK muncul saat aplikasi sudah terpasang", () => {
+  // Mengajak memasang aplikasi yang sudah terpasang membuat kita terlihat tidak
+  // tahu keadaan pengguna sendiri.
+  assert.equal(bolehTampil({
+    pathname: "/", sudahTerpasang: true, adaPrompt: true, iosSafari: false,
+    tundaSampai: null, sekarang: 1_000,
+  }), false);
+});
+
+test("ajakan TIDAK muncul di alur berbayar dan halaman kerja", () => {
+  // /bikin/** adalah alur berbayar: orang sedang mengisi form, meninjau
+  // storyboard, atau menunggu render yang ia bayar. Banner di atas itu menutupi
+  // pekerjaannya sendiri.
+  for (const p of ["/bikin/produk", "/bikin/storyboard", "/onboarding", "/admin", "/dashboard/menunggu"]) {
+    assert.equal(bolehTampil({
+      pathname: p, sudahTerpasang: false, adaPrompt: true, iosSafari: false,
+      tundaSampai: null, sekarang: 1_000,
+    }), false, `masih muncul di ${p}`);
+  }
+  // Dan MUNCUL di halaman biasa — kalau tidak, fiturnya cuma mati.
+  assert.equal(bolehTampil({
+    pathname: "/video", sudahTerpasang: false, adaPrompt: true, iosSafari: false,
+    tundaSampai: null, sekarang: 1_000,
+  }), true);
+});
+
+test("ditutup berarti diam, dan diamnya berakhir", () => {
+  const sekarang = 1_000_000;
+  const sampai = waktuTunda(sekarang);
+  const dasar = { pathname: "/", sudahTerpasang: false, adaPrompt: true, iosSafari: false };
+  assert.equal(bolehTampil({ ...dasar, tundaSampai: sampai, sekarang: sampai - 1 }), false, "muncul saat masih ditunda");
+  assert.equal(bolehTampil({ ...dasar, tundaSampai: sampai, sekarang: sampai + 1 }), true, "diam selamanya");
+  assert.equal(sampai - sekarang, DIAM_HARI * 86_400_000);
+});
+
+test("tidak menawarkan pemasangan yang tidak bisa dikerjakan", () => {
+  // Firefox desktop: tanpa event, tanpa menu Add to Home Screen. Menampilkan
+  // tombol di sana berarti menjanjikan sesuatu yang tidak terjadi.
+  assert.equal(bolehTampil({
+    pathname: "/", sudahTerpasang: false, adaPrompt: false, iosSafari: false,
+    tundaSampai: null, sekarang: 1_000,
+  }), false);
+});
+
+test("Safari iOS dikenali; Chrome iOS TIDAK", () => {
+  const safari = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
+  const chromeIos = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/120.0 Mobile/15E148 Safari/604.1";
+  const android = "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Mobile Safari/537.36";
+  assert.equal(deteksiIosSafari(safari, "Apple Computer, Inc."), true);
+  // Chrome iOS memakai WebKit yang sama tapi TIDAK punya "Add to Home Screen".
+  // Menyuruhnya membuka menu bagikan hanya membuat orang bingung.
+  assert.equal(deteksiIosSafari(chromeIos, "Apple Computer, Inc."), false);
+  assert.equal(deteksiIosSafari(android, "Google Inc."), false);
+});
+
+test("event pemasangan dipakai sekali, dan bilah bawaan Chrome dicegah", () => {
+  const src = readFileSync(join(process.cwd(), "app/_components/AjakPasang.tsx"), "utf8")
+    .replace(/\{\/\*[\s\S]*?\*\/\}/g, "").replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  // Tanpa preventDefault(), Chrome menampilkan bilahnya sendiri dan pengguna
+  // melihat DUA ajakan sekaligus.
+  assert.match(src, /e\.preventDefault\(\)/, "bilah bawaan Chrome tidak dicegah");
+  // Event hanya sah sekali; menyimpannya membuat ketukan kedua gagal diam-diam.
+  const i = src.indexOf("async function pasang");
+  assert.match(src.slice(i, i + 600), /setEv\(null\)/, "event tidak dibuang setelah dipakai");
 });

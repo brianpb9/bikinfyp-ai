@@ -3,6 +3,7 @@ import { Inter, Sora } from "next/font/google";
 import "./globals.css";
 import { SiteChrome } from "./_components/SiteChrome";
 import { DaftarSW } from "./_components/DaftarSW";
+import { AjakPasang } from "./_components/AjakPasang";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600", "700", "800"] });
@@ -81,6 +82,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body className="bg-zinc-100 text-zinc-900 antialiased">
         <SiteChrome>{children}</SiteChrome>
         <DaftarSW />
+        <AjakPasang />
       </body>
     </html>
   );
