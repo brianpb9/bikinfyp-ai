@@ -23,6 +23,7 @@ import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { pakaiDenganClient } from "./kredit-video";
 import type { JenisVideo } from "../kredit-video";
+import { ERR } from "../errors";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -248,7 +249,17 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         // Baris pengguna sudah dikunci di atas, jadi dua permintaan bersamaan
         // tidak bisa sama-sama membaca sisa yang sama.
         const ember = await pakaiDenganClient(client, userId, input.jenisVideo, jobId, timestamp, id());
-        if (!ember) throw new Error("INSUFFICIENT_CREDITS");
+        // GALAT TERSTRUKTUR, BUKAN Error BIASA.
+        //
+        // Error("INSUFFICIENT_CREDITS") tidak dikenali errorResponse(), jadi ia
+        // keluar sebagai INTERNAL 500 "Ada gangguan di sisi kami" — dan halaman
+        // skrip punya cabang `if (err.code === "INSUFFICIENT_CREDITS")` yang
+        // mengarahkan ke /bikin/paket, yang karena itu TIDAK PERNAH jalan.
+        // Pengguna yang tinggal perlu top-up justru diberi tahu sistemnya rusak.
+        //
+        // Ditemukan 8 Sep 2026 saat verifikasi produksi; ada sejak jatah video
+        // menggantikan saldo rupiah (171f45e).
+        if (!ember) throw ERR.INSUFFICIENT_CREDITS();
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
         await client.query("COMMIT"); return { jobId, duplicate: false };

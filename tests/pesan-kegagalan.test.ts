@@ -6,6 +6,8 @@
 // dibuat. Ia disuruh memperbaiki sesuatu yang tidak rusak.
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { sebabDariAlasan, pesanKegagalan } from "../lib/pesan-kegagalan";
 
 test("penolakan moderasi dikenali, bukan dianggap masalah mutu", () => {
@@ -49,4 +51,21 @@ test("alasan kosong tidak mengarang sebab", () => {
   assert.equal(sebabDariAlasan(null), "tidak_diketahui");
   assert.equal(sebabDariAlasan(""), "tidak_diketahui");
   assert.equal(sebabDariAlasan("   "), "tidak_diketahui");
+});
+
+test("kredit habis keluar sebagai 402 INSUFFICIENT_CREDITS, bukan 500", () => {
+  // Ditemukan 8 Sep 2026 saat verifikasi produksi: POST /api/jobs menjawab
+  // "Ada gangguan di sisi kami" (INTERNAL 500) untuk akun yang sekadar
+  // kehabisan token. Sebabnya Error("INSUFFICIENT_CREDITS") biasa, yang tidak
+  // dikenali errorResponse().
+  //
+  // Akibat lanjutannya di UI: app/bikin/skrip punya cabang
+  //   if (err.code === "INSUFFICIENT_CREDITS") router.push("/bikin/paket")
+  // yang karena itu TIDAK PERNAH jalan. Orang yang tinggal perlu top-up justru
+  // diberi tahu sistemnya rusak.
+  const src = readFileSync(join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n").filter((b) => !/^\s*\/\//.test(b)).join("\n");
+  assert.match(src, /throw ERR\.INSUFFICIENT_CREDITS\(\)/, "masih melempar Error biasa");
+  assert.doesNotMatch(src, /new Error\("INSUFFICIENT_CREDITS"\)/, "lemparan mentah masih ada");
 });
