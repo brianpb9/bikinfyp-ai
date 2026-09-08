@@ -157,6 +157,17 @@ test("saringan hidup di URL, supaya bisa disalin dan dibuka lagi", () => {
 });
 
 test("nilai jenis yang asing jatuh ke \"semua\", bukan menghasilkan galat", () => {
+  // Versi pertama tes ini memaku EKSPRESINYA persis, jadi ia gagal begitu
+  // saringan "menunggu" ditambahkan (8 Sep 2026) — padahal perilakunya tidak
+  // berubah sama sekali. Sekarang yang diuji sifatnya: setiap nilai yang
+  // dikenali diteruskan apa adanya, dan hanya itu; sisanya jatuh ke "semua".
   const q = kode("app/admin/page.tsx");
-  assert.match(q, /jenis === "retail" \|\| jenis === "brand" \? jenis : "semua"/);
+  const m = /jenis === "(\w+)"/g;
+  const dikenali = [...q.matchAll(m)].map((x) => x[1]!);
+  for (const v of ["retail", "brand", "menunggu"]) {
+    assert.ok(dikenali.includes(v), `nilai "${v}" tidak dikenali saringan`);
+  }
+  // Ada cabang fallback ke "semua" — itu yang membuat nilai asing tidak
+  // menjatuhkan halaman.
+  assert.match(q, /\? jenis : "semua"/, "tidak ada fallback ke \"semua\"");
 });

@@ -34,3 +34,18 @@ export function dariBrand(req: Request): boolean {
     return false;
   }
 }
+
+/**
+ * URL dashboard brand untuk dipakai di dalam EMAIL.
+ *
+ * Tidak bisa diturunkan dari permintaan seperti asalOauth(): email disusun di
+ * konteks admin (host aiugc.id) tapi dibaca oleh brand, dan menautkannya ke
+ * host admin membuat penerimanya mendarat di aplikasi retail.
+ *
+ * Sumbernya DASHBOARD_HOSTNAME — env yang sama yang dipakai middleware untuk
+ * mengenali host brand, jadi keduanya mustahil berbeda.
+ */
+export function urlDashboardBrand(): string {
+  const host = (process.env.DASHBOARD_HOSTNAME ?? "").trim().toLowerCase();
+  return host ? `https://${host}/dashboard` : "https://brand.aiugc.id/dashboard";
+}

@@ -14,6 +14,7 @@ import { validateMarketplaceUrl } from "./url-safety";
 import { guessCategory } from "./category-guess";
 export { guessCategory };
 import { getDb } from "./db";
+import { MAX_IMAGES } from "./product-images";
 
 export interface ExtractResult {
   extracted: boolean;
@@ -498,7 +499,12 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   // USP (keputusan Brian 2026-08-06): foto dari link harus ikut ter-copy
   // sebanyak mungkin — bukan cuma 1 og:image. Sumber digabung berurutan:
   // og:image (foto utama) -> JSON-LD Product.image -> pindaian state halaman.
-  // Dedup per content-hash (og:image dan varian inline = foto yang sama), maks 5.
+  // Dedup per content-hash (og:image dan varian inline = foto yang sama).
+  //
+  // BATASNYA MAX_IMAGES (8), BUKAN 5. Aplikasi menerima 8 foto dari unggahan
+  // manual, jadi angka 5 di sini membuat pengguna yang MENEMPEL LINK dapat
+  // lebih sedikit bahan daripada yang mengunggah sendiri — padahal link adalah
+  // jalur utamanya. Diminta Brian 8 Sep 2026.
   const candidates = [
     ...(fotoUrl ? [fotoUrl] : []),
     ...parseJsonLdImages(html),
@@ -511,7 +517,7 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     if (seenHash.has(hash)) continue;
     seenHash.add(hash);
     imageUrls.push(u);
-    if (imageUrls.length >= 5) break;
+    if (imageUrls.length >= MAX_IMAGES) break;
   }
   return {
     extracted: true,

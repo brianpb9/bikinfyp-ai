@@ -4,6 +4,7 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { config } from "@/lib/config";
 import { TombolStatusOrg } from "./_TombolStatusOrg";
+import { TombolTokenOrg } from "./_TombolTokenOrg";
 
 // DASHBOARD ADMIN — BACA SAJA.
 //
@@ -165,6 +166,7 @@ async function ambilPengguna() {
     job_terakhir: string | null;
     org_nama: string | null;
     org_status: string | null;
+    org_saldo: string | null;
     org_id: string | null;
   }>(
     `WITH topup AS (
@@ -196,7 +198,12 @@ async function ambilPengguna() {
             (SELECT COUNT(*) FROM jobs j WHERE j.user_id = u.id)::text AS jobs,
             (SELECT MAX(j.created_at) FROM jobs j WHERE j.user_id = u.id) AS job_terakhir,
             org.nama   AS org_nama,
-            org.status AS org_status
+            org.status AS org_status,
+            -- Saldo dompet ORG dibaca lewat org_id, bukan user_id: baris org
+            -- selalu mengisi user_id dengan owner-nya (jejak audit siapa yang
+            -- belanja), jadi menjumlahkan per user akan mencampur saldo pribadi
+            -- owner dengan saldo organisasinya.
+            COALESCE((SELECT SUM(delta) FROM credit_ledger c WHERE c.org_id = org.id), 0)::text AS org_saldo
        -- JENIS PENGGUNA DITURUNKAN, BUKAN DISIMPAN.
        --
        -- Tidak ada kolom "retail"/"brand" di tabel users, dan tidak perlu ada:
@@ -210,7 +217,7 @@ async function ambilPengguna() {
        -- aturan yang sama dengan lib/org.ts (created_at ASC).
        FROM users u
        LEFT JOIN LATERAL (
-         SELECT o.name AS nama, o.status AS status
+         SELECT o.id, o.name AS nama, o.status AS status
            FROM org_members m JOIN organizations o ON o.id = m.org_id
           WHERE m.user_id = u.id
           ORDER BY m.created_at ASC
@@ -357,7 +364,8 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   const aktif: IdTab = TAB.find((t) => t.id === tab)?.id ?? "ringkasan";
   // Nilai asing diperlakukan sebagai "semua", bukan ditolak: ini saringan
   // tampilan, dan URL yang salah ketik tidak pantas menghasilkan halaman galat.
-  const jenisPg = jenis === "retail" || jenis === "brand" ? jenis : "semua";
+  const jenisPg: JenisSaring =
+    jenis === "retail" || jenis === "brand" || jenis === "menunggu" ? jenis : "semua";
 
   if (!postgresRuntimeEnabled()) {
     return (
@@ -556,11 +564,15 @@ function LencanaJenis({ nama, status }: { nama: string | null; status: string | 
   );
 }
 
-function SaringJenis({ aktif }: { aktif: "semua" | "retail" | "brand" }) {
+function SaringJenis({ aktif, nMenunggu }: { aktif: JenisSaring; nMenunggu: number }) {
   const pilihan = [
     { id: "semua", label: "Semua" },
     { id: "retail", label: "Retail" },
     { id: "brand", label: "Brand" },
+    // "Menunggu" bukan jenis pengguna melainkan keadaan, dan sengaja duduk di
+    // baris yang sama: inilah satu-satunya saringan yang menuntut TINDAKAN, dan
+    // memisahkannya ke tempat lain berarti ia tidak akan pernah dilihat.
+    { id: "menunggu", label: nMenunggu > 0 ? `Menunggu (${nMenunggu})` : "Menunggu" },
   ] as const;
   return (
     <div className="flex gap-1">
@@ -581,24 +593,34 @@ function SaringJenis({ aktif }: { aktif: "semua" | "retail" | "brand" }) {
   );
 }
 
-async function Pengguna({ jenis }: { jenis: "semua" | "retail" | "brand" }) {
+type JenisSaring = "semua" | "retail" | "brand" | "menunggu";
+
+async function Pengguna({ jenis }: { jenis: JenisSaring }) {
   const semua = await ambilPengguna();
   // Disaring DI SINI, bukan di SQL. Jumlahnya dibatasi 200 baris dan angka
   // "dari N" di bawah hanya benar kalau kedua sisi berasal dari kumpulan yang
   // sama; menyaring di SQL membuat penyebutnya ikut menyusut dan pembacanya
   // kehilangan pembanding.
-  const rows = jenis === "semua" ? semua : semua.filter((u) => jenisPengguna(u) === jenis);
+  const menunggu = (u: { org_status: string | null }) => u.org_status === "pending";
+  const rows =
+    jenis === "semua" ? semua
+    : jenis === "menunggu" ? semua.filter(menunggu)
+    : semua.filter((u) => jenisPengguna(u) === jenis);
   const nBrand = semua.filter((u) => jenisPengguna(u) === "brand").length;
+  const nMenunggu = semua.filter(menunggu).length;
   return (
     <section className="space-y-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-bold text-zinc-900">
           Pengguna ({rows.length}{jenis === "semua" ? "" : ` dari ${semua.length}`})
         </h2>
-        <SaringJenis aktif={jenis} />
+        <SaringJenis aktif={jenis} nMenunggu={nMenunggu} />
       </div>
       <p className="text-[11px] text-zinc-500">
         {nBrand} brand · {semua.length - nBrand} retail
+        {nMenunggu > 0 && (
+          <> · <span className="font-bold text-amber-700">{nMenunggu} menunggu persetujuan</span></>
+        )}
       </p>
       {rows.length === 0 ? (
         <Kosong pesan={jenis === "semua" ? "Belum ada pengguna terdaftar." : `Belum ada pengguna ${jenis}.`} />
@@ -610,7 +632,16 @@ async function Pengguna({ jenis }: { jenis: "semua" | "retail" | "brand" }) {
               <td className="whitespace-nowrap p-2">
                 <LencanaJenis nama={u.org_nama} status={u.org_status} />
                 {u.org_id && u.org_status && (
-                  <span className="ml-2"><TombolStatusOrg orgId={u.org_id} status={u.org_status} /></span>
+                  <span className="ml-2 inline-flex items-center gap-1 align-middle">
+                    <TombolStatusOrg orgId={u.org_id} status={u.org_status} />
+                    {/* Saldo dipajang DI SEBELAH tombolnya, bukan di kolom
+                        lain: yang memutuskan mengisi token butuh tahu saldo
+                        sekarang pada saat yang sama ia menekan tombolnya. */}
+                    <span className="text-[10px] tabular-nums text-zinc-500">
+                      Rp{Number(u.org_saldo ?? "0").toLocaleString("id-ID")}
+                    </span>
+                    <TombolTokenOrg orgId={u.org_id} nama={u.org_nama ?? "brand"} />
+                  </span>
                 )}
               </td>
               <td className="max-w-[10rem] truncate p-2 text-zinc-500" title={u.name ?? ""}>{u.name ?? "—"}</td>

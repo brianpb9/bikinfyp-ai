@@ -44,6 +44,7 @@ import os from "node:os";
 import path from "node:path";
 import sharp from "sharp";
 import { runFf } from "./ffmpeg";
+import crypto from "node:crypto";
 
 /** Di bawah ini label terbukti ngawur permanen (LAYER2 §6.2: 351 px). */
 export const AMBANG_TOLAK_PX = 400;
@@ -95,6 +96,34 @@ export function perluDitegakkan(lebar: number, tinggi: number): boolean {
   // Toleransi 5%: foto yang sudah mendekati 9:16 tidak perlu disentuh, dan
   // menyentuhnya hanya menambah satu langkah pemrosesan tanpa manfaat.
   return Math.abs(rasio - RASIO_TEGAK) / RASIO_TEGAK > 0.05;
+}
+
+/**
+ * Versi buffer dari hitungKataOcr, untuk pemanggil yang belum menulis berkas.
+ *
+ * Dipakai penyaring foto hasil scraping (lib/product-image-download.ts): di
+ * sana gambarnya masih di memori dan menuliskannya dulu ke storage berarti
+ * menyimpan banner yang justru akan kita turunkan peringkatnya.
+ *
+ * Implementasinya SENGAJA menumpang fungsi yang sudah ada lewat berkas
+ * sementara alih-alih menyalin logikanya. Pembesaran 3x di bawah adalah
+ * perbaikan yang lahir dari insiden nyata (job be16d8f3); salinan kedua akan
+ * kehilangan perbaikan itu diam-diam pada perubahan berikutnya.
+ *
+ * Mengembalikan -1 bila OCR tidak bisa dijalankan — BUKAN 0. Nol berarti
+ * "diperiksa dan bersih", dan itu klaim yang tidak boleh dibuat saat
+ * pemeriksaannya sendiri gagal.
+ */
+export async function hitungKataOcrBuffer(buf: Buffer): Promise<number> {
+  const tmp = path.join(os.tmpdir(), `ocr-buf-${crypto.randomUUID()}.png`);
+  try {
+    await sharp(buf).png().toFile(tmp);
+    return await hitungKataOcr(tmp);
+  } catch {
+    return -1;
+  } finally {
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 async function hitungKataOcr(berkas: string): Promise<number> {
