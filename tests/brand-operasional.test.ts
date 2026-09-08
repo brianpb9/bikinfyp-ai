@@ -125,3 +125,19 @@ test("pengurutan stabil — hasil yang sama untuk masukan yang sama", () => {
   assert.deepEqual(urutkanFoto([a, b]), [a, b]);
   assert.deepEqual(urutkanFoto([b, a]), [a, b]);
 });
+
+test("kueri admin MEMILIH org_id — tanpa itu tombol Setujui tidak pernah dirender", () => {
+  // Bug bawaan sejak a117a17, ketahuan 8 Sep 2026 saat verifikasi produksi:
+  // tipe barisnya mendeklarasikan org_id, JSX-nya menjaga dengan
+  // `{u.org_id && ...}`, tapi kueri tidak pernah memilih kolomnya. Halaman
+  // menampilkan "(pending)" tanpa satu tombol pun. Fiturnya ada di kode dan
+  // mati di layar — bentuk kegagalan yang tidak muncul sebagai galat apa pun.
+  const p = readFileSync(join(process.cwd(), "app/admin/page.tsx"), "utf8");
+  assert.match(p, /org\.id\s+AS org_id/, "org_id tidak dipilih kueri");
+
+  // Setiap kolom yang dijaga JSX harus benar-benar ada di kueri.
+  const kode = p.replace(/\{\/\*[\s\S]*?\*\/\}/g, "").split("\n").filter((b) => !/^\s*--/.test(b)).join("\n");
+  for (const kolom of ["org_id", "org_status", "org_nama", "org_saldo"]) {
+    assert.match(kode, new RegExp(`AS ${kolom}`), `kolom ${kolom} dipakai JSX tapi tidak dipilih kueri`);
+  }
+});

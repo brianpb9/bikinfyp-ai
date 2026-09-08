@@ -197,7 +197,16 @@ async function ambilPengguna() {
              + COALESCE((SELECT ultra FROM langganan_sisa s WHERE s.user_id=u.id),0))::text AS ultra,
             (SELECT COUNT(*) FROM jobs j WHERE j.user_id = u.id)::text AS jobs,
             (SELECT MAX(j.created_at) FROM jobs j WHERE j.user_id = u.id) AS job_terakhir,
-            org.nama   AS org_nama,
+            -- org.id WAJIB IKUT.
+          --
+          -- Tipe barisnya mendeklarasikan org_id sejak a117a17, tapi kueri ini
+          -- tidak pernah memilihnya — jadi u.org_id selalu undefined, dan
+          -- penjaga `{u.org_id && u.org_status && (...)}` membuat tombol
+          -- Setujui TIDAK PERNAH DIRENDER SEKALI PUN. Fiturnya ada di kode dan
+          -- mati di layar. Ketahuan 8 Sep 2026 saat verifikasi produksi:
+          -- halaman menampilkan "(pending)" tanpa satu tombol pun di sebelahnya.
+          org.id     AS org_id,
+          org.nama   AS org_nama,
             org.status AS org_status,
             -- Saldo dompet ORG dibaca lewat org_id, bukan user_id: baris org
             -- selalu mengisi user_id dengan owner-nya (jejak audit siapa yang
