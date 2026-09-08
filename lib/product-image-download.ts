@@ -8,6 +8,7 @@ import path from "node:path";
 import { config, ensureDirs } from "./config";
 import { MAX_IMAGES, normalizeProductImageBuffer } from "./product-images";
 import { urutkanFoto } from "./foto-produk-pilih";
+import { urlResolusiTinggi } from "./gambar-resolusi";
 import { mediaStorage } from "./storage";
 
 const UA =
@@ -30,7 +31,32 @@ async function hitungKataFoto(buf: Buffer): Promise<number> {
   }
 }
 
+/**
+ * Ringkasan mutu foto hasil scraping, untuk peringatan di layar intake.
+ *
+ * Ada karena satu temuan yang tidak bisa diperbaiki dengan kode: link berbagi
+ * TikTok Shop hanya mengekspos SATU foto (parameter og_info), dan pada keempat
+ * link uji Brian 8 Sep 2026 foto itu sendiri adalah foto katalog promosi —
+ * "DISKON S.D. 55%", callout fitur, endorsement. OCR-nya 37, 23, 4, dan 19 kata.
+ *
+ * Pengurutan tidak bisa menolong di situ: tidak ada foto kedua untuk dipilih.
+ * Yang MASIH bisa dilakukan adalah mengatakannya kepada pengguna, sebelum ia
+ * membayar video yang tulisannya ikut tersalin.
+ */
+export interface MutuFoto {
+  /** Kata yang terbaca OCR pada foto yang jadi acuan utama. -1 = tidak diperiksa. */
+  kataAcuanUtama: number;
+  /** Semua foto yang didapat berteks banyak — tidak ada yang bersih untuk dipilih. */
+  semuanyaPromo: boolean;
+}
+
 export async function downloadProductImages(productId: string, urls: string[]): Promise<string[]> {
+  return (await downloadProductImagesDenganMutu(productId, urls)).rels;
+}
+
+export async function downloadProductImagesDenganMutu(
+  productId: string, urls: string[]
+): Promise<{ rels: string[]; mutu: MutuFoto }> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
   fs.mkdirSync(dir, { recursive: true });
@@ -46,7 +72,11 @@ export async function downloadProductImages(productId: string, urls: string[]): 
   const kandidat: { buf: Buffer; urutan: number; lebar: number; tinggi: number; kata: number }[] = [];
   for (const [i, url] of urls.slice(0, MAX_IMAGES).entries()) {
     try {
-      const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
+      // Diminta dalam resolusi tinggi. Link berbagi TikTok Shop membawa
+      // THUMBNAIL 260x260 — di bawah ambang tolak kita sendiri (400px) — dan
+      // satu penggantian direktif menaikkannya ke 800x800. Lihat
+      // lib/gambar-resolusi.ts untuk angka terukurnya.
+      const res = await fetch(urlResolusiTinggi(url), { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
       if (!res.ok) continue;
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > 10 * 1024 * 1024) continue;
@@ -61,7 +91,8 @@ export async function downloadProductImages(productId: string, urls: string[]): 
     }
   }
 
-  for (const [i, k] of urutkanFoto(kandidat).entries()) {
+  const urut = urutkanFoto(kandidat);
+  for (const [i, k] of urut.entries()) {
     try {
       const normalized = await normalizeProductImageBuffer(k.buf);
       const rel = path.join("uploads", productId, `${i}.webp`).split(path.sep).join("/");
@@ -74,5 +105,17 @@ export async function downloadProductImages(productId: string, urls: string[]): 
       /* gambar gagal dinormalkan — lanjut yang lain */
     }
   }
-  return rels;
+  // AMBANG_KATA_BANNER (3) dipakai jalur render untuk menolak poster. Angka yang
+  // sama dipakai di sini supaya peringatan intake dan penolakan render tidak
+  // pernah bertentangan — tidak ada yang lebih membingungkan daripada layar yang
+  // bilang "aman" lalu mesin yang bilang "poster".
+  const AMBANG = 3;
+  const diperiksa = urut.filter((k) => k.kata >= 0);
+  return {
+    rels,
+    mutu: {
+      kataAcuanUtama: urut[0]?.kata ?? -1,
+      semuanyaPromo: diperiksa.length > 0 && diperiksa.every((k) => k.kata >= AMBANG),
+    },
+  };
 }

@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { extractFromUrl, canExtract, cleanProductName } from "@/lib/extract";
 import { getDb, now, uuid, audit } from "@/lib/db";
-import { downloadProductImages } from "@/lib/product-image-download";
+import { downloadProductImagesDenganMutu } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
 import { usulMerekDariNama } from "@/lib/media/qc";
@@ -43,7 +43,10 @@ export async function POST(req: Request) {
 
     // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
     const productId = uuid();
-    const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls) : [];
+    const unduh = result.imageUrls?.length
+      ? await downloadProductImagesDenganMutu(productId, result.imageUrls)
+      : { rels: [], mutu: { kataAcuanUtama: -1, semuanyaPromo: false } };
+    const images = unduh.rels;
     // Harga coret hanya dipakai bila konsisten (> harga jual) — cek ulang di sini
     // karena user bisa mengubah harga di kartu konfirmasi nanti (PATCH memvalidasi lagi).
     const promoBefore =
@@ -84,6 +87,17 @@ export async function POST(req: Request) {
       // (tanpa ini, /api/files menolak — butuh exp+sig, bukan path polos).
       image_urls: images.map((rel) => createSignedUrl(rel)),
       images_downloaded: images.length,
+      // PERINGATAN JUJUR, bukan diam-diam diterima.
+      //
+      // Link berbagi TikTok Shop hanya mengekspos SATU foto, dan pada keempat
+      // link uji Brian 8 Sep 2026 foto itu foto katalog promosi (OCR 37, 23, 4,
+      // 19 kata). Pengurutan tidak bisa menolong — tidak ada foto kedua untuk
+      // dipilih. Yang masih bisa dilakukan: mengatakannya SEBELUM ia membayar
+      // video yang tulisan promonya ikut tersalin.
+      peringatan_foto: unduh.mutu.semuanyaPromo
+        ? "Foto dari link ini foto promo toko (ada tulisan diskon/banner). Tulisannya bisa ikut tersalin ke video. "
+          + "Upload foto produk polos kalau ada — hasilnya jauh lebih bagus."
+        : null,
       ...(images.length === 0 ? { warning: "Foto dari link gagal diunduh — upload manual ya." } : {}),
     });
   } catch (err) {

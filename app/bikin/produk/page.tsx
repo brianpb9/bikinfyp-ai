@@ -148,6 +148,7 @@ export default function ProdukPage() {
         images?: string[];
         image_urls?: string[];
         warning?: string;
+        peringatan_foto?: string | null;
       }>("/api/products/extract", {
         json: { url: url.trim() },
         // Batas sabar client: server maksimal ~8 dtk baca halaman + unduh foto;
@@ -184,7 +185,15 @@ export default function ProdukPage() {
         // jauh lebih berguna daripada satu kalimat gagal untuk semua keadaan.
         const adaFoto = Boolean(res.image_urls?.length);
         const adaHarga = Boolean(res.price_idr);
-        if (res.warning) setExtractMsg(res.warning);
+        // PERINGATAN FOTO PROMO MENANG atas kalimat "apa yang ketemu".
+        //
+        // Kalimat "Nama & foto ketemu" secara teknis benar tapi menyesatkan
+        // kalau foto yang ketemu adalah banner "DISKON 55%": pengguna
+        // menganggap semuanya beres, lalu membayar video yang tulisan promonya
+        // ikut tergambar. Yang paling perlu ia tahu di detik itu adalah bahwa
+        // fotonya bermasalah — bukan bahwa fotonya ada.
+        if (res.peringatan_foto) setExtractMsg(res.peringatan_foto);
+        else if (res.warning) setExtractMsg(res.warning);
         else if (adaFoto && !adaHarga)
           setExtractMsg("Nama & foto ketemu. Harganya nggak ada di link — isi manual ya, cuma satu kolom.");
         else if (!adaFoto && adaHarga)
