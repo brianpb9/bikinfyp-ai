@@ -72,6 +72,26 @@ export function promptGambar(input: {
   /** Ada acuan produk terlampir? Mengubah kalimat pembukanya. */
   adaAcuan?: boolean;
 }): string {
+  // PRODUK HARUS TERLIHAT JELAS (permintaan Brian, 9 Sep 2026: "untuk proses
+  // rendering image yang menggunakan seedream pastikan juga gambar jelas
+  // product utama brand terlihat").
+  //
+  // REFERENCE AUTHORITY di bawah mengunci IDENTITAS produk — bentuk, warna,
+  // bahan. Ia tidak pernah menuntut produknya TERLIHAT. Dua hal berbeda, dan
+  // kartu yang identitasnya benar tapi produknya kecil, buram, terpotong, atau
+  // tertutup tangan tetap gagal sebagai storyboard: kartu ini dipakai sebagai
+  // frame pertama render, jadi apa yang samar di sini ikut samar di videonya.
+  //
+  // Hanya dikirim kalau ada acuan. Scene ber-withhold_product sengaja
+  // menyembunyikan produk (build-up sebelum reveal), dan pemanggil menandainya
+  // dengan tidak melampirkan foto — jadi syarat ini tidak akan pernah
+  // bertabrakan dengan scene yang memang tidak boleh menampilkannya.
+  const terlihat = input.adaAcuan
+    ? "PRODUCT VISIBILITY (required): the product must be clearly visible, sharp and in focus, "
+      + "unobstructed, fully inside the frame and not cropped at any edge. Its front label must face "
+      + "the camera and stay legible. Hands may hold it but must not cover the label. "
+      + "It occupies a clear focal share of the frame, never a small background detail."
+    : "";
   const bagian = [
     // REFERENCE AUTHORITY — bagian pertama pada spesifikasi Layer 2.5, dan
     // bukan basa-basi.
@@ -89,6 +109,7 @@ export function promptGambar(input: {
         + "product shape, colour, material and proportions. Do NOT reproduce the reference photo composition, "
         + "background or framing — build the NEW scene described below."
       : "",
+    terlihat,
     // Keadaan yang sudah benar di frame pertama menang atas prompt shot.
     // Prompt shot menggambarkan apa yang TERJADI sepanjang klip; kalau ia
     // dipakai apa adanya, gambar diamnya menggambarkan gerakan.

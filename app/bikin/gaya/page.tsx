@@ -9,6 +9,7 @@ import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_co
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 import { track } from "../../_components/track";
 import templateTerbukti from "../../../lib/config/template-terbukti.json";
+import { templateTeratas, type TemplatePilihan } from "@/lib/template-pilihan";
 import { HOOK_LEVELS, type HookLevel } from "@/lib/config/hooks";
 import type { QualityTier } from "@/lib/providers/types";
 import { setaraBaru } from "@/lib/kualitas-video";
@@ -98,16 +99,26 @@ export default function GayaPage() {
       setTemplateId(null); // tap ulang = lepas template
       return;
     }
-    const t = templateTerbukti.templates.find((x) => x.id === id);
+    const t = daftarTemplate.find((x) => x.id === id);
     if (!t) return;
     setTemplateId(id);
-    setFormat(t.preset.format as VideoFormat);
+    setFormat(t.format as VideoFormat);
     // Preset ditulis dengan nama tier lama. Dipetakan ke padanannya supaya
     // kartu yang tersorot benar-benar ada di daftar yang sedang ditawarkan —
     // kalau tidak, memilih template membuat SEMUA kartu tampak tidak terpilih.
-    setTier(setaraBaru(t.preset.qualityTier as Tier));
-    setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
+    // Preset lama menyimpan tier-nya sendiri; template kampanye tidak membawa
+    // tier ke retail (pilihan paket tetap milik pengguna), jadi tier hanya
+    // diubah kalau template memang menyatakannya.
+    const preset = templateTerbukti.templates.find((x) => x.id === id);
+    if (preset) setTier(setaraBaru(preset.preset.qualityTier as Tier));
+    setDurationSec(t.format === "talking_head" ? 15 : (t.durationSec as 15 | 30 | 45));
+    if (t.hookLevel && (HOOK_LEVELS as readonly string[]).includes(t.hookLevel)) {
+      setHookPct(Math.round((HOOK_LEVELS.indexOf(t.hookLevel as HookLevel) + 0.5) * (100 / HOOK_LEVELS.length)));
+    }
   }
+  // SEPULUH TERBAIK UNTUK KATEGORI PRODUKNYA (keputusan Brian 9 Sep 2026).
+  // Dihitung sekali; kategorinya sudah tetap sejak langkah 1.
+  const [daftarTemplate, setDaftarTemplate] = useState<TemplatePilihan[]>([]);
   const restoredFlow = loadFlow();
   const restoredAvatar = getAvatarPreset(restoredFlow.avatarId);
   const initialAvatar = restoredAvatar ?? AVATAR_PRESETS.find((avatar) => avatar.gender === "female")!;
@@ -132,7 +143,9 @@ export default function GayaPage() {
   const [noCredits, setNoCredits] = useState(false);
 
   useEffect(() => {
-    if (!loadFlow().product) router.replace("/bikin/produk");
+    const p = loadFlow().product;
+    if (!p) router.replace("/bikin/produk");
+    else setDaftarTemplate(templateTeratas(p.category));
     apiFetch<{ tiers: TierMeta[] }>("/api/meta").then((m) => setTiers(m.tiers)).catch(() => {});
     apiFetch<{ sisa: Record<string, { total: number }> }>("/api/kredit-video")
       .then((d) => setSisa(d.sisa))
@@ -202,7 +215,11 @@ export default function GayaPage() {
           duration_s: durationSec,
           hook_level: hookLevel,
           ...(templateId
-            ? { hook_families: templateTerbukti.templates.find((t) => t.id === templateId)?.preset.hookFamilies }
+            // Dari daftar GABUNGAN, bukan cuma preset lama: kalau ini tetap
+            // mencari di templateTerbukti saja, template kampanye terpilih
+            // akan terkirim TANPA keluarga hook-nya — diam-diam kehilangan
+            // justru bagian yang membuatnya jadi template.
+            ? { hook_families: daftarTemplate.find((t) => t.id === templateId)?.hookFamilies }
             : {}),
         },
       });
@@ -231,11 +248,11 @@ export default function GayaPage() {
       <div className="space-y-7 px-4">
         <section className="space-y-3">
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pola dari {templateTerbukti.total_winners} video pemenang</p>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dipilih untuk produkmu</p>
             <h2 className="font-display text-xl font-bold">🏆 Template Terbukti</h2>
           </div>
           <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {templateTerbukti.templates.map((t) => (
+            {daftarTemplate.map((t) => (
               <button
                 key={t.id}
                 type="button"
@@ -246,15 +263,21 @@ export default function GayaPage() {
                 }`}
               >
                 <p className="text-sm font-bold leading-tight">{t.name}</p>
-                <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t.desc}</p>
-                <p className="mt-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700">
-                  {t.count} dari {templateTerbukti.total_winners} video pemenang
+                <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t.when}</p>
+                {/* Tiap kartu membawa ANGKANYA SENDIRI. Dua sumber, dua studi:
+                    preset lama dari 110 pemenang (korelasi GMV), template
+                    kampanye dari 12 pemenang yang dibedah shot demi shot.
+                    Meminjamkan angka satu ke yang lain akan membuat aplikasi
+                    mengklaim bukti yang tidak pernah ada. */}
+                <p className="mt-1.5 inline-block rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                  {t.bukti}
                 </p>
               </button>
             ))}
           </div>
           <p className="text-[11px] leading-4 text-zinc-400">
-            {templateTerbukti.disclaimer} Pilih template = format, durasi & gaya hook ikut diatur otomatis (masih bisa kamu ubah).
+            {templateTerbukti.disclaimer} Sepuluh yang paling cocok untuk kategori produkmu.
+            Pilih template = format, durasi & gaya hook ikut diatur otomatis (masih bisa kamu ubah).
           </p>
         </section>
 
