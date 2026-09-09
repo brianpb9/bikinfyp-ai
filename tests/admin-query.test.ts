@@ -172,21 +172,28 @@ test("nilai jenis yang asing jatuh ke \"semua\", bukan menghasilkan galat", () =
   assert.match(q, /\? jenis : "semua"/, "tidak ada fallback ke \"semua\"");
 });
 
-test("/admin keluar dari cangkang mobile — ia alat desktop", () => {
-  // Brian 9 Sep 2026: "widget terlalu kecil dan jadinya tidak informatif."
-  // Sebab utamanya bukan ukuran kartu: /admin ikut SiteChrome, yang mengunci
-  // lebar ke max-w-md (~430px) dan menempelkan bilah nav mobile. Setiap tabel
-  // jadi menggulir menyamping di layar 1440px yang sebenarnya luas.
+test("SATU bentuk untuk seluruh area admin", () => {
+  // Brian 9 Sep 2026: "jadinya inkonsisten, kembalikan layout mobile first nya".
+  //
+  // Saya sempat mengeluarkan /admin dari cangkang mobile supaya tabelnya lapang.
+  // Alasannya masuk akal, akibatnya tidak saya perhitungkan: awalan "/admin" ikut
+  // menarik /admin/paket dan /admin/kredensial keluar, padahal keduanya dirancang
+  // DI DALAM cangkang. Hasilnya tiga halaman dengan tiga bentuk berbeda.
+  //
+  // Satu bentuk untuk seluruh aplikasi lebih berharga daripada satu halaman yang
+  // lebih lapang.
   const chrome = fs.readFileSync(path.join(process.cwd(), "app/_components/SiteChrome.tsx"), "utf8");
   const m = /const NO_CHROME = \[([^\]]*)\]/.exec(chrome);
   assert.ok(m, "daftar NO_CHROME tidak ditemukan");
-  assert.match(m[1]!, /"\/admin"/, "/admin masih memakai cangkang mobile");
+  assert.doesNotMatch(m[1]!, /"\/admin"/, "/admin keluar lagi dari cangkang");
 
-  const src = kode("app/admin/page.tsx");
-  assert.doesNotMatch(src, /max-w-6xl">/, "lebar halaman masih dipagu 1152px");
-  assert.match(src, /max-w-\[1600px\]/, "halaman tidak dilebarkan");
+  // Dan kedua halaman admin memakai pagu yang SAMA.
+  for (const rel of ["app/admin/page.tsx", "app/admin/paket/page.tsx"]) {
+    const src = kode(rel);
+    assert.match(src, /<main className="space-y-5 p-4">/, `${rel} tidak memakai bentuk yang sama`);
+    assert.doesNotMatch(src, /max-w-\[1600px\]|max-w-4xl/, `${rel} masih punya pagu lebarnya sendiri`);
+  }
 });
-
 test("angka adalah isi kartu, jadi ia yang paling besar", () => {
   // Sebelumnya angkanya text-base — sekelas teks paragraf — padahal ANGKA
   // ITULAH isi kartunya. Yang paling penting justru yang paling kecil.

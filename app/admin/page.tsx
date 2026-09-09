@@ -383,7 +383,7 @@ function Tabel({ kepala, children }: { kepala: string[]; children: React.ReactNo
       {/* text-[13px], bukan text-xs (12px): tabel ini dibaca berbaris-baris untuk
           menelusuri kegagalan, dan satu piksel di ukuran huruf terasa jauh lebih
           besar setelah baris kesepuluh. */}
-      <table className="w-full min-w-[52rem] text-left text-[13px]">
+      <table className="w-full min-w-[44rem] text-left text-[13px]">
       {/* KEPALA MENEMPEL saat digulir. Riwayat generation punya 100 baris
           dan delapan kolom; tanpanya siapa pun yang menggulir ke bawah
           kehilangan tahu kolom mana yang sedang ia baca. */}
@@ -448,20 +448,18 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    // max-w-[1600px], BUKAN max-w-6xl (1152px). Halaman ini penuh tabel lebar —
-    // riwayat generation punya delapan kolom — dan pagu 1152px membuat semuanya
-    // menggulir menyamping di layar yang sebenarnya cukup luas.
-    <main className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
-      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-zinc-900">Admin</h1>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            Masuk sebagai {user.email} · <b>baca saja</b> — tidak ada aksi yang mengubah data
-          </p>
-        </div>
-        {/* Waktu render disebut supaya angka yang dibaca punya umur.
-            Dasbor tanpa cap waktu membuat orang tidak pernah tahu apakah yang
-            ia lihat baru atau sisa tab yang terbuka sejak pagi. */}
+    // Kembali ke lebar cangkang. Tabel lebar tetap menggulir menyamping di
+    // dalamnya, dan itu memang harga dari satu bentuk untuk seluruh aplikasi —
+    // lihat catatan NO_CHROME di app/_components/SiteChrome.tsx.
+    <main className="space-y-5 p-4">
+      <header className="space-y-1 border-b border-zinc-200 pb-3">
+        <h1 className="font-display text-xl font-bold text-zinc-900">Admin</h1>
+        <p className="text-xs text-zinc-500">
+          Masuk sebagai {user.email} · <b>baca saja</b> — tidak ada aksi yang mengubah data
+        </p>
+        {/* Waktu render disebut supaya angka yang dibaca punya umur. Dasbor
+            tanpa cap waktu membuat orang tidak pernah tahu apakah yang ia lihat
+            baru atau sisa tab yang terbuka sejak pagi. */}
         <p className="text-[11px] text-zinc-400">
           Dimuat {new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} WIB
         </p>
@@ -660,7 +658,7 @@ async function Ringkasan() {
     <div className="space-y-4">
       {/* Lima kartu: satu baris utuh di layar lebar, tiga kolom di layar
           sedang (sisanya jadi dua, bukan satu kartu yatim). */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+      <section className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Kartu
           ikon="💰"
           label="Pendapatan"
@@ -699,7 +697,7 @@ async function Ringkasan() {
         {job.length === 0 ? (
           <Kosong pesan="Belum ada job dalam 7 hari terakhir." />
         ) : (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-3">
             {job.map((r) => (
               <Kartu
                 key={r.state}
