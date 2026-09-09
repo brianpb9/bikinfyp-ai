@@ -209,20 +209,31 @@ async function tegakkanAcuan(spec: VisualSpec, workDir: string, namaProduk?: str
 async function framePertamaDariStoryboard(
   spec: VisualSpec, workDir: string, jobId: string, storyboardId: string, format: string
 ): Promise<{ spec: VisualSpec; sudahAda: Set<number> }> {
-  // FORMAT BERWAJAH TIDAK MEMAKAI KARTU SEBAGAI ACUAN RENDER.
+  // FORMAT BERWAJAH: DINILAI PER KARTU, BUKAN DITOLAK SEBORONG (9 Sep 2026).
   //
-  // Kartu talking_head memang berisi wajah presenter — itu justru gunanya bagi
-  // pengguna. Tapi BytePlus menolak acuan berwajah (config.seedanceFaceRef,
-  // terdokumentasi sejak 17 Agu 2026), dan jalur lama menanganinya dengan
-  // membuat frame TANPA wajah yang dirancang khusus untuk shot itu — bukan
-  // dengan memotong wajah dari potret, yang cuma menghasilkan crop torso.
+  // Versi lama menolak SELURUH format talking_head di sini, dengan alasan yang
+  // benar: kartu talking_head berisi wajah presenter, penyedia menolak acuan
+  // berwajah, dan penyaring aman-orang menanganinya dengan MEMOTONG wajahnya —
+  // yang cuma menghasilkan crop torso, bukan frame yang dirancang untuk shot itu.
   //
-  // Jadi untuk format ini kartunya tetap ditampilkan dan tetap jadi gerbang
-  // persetujuan, tapi rendernya memakai jalur yang sudah terbukti.
-  if (format === "talking_head" && !config.seedanceFaceRef) {
-    console.log(`[storyboard] job ${jobId}: format berwajah — kartu dipakai untuk review saja, render lewat jalur lama`);
-    return { spec, sudahAda: new Set() };
-  }
+  // Yang tidak terlihat waktu itu: TIDAK SEMUA kartu talking_head berwajah.
+  // Shot pembuka hampir selalu produk atau tangan. Menolak seborong berarti
+  // shot-shot itu ikut memakai jalur lama — dan jalur lama menambal foto produk
+  // jadi 9:16 dengan pita blur, yang ditiru model sepanjang video.
+  //
+  // Terukur pada job 9789aa55 (video yang Brian tinjau 9 Sep):
+  //   detik 0  foto katalog produk di dinding beton, pita blur kiri-kanan
+  //   detik 1  potong keras ke ruang mesin — lompatan terbesar di video (MAD 0,223)
+  //
+  // Setiap video dibuka dengan foto katalog lalu menyentak. Kartu storyboard
+  // tidak punya cacat itu: Seedream menggambarnya sebagai ADEGAN, sudah 9:16
+  // penuh, dan adegannya nyambung dengan shot berikutnya.
+  //
+  // Jadi kartunya tetap dicoba, dan yang menjaga tetap penyaring aman-orang di
+  // bawah — cuma kini keputusannya per kartu: kartu yang WAJAHNYA HARUS
+  // DIPOTONG dikembalikan ke jalur lama (kekhawatiran crop-torso tetap
+  // dihormati), kartu yang memang tidak berwajah dipakai apa adanya.
+  const tolakKartuTerpotong = format === "talking_head" && !config.seedanceFaceRef;
 
   const sbRepo = new PgStoryboardRepository(config.databaseUrl);
   try {
@@ -273,6 +284,14 @@ async function framePertamaDariStoryboard(
         // Kartunya TETAP ditampilkan ke pengguna apa adanya; yang disaring
         // hanya salinan yang dikirim ke mesin video.
         const aman = await personSafeReferencePhotos([rapi], workDir);
+        // Kartu berwajah pada format berwajah: penyaring memang bisa
+        // "mengamankan" dengan memotong wajahnya, tapi hasilnya crop torso —
+        // bukan frame yang dirancang untuk shot itu. Untuk format itu, kartu
+        // yang perlu dipotong dikembalikan ke jalur lama.
+        if (tolakKartuTerpotong && aman.cropped > 0) {
+          console.log(`[storyboard] job ${jobId} shot ${sh.index}: kartu berwajah, pakai jalur lama (crop torso dihindari)`);
+          return sh;
+        }
         if (aman.safe.length === 0) {
           // Tidak ada versi aman: shot ini kembali ke jalur lama, bukan
           // menjatuhkan job. Kehilangan frame yang disetujui lebih baik

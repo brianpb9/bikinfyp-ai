@@ -223,9 +223,27 @@ const OVERCLAIM_PHRASES = ["100%", "paling bagus", "nomor 1", "nomor satu", "no 
  * PASANGANNYA dengan hasil — itu yang menjadikannya janji.
  */
 const KLAIM_TOKENS = new Set(["instan", "instant", "permanen", "memutihkan", "whitening", "mencerahkan"]);
+// KATA HASIL DIPERLUAS DI LUAR KECANTIKAN (9 Sep 2026).
+//
+// Daftar lama seluruhnya kosakata skincare: putih, bening, cerah, glowing,
+// mulus, kempes, kencang. Jadi L-23 — gerbang KERAS terhadap janji hasil
+// instan — buta terhadap seluruh kategori lain.
+//
+// Terbukti pada job 9789aa55 yang Brian tinjau. Naskahnya lolos gerbang dengan
+// kalimat:
+//
+//   "Sumpah ampuh sih, semprotin doang, karatnya langsung keangkat deh."
+//
+// Itu janji hasil seketika, persis jenis yang L-23 ada untuk menahan — dan
+// akibatnya tidak berhenti di teks. Mesin video MENURUTI naskahnya: Brian
+// melaporkan "transisi tidak realistis, tiba-tiba semprot ke mesin dan menjadi
+// bersih". Videonya tidak mengarang keajaiban itu; naskahnya yang memintanya.
+//
+// Cacatnya sekelas dengan tabel kategori: aturan ditulis dari satu kategori
+// lalu dipakai untuk semua.
 const KLAIM_POLA: RegExp[] = [
-  /\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\s+\w{0,6}\s*(putih|bening|cerah|glowing|mulus|hilang|kempes|kencang)/i,
-  /\b(pasti|dijamin)\s+(putih|bening|cerah|sembuh|hilang)/i,
+  /\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\s+\w{0,6}\s*(putih|bening|cerah|glowing|mulus|hilang|kempes|kencang|bersih|kinclong|mengkilap|kilap|keangkat|terangkat|rontok|licin|baru)/i,
+  /\b(pasti|dijamin)\s+(putih|bening|cerah|sembuh|hilang|bersih|kinclong)/i,
 ];
 
 const MEDICAL_TOKENS = new Set([

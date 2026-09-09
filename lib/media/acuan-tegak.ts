@@ -14,20 +14,37 @@
  * permintaan.
  *
  * ────────────────────────────────────────────────────────────────────────────
- * KENAPA ISIAN BURAM, BUKAN BILAH HITAM
+ * MEMOTONG DULU, MENAMBAL BELAKANGAN (9 Sep 2026 — keputusan Brian: opsi C)
  * ────────────────────────────────────────────────────────────────────────────
- * Menambal jadi 9:16 dengan bilah hitam atau putih memasukkan DUA GARIS LURUS
- * ke frame pertama — dan model video memperlakukan frame pertama sebagai
- * adegan, jadi bilah itu ikut dirender dan bertahan sepanjang video. Kami
- * pernah membayar cacat sejenis: foto referensi yang dibaca sebagai objek
- * adegan lalu ditempel jadi bidang depan raksasa.
+ * Isian buram dipilih dulu supaya tidak ada TEPI TAJAM yang bisa dibaca model
+ * sebagai benda — alasan yang masih benar. Yang tidak diantisipasi: model
+ * meniru KOMPOSISI berpitanya juga.
  *
- * Isian buram dari fotonya sendiri tidak punya tepi tajam, jadi tidak ada yang
- * bisa dibaca model sebagai benda. Ini juga cara baku aplikasi video menambal
- * rasio, jadi hasilnya terlihat wajar.
+ * Terukur pada dua job produksi:
+ *   2a040ce1  potongan produk 646x488 mendatar -> 57% frame jadi pita blur,
+ *             dan pita itu muncul di SETIAP frame video hasilnya
+ *   9789aa55  foto tegak -> pita kiri-kanan, dan frame pertama video menjadi
+ *             foto katalog yang lalu dipotong keras ke adegan di detik 1
  *
- * Produknya sendiri TIDAK dipotong: ia diciutkan utuh ke dalam bingkai tegak.
- * Memotong berarti membuang bagian produk yang mungkin justru labelnya.
+ * Akibatnya berlapis: produk mengecil (label sulit dibaca, QC-10 membaca
+ * "azza" bukan "fazza"), pita menggandakan konten kulit sehingga QC-02 salah
+ * menuduh, dan pembukaan videonya menyentak.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * KENAPA HANYA MEMOTONG TEGAK, TIDAK PERNAH MENDATAR
+ * ────────────────────────────────────────────────────────────────────────────
+ * Foto yang LEBIH TEGAK dari 9:16 bisa dipotong atas-bawah: lebar produknya
+ * utuh, dan label ada di lebarnya. Itu aman, dan itu bentuk foto yang paling
+ * sering dikirim penjual (foto ponsel).
+ *
+ * Foto yang LEBIH MENDATAR dari 9:16 hanya bisa dipadatkan dengan membuang
+ * SISI — dan sisi adalah tempat label berada. Membuang label untuk menghindari
+ * pita berarti menukar cacat yang terlihat dengan cacat yang membatalkan
+ * seluruh gunanya foto acuan. Untuk bentuk itu, pita buram tetap dipakai dan
+ * itu disengaja.
+ *
+ * Jalur terbaik tetap TIDAK MELEWATI berkas ini sama sekali: kartu storyboard
+ * digambar Seedream langsung 9:16 sebagai adegan. Lihat framePertamaDariStoryboard().
  */
 
 import fs from "node:fs";
@@ -61,20 +78,34 @@ export async function acuanTegak(berkas: string, dirKerja: string): Promise<stri
     fs.mkdirSync(dirKerja, { recursive: true });
     const keluar = path.join(dirKerja, `acuan-tegak-${path.basename(berkas).replace(/\.\w+$/, "")}.png`);
 
-    // Latar: foto yang sama, dibesarkan menutup bingkai lalu diburamkan kuat.
+    const RASIO_TARGET = LEBAR / TINGGI;
+    const rasio = lebar / tinggi;
+
+    // LEBIH TEGAK DARI 9:16 -> dipotong atas-bawah. Lebar produk utuh, jadi
+    // labelnya utuh; yang dibuang cuma langit-langit dan lantai. Tidak ada
+    // pita sama sekali, dan frame pertamanya penuh.
+    if (rasio <= RASIO_TARGET) {
+      await sharp(berkas)
+        // "attention" memilih wilayah paling berisi, bukan titik tengah buta:
+        // produk yang duduk di sepertiga bawah tidak ikut terpotong.
+        .resize(LEBAR, TINGGI, { fit: "cover", position: "attention" })
+        .png().toFile(keluar);
+      console.log(`[acuan] ${lebar}x${tinggi} -> ${LEBAR}x${TINGGI} DIPOTONG tegak (tanpa pita): ${keluar}`);
+      return keluar;
+    }
+
+    // LEBIH MENDATAR DARI 9:16 -> memadatkan berarti membuang SISI, dan sisi
+    // adalah tempat label. Di sini pita buram tetap dipakai, dan itu disengaja.
     const latar = await sharp(berkas)
       .resize(LEBAR, TINGGI, { fit: "cover", position: "center" })
       .blur(40)
       .modulate({ brightness: 0.92 })
       .toBuffer();
-
-    // Depan: produk UTUH, diciutkan sampai muat tanpa dipotong.
     const depan = await sharp(berkas)
       .resize(LEBAR, TINGGI, { fit: "inside", withoutEnlargement: false })
       .toBuffer();
-
     await sharp(latar).composite([{ input: depan, gravity: "center" }]).png().toFile(keluar);
-    console.log(`[acuan] ${lebar}x${tinggi} -> ${LEBAR}x${TINGGI} tegak: ${keluar}`);
+    console.log(`[acuan] ${lebar}x${tinggi} -> ${LEBAR}x${TINGGI} ditambal pita (foto mendatar, label di sisi): ${keluar}`);
     return keluar;
   } catch (err) {
     console.error(`[acuan] gagal menegakkan ${berkas}, dipakai apa adanya:`, (err as Error).message);
