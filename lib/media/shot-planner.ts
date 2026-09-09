@@ -1771,8 +1771,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // itu ditulis untuk kasus ADA presenter, dan di sini merugikan.
             // Ditulis positif: menyebut "nobody appears on screen" justru
             // memanggil orang ke frame yang seharusnya murni produk.
-            ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: "${dialogue}". `
-            : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: "${dialogue}". `
+            ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: {${dialogue}} `
+            : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: {${dialogue}} `
         : format === "hands_only"
         // JEDA SATU DETIK DIBUANG 4 Sep 2026.
         //
@@ -1789,14 +1789,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         //
         // Yang tersisa: pemisahan antar baris tetap diminta, tapi sebagai
         // PERGANTIAN yang wajar, bukan sebagai kesenyapan yang ditakar.
-        ? `A warm female VOICEOVER narrates in casual Indonesian at a natural conversational pace, keeping the narration flowing without long empty gaps, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
+        ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): {${dialogue}} `
         : lipSyncPresenter
           ? bukaTanpaWajah
             // Preseden job a1192101: frasa "presenter speaks to camera" membuat
             // model MENGGAMBAR wajah pembicara di shot yang harus tanpa wajah.
             // Shot pembuka memakai kalimat VO hands_only; presenter bicara ke
             // kamera baru mulai shot 2.
-            ? `A warm female VOICEOVER speaks in casual Indonesian at a natural conversational pace, keeping the narration flowing without long empty gaps, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+            ? `A warm female VOICEOVER speaks in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
             // ARAHAN AKTIF, bukan "unhurried pace with natural pauses".
             //
             // Kalimat lama secara harfiah menyuruh model berhenti bicara, dan
@@ -1816,10 +1816,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // yang persis dibersihkan hari ini karena model video merender apa
             // yang dinegasikan. "Suaranya terbawa sampai frame terakhir"
             // mengatakan hal yang sama tanpa satu pun larangan.
-            : `The presenter launches straight into the line and talks to camera in Indonesian, speaking continuously for the whole shot with her lips moving on every syllable and her voice carrying all the way to the final frame, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
+            : `The presenter launches straight into the line and talks to camera in natural Jakarta Indonesian, never in English, speaking continuously for the whole shot with her lips moving on every syllable and her voice carrying all the way to the final frame, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: {${dialogue}} `
           : bukaTanpaWajah
-          ? `A warm female VOICEOVER narrates in casual Indonesian at a natural conversational pace, keeping the narration flowing without long empty gaps, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
-          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a natural conversational pace, keeping the narration flowing without long empty gaps, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
+          ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
+          : `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, over this footage at a natural conversational pace, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: {${dialogue}} `;
     const pacing =
       format === "tvc"
         ? !dialogue.trim()
@@ -1850,7 +1850,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // dari "lupa label dialog" — sebelum ini ia menebak dari tanda kutip, dan
     // nama produk yang memang ditulis dalam kutip membuatnya salah tebak.
     const speechBerlabel = dialogue.trim()
-      ? `Indonesian dialogue, spoken exactly as written. ${speech}`
+      ? `Indonesian dialogue, spoken exactly as written. Dialogue language: Indonesian, casual Jakarta vernacular. ${speech}`
       : `No spoken words in this shot — it plays on picture and sound design alone. `;
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah

@@ -22,6 +22,30 @@ async function gambarSatuScene(
   scene: BarisScene,
   fotoProduk: Buffer | null
 ): Promise<void> {
+  // ACUAN HILANG = SCENE GAGAL, BUKAN DIGAMBAR TANPA ACUAN (Brian, 9 Sep 2026).
+  //
+  // "pastikan setiap regenerate image storyboard selalu menggunakan brand yang
+  //  sama (image sama persis bentuk dan tulisannya) dengan yang diupload
+  //  pertama kali"
+  //
+  // Foto acuan MEMANG sudah dipakai ulang di tiap regenerate — diambil sekali
+  // per storyboard dari kunciFotoProduk lalu diteruskan ke semua scene. Yang
+  // bocor adalah jalur kegagalannya: kalau berkasnya tidak terbaca dari
+  // storage, sampai hari ini kartu tetap digambar TANPA acuan. Model lalu
+  // mengarang produknya dari teks, dan yang keluar adalah barang lain dengan
+  // merek lain — persis cacat yang sudah dibayar 7 Sep (pouch hijau zaitun
+  // menjadi tas batik cokelat).
+  //
+  // Kegagalannya senyap: kartunya jadi, tampak wajar, dan baru ketahuan salah
+  // sesudah dipakai sebagai frame pertama render. Jadi scene yang seharusnya
+  // menampilkan produk kini GAGAL bila acuannya tidak ada — pengguna bisa
+  // mencoba lagi, dan itu jauh lebih murah daripada video produk yang salah.
+  if (!scene.withhold_product && !fotoProduk) {
+    throw new Error(
+      "acuan foto produk tidak terbaca — kartu tidak digambar. "
+      + "Menggambar tanpa acuan menghasilkan produk yang berbeda dari yang diunggah.",
+    );
+  }
   const gambar = await generateGambarStoryboard({
     prompt: scene.prompt,
     startState: scene.start_state,

@@ -40,6 +40,7 @@ def features(filename):
                 "area_fraction": 0.0, "solidity": 0.0, "valleys": 0, "hist": histogram(image), "eligible": False}
     contour = max(contours, key=cv2.contourArea)
     area = cv2.contourArea(contour)
+    bx, by, bw, bh = cv2.boundingRect(contour)
     hull = cv2.convexHull(contour)
     hull_area = max(cv2.contourArea(hull), 1.0)
     perimeter = max(cv2.arcLength(contour, True), 1.0)
@@ -69,7 +70,29 @@ def features(filename):
         "solidity": round(area / hull_area, 4),
         "valleys": int(min(valleys, 8)),
         "hist": histogram(image),
-        "eligible": area / float(w * h) >= 0.008,
+        # LAYAK DINILAI = MASIH MASUK AKAL SEBAGAI TANGAN (9 Sep 2026).
+        #
+        # Pemeriksaan ini bertumpu pada satu asumsi: siluet kulit TERBESAR di
+        # frame adalah tangan. Pada job 2a040ce1 asumsi itu runtuh, dan
+        # akibatnya terukur:
+        #
+        #   frame_005: "kulit" 25.8% frame, kotak batas 480x684 -> SELEBAR
+        #              PENUH gambar, 80% tingginya
+        #   sepanjang video: median lebar blob 94% frame, 17 dari 30 frame >=90%
+        #
+        # Yang terdeteksi bukan tangan melainkan ASPAL — rentang YCrCb kulit
+        # juga mencakup beige/tan: paving, kardus, kayu, pasir, beton. Diperparah
+        # oleh acuan berpita blur: konten kulit muncul tiga kali (pita atas,
+        # tengah, pita bawah) lalu menyatu jadi satu blob raksasa.
+        #
+        # Blob yang menguasai KEDUA sumbu sekaligus adalah latar, bukan tangan
+        # yang masuk frame. Tangan menyentuh satu-dua tepi; lantai menyentuh
+        # semuanya. Syaratnya dua sumbu sekaligus supaya lengan yang melintang
+        # lebar (lebar besar, tinggi kecil) tetap dinilai.
+        "eligible": (
+            area / float(w * h) >= 0.008
+            and not (bw >= 0.90 * w and bh >= 0.50 * h)
+        ),
     }
 
 
