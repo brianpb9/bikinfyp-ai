@@ -47,6 +47,62 @@ export const MAKS_REGEN_PER_SCENE = 2;
  *  benar-benar menjaga margin, karena ia tidak tumbuh bersama jumlah scene. */
 export const MAKS_REGEN_TOTAL = 4;
 
+/**
+ * Berapa banyak scene yang DIGAMBAR. Sisanya tetap jadi kartu, tapi kartunya
+ * berisi teks saja.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA DIBAKUKAN (Brian 9 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * "Apakah ini tidak menjadi boros? Kalau boros apakah anda bisa buat
+ *  standardkan seluruh proses berapapun inputnya tetap storyboardnya sama."
+ *
+ * Ia benar soal borosnya, walau sebabnya bukan jumlah foto — itu sudah diukur
+ * dan tidak berpengaruh. Yang membuatnya berbeda-beda adalah DURASI dan FORMAT:
+ *
+ *   15 dtk talking_head -> 1 scene   (wajah tidak boleh dipecah)
+ *   15 dtk hands_only   -> 3 scene
+ *   30 dtk hands_only   -> 6 scene
+ *
+ * Jadi biaya storyboard berayun 1x sampai 6x tanpa pengguna pernah memilihnya,
+ * dan video 30 detik membayar enam gambar untuk satu kali tinjau.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA 3, DAN KENAPA BUKAN "SELALU 3 KARTU"
+ * ---------------------------------------------------------------------------
+ * Kartunya TETAP satu per scene — gerbang persetujuan harus mencakup seluruh
+ * video, dan menyembunyikan tiga scene terakhir berarti pengguna menyetujui
+ * sesuatu yang tidak pernah ia lihat.
+ *
+ * Yang dibakukan adalah jumlah yang DIGAMBAR. Tiga karena itu jumlah minimum
+ * yang masih memperlihatkan busur cerita — pembuka, tengah, penutup. Scene yang
+ * tidak digambar tetap menampilkan dialog dan arahan kameranya, dan frame
+ * pertamanya kembali ke jalur lama saat render.
+ */
+export const MAKS_GAMBAR_STORYBOARD = 3;
+
+/**
+ * Scene mana yang digambar: SEBARAN, bukan tiga pertama.
+ *
+ * Tiga pertama dari enam scene memperlihatkan pembuka dan tengah saja —
+ * penutupnya, tempat CTA dan packshot hidup, tidak pernah terlihat. Padahal
+ * justru di situ kesalahan paling mahal: produk salah di detik terakhir adalah
+ * yang paling diingat penonton.
+ *
+ * Scene pertama SELALU ikut (ia frame pembuka video), sisanya diambil merata.
+ */
+export function sceneUntukDigambar(jumlahScene: number, maks = MAKS_GAMBAR_STORYBOARD): number[] {
+  if (jumlahScene <= maks) return Array.from({ length: jumlahScene }, (_, i) => i);
+  if (maks <= 1) return [0];
+  const pilih = new Set<number>([0, jumlahScene - 1]);
+  // Sisa jatah disebar di antara keduanya.
+  const sisa = maks - pilih.size;
+  for (let k = 1; k <= sisa; k++) {
+    pilih.add(Math.round((k * (jumlahScene - 1)) / (sisa + 1)));
+  }
+  return [...pilih].sort((a, b) => a - b).slice(0, maks);
+}
+
 export type StatusStoryboard = "PENDING" | "BUILDING" | "READY" | "APPROVED" | "FAILED";
 
 export interface SceneStoryboard {
@@ -141,11 +197,23 @@ export function sisaRegenerate(
   return Math.min(perScene, sisaTotal(semuaScene));
 }
 
-/** Storyboard siap disetujui hanya bila SETIAP scene punya gambar.
- *  Mengizinkan Generate dengan satu kartu kosong berarti pengguna menyetujui
- *  sesuatu yang belum pernah ia lihat. */
+/**
+ * Storyboard siap disetujui bila setiap scene YANG DIJATAH GAMBAR sudah punya
+ * gambarnya.
+ *
+ * Bukan "setiap scene": sejak jumlah gambar dibakukan (MAKS_GAMBAR_STORYBOARD),
+ * storyboard 6 scene memang cuma menggambar 3. Menuntut semuanya membuat video
+ * 30 detik tidak pernah keluar dari BUILDING — fitur yang macet total, dan
+ * macetnya di gerbang yang menahan uang.
+ *
+ * Scene yang tidak dijatah tetap jadi kartu berisi dialog dan arahan kamera,
+ * jadi pengguna tetap menyetujui SELURUH video — ia hanya tidak melihat
+ * pratinjau tergambar untuk setiap detiknya.
+ */
 export function siapDisetujui(scenes: { imageKey: string | null }[]): boolean {
-  return scenes.length > 0 && scenes.every((s) => Boolean(s.imageKey));
+  if (scenes.length === 0) return false;
+  const dijatah = new Set(sceneUntukDigambar(scenes.length));
+  return scenes.every((s, i) => !dijatah.has(i) || Boolean(s.imageKey));
 }
 
 /** Estimasi biaya gambar untuk ditampilkan sebagai transparansi internal

@@ -50,6 +50,28 @@ interface Status {
  *  detik cukup rapat untuk terasa hidup tanpa membanjiri server. */
 const JEDA_POLL_MS = 3_000;
 
+/**
+ * Terjemahkan galat provider jadi kalimat yang menyebut APA yang harus dilakukan.
+ *
+ * Kalimat umum "ada gambar yang gagal" benar tapi tidak berguna: penyebabnya
+ * menuntut tindakan yang berbeda-beda. Foto ditolak filter menuntut ganti foto;
+ * gangguan penyedia cuma menuntut sabar. Menyamakan keduanya membuat orang
+ * mengganti foto yang tidak salah — persis yang terjadi pada jalur render
+ * sebelum lib/pesan-kegagalan.ts ada.
+ */
+function pesanGagalStoryboard(err: string | null): string {
+  const t = (err ?? "").toLowerCase();
+  if (/sensitive|may contain|real person|moderation|content policy/.test(t))
+    return "Fotonya ditolak filter otomatis mesin gambar — bukan karena fotonya jelek. Coba ganti scene ini, atau pakai foto produk tanpa orang.";
+  if (/invalidparameter|invalid.*param|bad request|http 400/.test(t))
+    return "Permintaannya ditolak mesin gambar. Coba ganti scene ini; kalau tetap gagal, kabari kami.";
+  if (/timeout|etimedout|econnreset|network|fetch failed/.test(t))
+    return "Koneksi ke mesin gambar terputus. Coba ganti scene ini sebentar lagi.";
+  if (/rate|429|quota/.test(t))
+    return "Mesin gambarnya sedang penuh. Tunggu sebentar, lalu coba ganti scene ini.";
+  return "Ada gambar yang gagal dibuat. Coba ganti scene-nya, atau hapus storyboard dan ulangi.";
+}
+
 export default function StoryboardPage() {
   const router = useRouter();
   const [data, setData] = useState<Status | null>(null);
@@ -148,9 +170,20 @@ export default function StoryboardPage() {
       </header>
 
       {data.status === "FAILED" && (
-        <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
-          Ada gambar yang gagal dibuat. Kamu bisa coba ganti scene-nya, atau hapus storyboard dan ulangi.
-          Tidak ada token yang terpotong.
+        <div className="space-y-1.5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <p className="font-semibold">{pesanGagalStoryboard(data.error)}</p>
+          {/* SEBAB TEKNISNYA IKUT DITAMPILKAN, tidak disembunyikan.
+              Brian 9 Sep 2026: "tidak diinformasikan gagal disebabkan kenapa dan
+              saya tidak bisa tracing root cause-nya." Kalimat ramah saja membuat
+              orang yang MAU menelusuri kehilangan satu-satunya petunjuk, dan
+              ia toh akan bertanya — hanya dengan lebih sedikit informasi. */}
+          {data.error && (
+            <details className="text-[11px] leading-5 text-red-700/90">
+              <summary className="cursor-pointer">Lihat pesan teknisnya</summary>
+              <p className="mt-1 break-words font-mono">{data.error}</p>
+            </details>
+          )}
+          <p className="text-[11px] text-red-700/80">Tidak ada token yang terpotong.</p>
         </div>
       )}
 

@@ -92,3 +92,27 @@ test("admin punya tabnya, dan tabel tidak menyimpan badan permintaan", () => {
   assert.match(mig, /request_ringkas/, "kolom ringkasan tidak ada");
   assert.doesNotMatch(mig, /request_body|authorization|api_key/i, "ada tempat menaruh rahasia");
 });
+
+test("Seedream ikut tercatat — kegagalan gambar juga butuh root cause", () => {
+  // Brian 9 Sep 2026: "ketika regenerate apabila gagal tidak diinformasikan
+  // gagal disebabkan kenapa dan saya tidak bisa tracing root cause-nya."
+  const sr = kode("lib/media/seedream.ts");
+  assert.match(sr, /catatProvider\(/, "panggilan Seedream tidak dicatat");
+  assert.match(sr, /provider: "byteplus-seedream"/, "tidak dibedakan dari jalur video");
+  // Gagal DAN berhasil dicatat: tanpa pembanding, admin tidak bisa tahu apakah
+  // sebuah kegagalan luar biasa atau memang selalu begitu.
+  assert.match(sr, /fase: "gagal"/, "kegagalan tidak dicatat");
+  assert.match(sr, /fase: "selesai"/, "keberhasilan tidak dicatat");
+});
+
+test("layar storyboard menyebut SEBAB, bukan kalimat umum", () => {
+  // Penyebab berbeda menuntut tindakan berbeda: foto ditolak filter menuntut
+  // ganti foto; gangguan penyedia cuma menuntut sabar. Menyamakannya membuat
+  // orang mengganti foto yang tidak salah.
+  const hal = kode("app/bikin/storyboard/page.tsx");
+  assert.match(hal, /function pesanGagalStoryboard/, "tidak ada penerjemah sebab");
+  assert.match(hal, /sensitive\|may contain/, "penolakan filter tidak dikenali");
+  assert.match(hal, /Lihat pesan teknisnya/, "pesan teknis disembunyikan seluruhnya");
+  // Dan pesan teknisnya benar-benar ditampilkan, bukan cuma disimpan.
+  assert.match(hal, /\{data\.error\}/, "pesan teknis tidak pernah dirender");
+});

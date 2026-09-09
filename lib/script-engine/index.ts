@@ -690,10 +690,25 @@ export async function generateScripts(opts: {
     product.category, product.id, hookLevel,
     opts.hookFamilies, count, opts.lockHookFamily === true
   );
-  // Berurutan, BUKAN Promise.all: tiap varian memanggil LLM, dan menembakkan
-  // enam permintaan sekaligus ke satu akun akan menabrak rate limit persis
-  // saat pengguna paling menunggu. Selisih waktunya kecil dibanding satu klip
-  // video yang butuh dua sampai empat menit.
+  // PARALEL BERPAGAR — dua sekaligus, bukan berurutan dan bukan semua.
+  //
+  // Versi sebelumnya berurutan, dengan alasan yang saat itu benar: menembakkan
+  // enam permintaan sekaligus menabrak rate limit, dan "selisih waktunya kecil
+  // dibanding satu klip video yang butuh dua sampai empat menit".
+  //
+  // Premis kedua itu sudah tidak berlaku. Diukur dari audit produksi 9 Sep 2026:
+  //
+  //   premium, 1 percobaan   147 detik
+  //   premium, 3 percobaan   177 detik
+  //   standard, 1 percobaan   49 detik
+  //
+  // Dua setengah menit HANYA untuk naskah, sebelum satu klip pun dimulai — dan
+  // sejak storyboard masuk, pengguna menunggu dua tahap sebelum melihat video.
+  // Brian melaporkannya sebagai keluhan pertama.
+  //
+  // Pagarnya tetap ada, cuma tidak lagi selebar satu. Dua bersamaan memotong
+  // tunggu kira-kira setengah sementara tekanan ke akun model tetap jauh di
+  // bawah enam permintaan serentak yang dulu ditakutkan.
   //
   // IDEA STAGE — SEKALI per permintaan, bukan per varian.
   //
@@ -767,21 +782,32 @@ export async function generateScripts(opts: {
     }
   }
 
-  const hasil: GeneratedScript[] = [];
-  for (let i = 0; i < families.length; i++) {
+  const hasil: GeneratedScript[] = new Array<GeneratedScript>(families.length);
+  const satuVarian = async (i: number) => {
     // Varian ke-i memakai ide peringkat ke-i kalau ada; kalau kandidatnya lebih
     // sedikit dari variannya, sisanya memakai ide terbaik.
     // Ide dipakai HANYA kalau gate lulus. Kalau tidak, naskah ditulis tanpa
     // ide dan kandidatnya ditawarkan ke pengguna (lihat catatan di atas).
     const ideVarian = ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
-    hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
+    // Ditulis ke INDEKS-nya, bukan di-push: urutan varian menentukan pasangan
+    // ide-peringkat dan hook family. Dengan paralel, push menghasilkan urutan
+    // yang bergantung siapa selesai duluan — dan varian pertama (yang paling
+    // sering dipilih pengguna) berhenti selalu memakai ide peringkat teratas.
+    hasil[i] = await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
       ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true,
       hookLevel, ideVarian?.mechanic,
       ide?.nilai.lulus ? ide.nilai.total : null,
       ideVarian ? `${ideVarian.mechanic}/${ideVarian.format ?? "-"}` : null,
       ideVarian?.format ?? null,
-      opts.format));
+      opts.format);
+  };
+
+  const LEBAR = 2;
+  for (let mulai = 0; mulai < families.length; mulai += LEBAR) {
+    await Promise.all(
+      families.slice(mulai, mulai + LEBAR).map((_, k) => satuVarian(mulai + k)),
+    );
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.

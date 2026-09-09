@@ -32,6 +32,7 @@
  * menyalakannya karena salah salin.
  */
 import { config } from "../config";
+import { catatProvider } from "../provider-log";
 
 const MODEL = "dola-seedream-5-0-pro-260628";
 const UKURAN = "1K";
@@ -135,10 +136,14 @@ export async function generateGambarStoryboard(input: {
    * muncul di shot yang seharusnya belum memperlihatkannya.
    */
   fotoProduk?: Buffer | null;
+  /** Dipakai HANYA untuk mengaitkan baris log ke job/scene-nya. */
+  jobId?: string | null;
+  shotIndex?: number | null;
   signal?: AbortSignal;
 }): Promise<GambarStoryboard> {
   if (!config.byteplusApiKey) throw new SeedreamError("BYTEPLUS_ARK_API_KEY belum diisi.");
 
+  const mulai = Date.now();
   const res = await fetch(`${config.byteplusBaseUrl}/images/generations`, {
     method: "POST",
     headers: {
@@ -165,10 +170,30 @@ export async function generateGambarStoryboard(input: {
   try {
     jawaban = JSON.parse(teks) as JawabanArk;
   } catch {
-    throw new SeedreamError(`Jawaban Seedream bukan JSON (HTTP ${res.status}): ${teks.slice(0, 200)}`);
+    const pesan = `Jawaban Seedream bukan JSON (HTTP ${res.status}): ${teks.slice(0, 200)}`;
+    void catatProvider({
+      jobId: input.jobId ?? null, shotIndex: input.shotIndex ?? null,
+      provider: "byteplus-seedream", model: MODEL, fase: "gagal",
+      httpStatus: res.status, error: pesan, durasiMs: Date.now() - mulai,
+    });
+    throw new SeedreamError(pesan);
   }
   if (!res.ok || jawaban.error) {
-    throw new SeedreamError(`Seedream menolak (HTTP ${res.status}): ${jawaban.error?.message ?? teks.slice(0, 200)}`);
+    // GALAT PROVIDER DICATAT UTUH (sesudah disamarkan), bukan cuma dilempar.
+    //
+    // Brian 9 Sep 2026: "ketika regenerate apabila gagal tidak diinformasikan
+    // gagal disebabkan kenapa dan saya tidak bisa tracing root cause-nya."
+    // Pesan asli BytePlus-lah yang menjawab itu — "may contain sensitive
+    // information" dan "InvalidParameter" menuntut tindakan yang berbeda.
+    const pesan = `Seedream menolak (HTTP ${res.status}): ${jawaban.error?.message ?? teks.slice(0, 200)}`;
+    void catatProvider({
+      jobId: input.jobId ?? null, shotIndex: input.shotIndex ?? null,
+      provider: "byteplus-seedream", model: MODEL, fase: "gagal",
+      httpStatus: res.status, error: pesan, response: jawaban.error ?? teks,
+      durasiMs: Date.now() - mulai,
+      requestRingkas: `ukuran=${UKURAN} watermark=${WATERMARK} acuan=${input.fotoProduk ? "ya" : "tidak"}`,
+    });
+    throw new SeedreamError(pesan);
   }
 
   const item = jawaban.data?.[0];
@@ -186,6 +211,13 @@ export async function generateGambarStoryboard(input: {
   const bytes = Buffer.from(await unduh.arrayBuffer());
   if (bytes.length < 1024) throw new SeedreamError("Gambar Seedream terlalu kecil — kemungkinan bukan gambar.");
 
+  void catatProvider({
+    jobId: input.jobId ?? null, shotIndex: input.shotIndex ?? null,
+    provider: "byteplus-seedream", model: MODEL, fase: "selesai",
+    httpStatus: res.status, durasiMs: Date.now() - mulai, biayaIdr: BIAYA_GAMBAR_IDR,
+    requestRingkas: `ukuran=${UKURAN} acuan=${input.fotoProduk ? "ya" : "tidak"}`,
+    response: { bytes: bytes.length },
+  });
   return {
     bytes,
     contentType: unduh.headers.get("content-type") ?? "image/jpeg",

@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import {
   MAKS_REGEN_PER_SCENE, MAKS_REGEN_TOTAL, dialogUntukScene, sceneDariShots,
   bolehRegenerate, sisaRegenerate, siapDisetujui, sisaTotal, terpakaiTotal,
+  sceneUntukDigambar, MAKS_GAMBAR_STORYBOARD,
 } from "../lib/storyboard";
 import { promptGambar } from "../lib/media/seedream";
 import type { SegmentDraft } from "../lib/script-engine/templates";
@@ -254,4 +255,51 @@ test("kartu berwajah TIDAK dikirim ke mesin video sebagai acuan", () => {
   // Pertahanan kedua: format lain pun disaring, karena kartu bisa memuat wajah
   // tanpa diminta.
   assert.match(blok, /personSafeReferencePhotos\(\[rapi\]/, "kartu tidak disaring aman-orang");
+});
+
+// ── JUMLAH GAMBAR DIBAKUKAN (Brian 9 Sep 2026) ──────────────────────────────
+test("jumlah gambar tidak lagi mengikuti jumlah scene", () => {
+  // Diukur dari produksi: 15 dtk talking_head = 1 scene, 30 dtk hands_only = 6.
+  // Biaya storyboard berayun 1x-6x tanpa pengguna pernah memilihnya.
+  for (const n of [4, 5, 6, 10]) {
+    assert.equal(sceneUntukDigambar(n).length, MAKS_GAMBAR_STORYBOARD, `${n} scene tidak dibatasi`);
+  }
+  // Yang di bawah pagu tetap digambar semua — membatasi 2 jadi 2 tidak ada
+  // gunanya dan cuma membuang satu pratinjau.
+  for (const n of [1, 2, 3]) {
+    assert.equal(sceneUntukDigambar(n).length, n, `${n} scene ikut dipangkas`);
+  }
+});
+
+test("penutup SELALU ikut digambar, bukan tiga pertama", () => {
+  // Tiga pertama dari enam memperlihatkan pembuka dan tengah saja — penutupnya,
+  // tempat CTA dan packshot hidup, tidak pernah terlihat. Padahal di situ
+  // kesalahan paling mahal: produk salah di detik terakhir paling diingat.
+  for (const n of [4, 5, 6, 10]) {
+    const dipilih = sceneUntukDigambar(n);
+    assert.ok(dipilih.includes(0), `${n} scene: pembuka tidak digambar`);
+    assert.ok(dipilih.includes(n - 1), `${n} scene: penutup tidak digambar`);
+  }
+});
+
+test("urut, unik, dan selalu di dalam rentang", () => {
+  for (const n of [1, 2, 3, 4, 6, 9, 12]) {
+    const d = sceneUntukDigambar(n);
+    assert.deepEqual(d, [...d].sort((a, b) => a - b), `${n}: tidak urut`);
+    assert.equal(d.length, new Set(d).size, `${n}: ada indeks ganda`);
+    assert.ok(d.every((i) => i >= 0 && i < n), `${n}: indeks di luar rentang`);
+  }
+});
+
+test("SIAP dinilai dari scene yang dijatah, bukan semua scene", () => {
+  // Sejak pagu berlaku, storyboard 6 scene memang cuma menggambar 3. Menuntut
+  // semuanya membuat video 30 detik tidak pernah keluar dari BUILDING —
+  // fitur macet total, dan macetnya di gerbang yang menahan uang.
+  const enam = Array.from({ length: 6 }, (_, i) =>
+    ({ imageKey: sceneUntukDigambar(6).includes(i) ? "ada" : null }));
+  assert.equal(siapDisetujui(enam), true, "storyboard 6 scene tidak pernah siap");
+
+  // Dan kalau satu yang DIJATAH belum jadi, tetap belum siap.
+  const kurang = enam.map((s, i) => (i === sceneUntukDigambar(6)[0] ? { imageKey: null } : s));
+  assert.equal(siapDisetujui(kurang), false, "siap padahal jatahnya belum lengkap");
 });

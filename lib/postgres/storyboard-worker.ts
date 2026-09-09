@@ -8,6 +8,7 @@ import { config } from "../config";
 import { mediaStorage } from "../storage";
 import { generateGambarStoryboard, SeedreamError } from "../media/seedream";
 import { PgStoryboardRepository, type BarisScene } from "./storyboard";
+import { sceneUntukDigambar } from "../storyboard";
 
 /** Kunci objek gambar storyboard. Bukan di bawah prefiks job — storyboard bisa
  *  dihapus tanpa job pernah ada, dan sampahnya harus bisa ditemukan. */
@@ -24,6 +25,8 @@ async function gambarSatuScene(
   const gambar = await generateGambarStoryboard({
     prompt: scene.prompt,
     startState: scene.start_state,
+    jobId: storyboardId,
+    shotIndex: scene.idx,
     // Scene yang WAJIB menahan produk tidak menerima acuannya: menyertakannya
     // di situ justru memunculkan produk di shot yang seharusnya belum
     // memperlihatkannya.
@@ -56,10 +59,22 @@ export async function prosesStoryboard(storyboardId: string, idx?: number): Prom
     if (sb.status === "APPROVED") return;
 
     const semua = await repo.scenes(storyboardId);
+
+    // JUMLAH GAMBAR DIBAKUKAN, bukan mengikuti jumlah scene (Brian 9 Sep 2026).
+    //
+    // Video 30 detik punya 6 scene dan dulu membayar 6 gambar; yang 15 detik
+    // talking_head cuma 1. Biaya berayun 1x-6x tanpa pengguna pernah memilihnya.
+    //
+    // Kartunya TETAP satu per scene — gerbang persetujuan harus mencakup seluruh
+    // video. Yang dibatasi hanya yang DIGAMBAR, dan pilihannya disebar supaya
+    // penutup ikut terlihat. Lihat sceneUntukDigambar().
+    const bolehDigambar = new Set(sceneUntukDigambar(semua.length));
     const target = idx === undefined
       // Yang SUDAH punya gambar dilewati — percobaan ulang tidak membayar dua
       // kali untuk kartu yang sudah jadi.
-      ? semua.filter((s) => !s.image_key)
+      ? semua.filter((s) => !s.image_key && bolehDigambar.has(s.idx))
+      // Permintaan ganti satu scene TIDAK dibatasi pagu: pengguna hanya bisa
+      // menekan "ganti" pada kartu yang memang punya gambar.
       : semua.filter((s) => s.idx === idx);
 
     if (target.length === 0) {
@@ -92,8 +107,12 @@ export async function prosesStoryboard(storyboardId: string, idx?: number): Prom
       throw sebab;
     }
 
+    // SIAP berarti setiap scene YANG DIJATAH GAMBAR sudah punya gambarnya —
+    // bukan setiap scene. Memakai "setiap scene" membuat storyboard 6 scene
+    // tidak pernah keluar dari BUILDING sejak pagu diberlakukan.
     const setelah = await repo.scenes(storyboardId);
-    await repo.setStatus(storyboardId, setelah.every((s) => s.image_key) ? "READY" : "BUILDING", null);
+    const kurang = setelah.some((s) => bolehDigambar.has(s.idx) && !s.image_key);
+    await repo.setStatus(storyboardId, kurang ? "BUILDING" : "READY", null);
   } finally {
     await repo.close();
   }
