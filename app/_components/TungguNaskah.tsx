@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { JANJI_WAKTU } from "../../lib/janji-waktu";
 
 /**
  * Lapisan tunggu saat naskah sedang ditulis.
@@ -44,18 +45,68 @@ import { useEffect, useRef, useState } from "react";
  * persen".
  */
 
-/** Tahap yang benar-benar dikerjakan mesin, dengan detik mulainya. */
-const TAHAP: { sejakDetik: number; teks: string }[] = [
+/**
+ * Tahap yang benar-benar dikerjakan mesin, dengan detik mulainya.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * DUA JADWAL, KARENA MEMANG ADA DUA MESIN (9 Sep 2026)
+ * ────────────────────────────────────────────────────────────────────────────
+ * Daftar lama satu-satunya dan dikalibrasi untuk tier standard. Diukur di audit
+ * produksi 9 Sep 2026:
+ *
+ *   standard, 1 percobaan    49 detik
+ *   premium,  1 percobaan   147 detik
+ *   premium,  3 percobaan   177 detik
+ *
+ * Selisih ~100 detik itu Idea Stage, yang HANYA dijalankan premium ke atas.
+ * Terhadap jadwal lama, akibatnya bukan sekadar meleset — ia bercerita salah:
+ *
+ *   detik 8   "Menulis hook, demo, dan ajakan penutup" — padahal mesin masih
+ *             mengarang kandidat ide; belum satu kalimat naskah pun ditulis.
+ *   detik 35  "Skor viralnya belum cukup" — menuduh sebuah kegagalan yang
+ *             belum tentu terjadi. Pada premium, detik 35 masih Idea Stage.
+ *   detik 60  "Percobaan terakhir, sebentar lagi" — dua kebohongan sekaligus:
+ *             percobaan pertama pun biasanya belum mulai, dan yang tersisa
+ *             masih sekitar satu setengah menit. Brian melaporkan persis
+ *             kalimat ini sebagai tahap yang "sampai 2 menit lebih".
+ *
+ * Header file ini sudah memutuskan aturannya: "kalau tidak terukur, jangan
+ * dikarang". Menebak nomor percobaan dari stopwatch adalah pelanggaran aturan
+ * itu, cuma dalam bentuk kalimat alih-alih angka persen. Jadi tidak ada lagi
+ * kalimat yang menyebut percobaan keberapa — yang tidak dikirim server tidak
+ * boleh diklaim klien.
+ */
+interface Tahap { sejakDetik: number; teks: string }
+
+/** Tier tanpa Idea Stage. Naskah langsung ditulis, jadi jauh lebih cepat. */
+const TAHAP_CEPAT: Tahap[] = [
   { sejakDetik: 0, teks: "Membaca produkmu & memilih sudut cerita" },
   { sejakDetik: 8, teks: "Menulis hook, demo, dan ajakan penutup" },
   { sejakDetik: 22, teks: "Memeriksa naskah ke aturan mutu" },
-  // Di atas ~35 detik, hampir selalu karena gerbang viral menulis ulang.
-  // Menyebut alasannya mengubah "kok lama" jadi "oh, lagi dibagusin".
-  { sejakDetik: 35, teks: "Skor viralnya belum cukup — naskahnya ditulis ulang" },
-  { sejakDetik: 60, teks: "Percobaan terakhir, sebentar lagi" },
+  { sejakDetik: 40, teks: "Ada aturan mutu yang belum lolos — naskahnya ditulis ulang" },
+  { sejakDetik: 70, teks: "Masih jalan, kali ini lebih lama dari biasanya" },
 ];
 
-export function TungguNaskah({ terlihat }: { terlihat: boolean }) {
+/** Premium ke atas: Idea Stage berjalan lebih dulu dan memakan porsi terbesar. */
+const TAHAP_IDE: Tahap[] = [
+  { sejakDetik: 0, teks: "Membaca produkmu" },
+  { sejakDetik: 10, teks: "Menyusun beberapa sudut cerita yang berbeda" },
+  { sejakDetik: 45, teks: "Menilai tiap sudut, memilih yang paling kuat" },
+  { sejakDetik: 95, teks: "Menulis hook, demo, dan ajakan penutup" },
+  { sejakDetik: 125, teks: "Memeriksa naskah ke aturan mutu" },
+  { sejakDetik: 155, teks: "Ada yang belum lolos — naskahnya ditulis ulang" },
+  { sejakDetik: 200, teks: "Masih jalan, kali ini lebih lama dari biasanya" },
+];
+
+export function TungguNaskah({
+  terlihat,
+  /** Tier yang dipilih. Menentukan jadwal DAN perkiraan lama — premium
+   *  menjalankan Idea Stage, standard tidak. Default "premium" karena itu
+   *  pilihan bawaan layar /bikin/gaya: kalau salah, lebih baik salah ke arah
+   *  perkiraan yang lebih panjang daripada menjanjikan 40 detik lalu meleset
+   *  seratus detik. */
+  tier = "premium",
+}: { terlihat: boolean; tier?: string }) {
   const [detik, setDetik] = useState(0);
   const mulai = useRef<number>(0);
 
@@ -75,6 +126,9 @@ export function TungguNaskah({ terlihat }: { terlihat: boolean }) {
 
   if (!terlihat) return null;
 
+  // standard = satu-satunya tier tanpa Idea Stage.
+  const pakaiIde = tier !== "standard";
+  const TAHAP = pakaiIde ? TAHAP_IDE : TAHAP_CEPAT;
   const tahap = [...TAHAP].reverse().find((t) => detik >= t.sejakDetik) ?? TAHAP[0];
   const menit = Math.floor(detik / 60);
   const sisa = detik % 60;
@@ -100,12 +154,14 @@ export function TungguNaskah({ terlihat }: { terlihat: boolean }) {
 
         <div className="mt-3 flex items-baseline justify-between text-xs text-zinc-500">
           <span>Berjalan {jam}</span>
-          <span>Biasanya 20–40 detik</span>
+          <span>Biasanya {pakaiIde ? JANJI_WAKTU.naskahIde : JANJI_WAKTU.naskahCepat}</span>
         </div>
 
         <p className="mt-4 rounded-xl bg-amber-50 px-3 py-2 text-[11px] leading-4 text-amber-800">
-          Jangan tutup halaman ini ya. Kalau agak lama, itu karena skripnya
-          ditulis ulang sampai skor viralnya cukup.
+          Jangan tutup halaman ini ya.{" "}
+          {pakaiIde
+            ? "Paket ini menyusun beberapa sudut cerita dulu dan memilih yang terkuat — itu bagian yang paling lama."
+            : "Kalau agak lama, itu karena skripnya ditulis ulang sampai lolos aturan mutu."}
         </p>
       </div>
     </div>

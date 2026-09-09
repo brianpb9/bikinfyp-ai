@@ -20,6 +20,7 @@
  * template adalah persis cara kondisi "datar" bertahan berbulan-bulan tanpa
  * ada yang menyadarinya. Sekali lagi tidak boleh terjadi.
  */
+import { blokProdukNyata } from "./blok-produk";
 import { z } from "zod";
 import { MAKS_KATA_PER_SHOT, batasKataShot } from "./standar-10";
 import { panduanPerangkatHook } from "./hook-devices";
@@ -234,6 +235,10 @@ export function ambilObjekJson(teks: string): string {
 interface PermintaanNaskah {
   productName: string;
   productCategory: string;
+  /** Wujud produk dari foto (product_visual_desc). Lihat blok-produk.ts. */
+  productVisualDesc?: string | null;
+  /** Arahan kreatif brand. */
+  brandBrief?: string | null;
   priceIdr: number;
   durationSec: number;
   /** "affiliate" | "ads" — mengubah aturan CTA dan overlay. */
@@ -245,6 +250,10 @@ interface PermintaanNaskah {
   register: string;
   /** Petunjuk strategi dari template — BUKAN sumber kalimat. */
   hookFamily: string;
+  /** Perangkat retoris yang disarankan untuk varian ini, supaya varian-varian
+   *  satu permintaan tidak berangkat dari titik yang sama. Lihat
+   *  perangkatUntukVarian(). */
+  perangkatDisarankan?: { nama: string; penanda: string } | null;
   hookLevel: string;
   format: string;
   /** Contoh few-shot dari template-copy, kalau ada. */
@@ -405,6 +414,7 @@ function blokTugas(r: PermintaanNaskah): string {
   return [
     r.ide ? `${r.ide}\n` : "",
     `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`,
+    blokProdukNyata(r),
     `DURATION: ${r.durationSec} seconds, exactly ${jumlah} segments.`,
     `CONTENT TYPE: ${r.contentType}. ${cta}`,
     storyOs,
@@ -412,6 +422,11 @@ function blokTugas(r: PermintaanNaskah): string {
     blokAturanTerukur(r, jumlah),
     `STRATEGY HINTS (these shape the angle, they are not lines to copy):`,
     `  hook family ${r.hookFamily}, hook level ${r.hookLevel}, format ${r.format}.`,
+    r.perangkatDisarankan
+      ? `  For THIS variant, start from the "${r.perangkatDisarankan.nama}" device — markers: ${r.perangkatDisarankan.penanda}.\n` +
+        `  Another recognised device is allowed if it genuinely fits better, but do not fall back to the\n` +
+        `  most obvious one just because it is easiest to pass the check.`
+      : "",
     r.contoh ? `TONE EXAMPLE (imitate the register and rhythm, never the words):\n${r.contoh}` : "",
     perbaikan,
     "",

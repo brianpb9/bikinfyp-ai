@@ -125,6 +125,7 @@ export async function POST(req: Request) {
     const run = (name: string) => generateScripts({
       product: {
         id: product.id, name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        productVisualDesc: product.product_visual_desc, brandBrief: product.brand_brief,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,

@@ -24,6 +24,17 @@ export const JANJI_WAKTU = {
   klipTunggal: "2–5 menit",
   /** Estimasi sisa saat fase akhir alur satu-klip. */
   sisaKlip: "1–2 menit",
+  /** NASKAH, bukan render — lapisan tunggu di /bikin/gaya.
+   *
+   *  Dua angka karena memang ada dua mesin. Diukur di audit produksi 9 Sep
+   *  2026: standard 49 detik (1 percobaan), premium 147 detik (1 percobaan) /
+   *  177 detik (3 percobaan). Selisihnya Idea Stage, yang hanya dijalankan
+   *  premium ke atas.
+   *
+   *  Sampai hari itu satu-satunya janji adalah "20–40 detik" untuk semua
+   *  orang — jadi penantian premium yang NORMAL terbaca sebagai kerusakan. */
+  naskahCepat: "40–60 detik",
+  naskahIde: "2–3 menit",
   /** BUKAN waktu render: jeda settlement pembayaran Duitku. Ditaruh di sini
    * hanya supaya SEMUA janji menit punya satu rumah yang dijaga tes. */
   tungguPembayaran: "1–2 menit",

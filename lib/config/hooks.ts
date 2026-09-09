@@ -88,6 +88,7 @@ export const BOLD_HOOK_PRIORITY: HookCode[] = ["H1", "H5", "H10", "H9", "H2", "H
  * hanya urutannya. Koefisien global, belum per-kategori (n belum cukup) —
  * re-rank ulang saat checkpoint per-kategori tersedia. */
 export const CATEGORY_HOOK_PRIORITY: Record<string, HookCode[]> = {
+  otomotif: ["H2", "H11", "H6", "H1", "H7", "H12", "H15"],
   beauty: ["H9", "H4", "H3", "H1", "H14", "H5", "H16"],
   fashion: ["H13", "H4", "H9", "H1", "H8", "H5", "H10"],
   muslim_fashion: ["H13", "H4", "H1", "H3", "H8", "H10"],
@@ -101,6 +102,7 @@ export const CATEGORY_HOOK_PRIORITY: Record<string, HookCode[]> = {
 
 /** Kata benda kategori yang dipakai di template (bukan nama produk). */
 export const CATEGORY_NOUN: Record<string, string> = {
+  otomotif: "perawatan kendaraan",
   beauty: "skincare",
   fashion: "baju",
   muslim_fashion: "hijab",
@@ -114,6 +116,7 @@ export const CATEGORY_NOUN: Record<string, string> = {
 
 /** Keluhan khas per kategori (untuk H2/H3/H5). */
 export const CATEGORY_PAIN: Record<string, string> = {
+  otomotif: "kusam dan buluknya",
   beauty: "kusamnya",
   fashion: "gerahnya",
   muslim_fashion: "gerahnya",
@@ -127,6 +130,7 @@ export const CATEGORY_PAIN: Record<string, string> = {
 
 /** Kata sifat bukti konkret per kategori (untuk segmen demo). */
 export const CATEGORY_PROOF: Record<string, string> = {
+  otomotif: "hasil kilapnya",
   beauty: "teksturnya",
   fashion: "bahannya",
   muslim_fashion: "bahannya",

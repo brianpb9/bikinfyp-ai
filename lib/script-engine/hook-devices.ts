@@ -135,7 +135,16 @@ export const POLA_PERANGKAT: Record<string, RegExp> = {
   // Penanda "sudah coba banyak, baru ini yang berhasil". Ditambahkan setelah
   // contoh perangkat penemuan-setelah-gagal tidak dikenali polanya sendiri —
   // perangkatnya nyata, pengukurnya yang belum lengkap.
-  "penemuan setelah gagal": /\bakhirnya\b|\bganti-ganti\b|\bberkali-kali\b|\bbaru (yang )?ini\b/i,
+  // DIPERLUAS 9 Sep 2026. Empat penanda saja, dan penulis diberi tahu keempatnya
+  // di blok aturan, membuat gerbang L-19 berubah jadi gerbang KATA KUNCI: jalan
+  // termurah untuk lolos adalah menempelkan "ganti-ganti" lalu "baru ini".
+  // Brian mengirim dua hook berturut-turut yang membuktikannya —
+  //   "gue ganti-ganti cat rambut, baru ini yang benaran terasa beda"
+  //   "gue ganti-ganti cat rambut terus, baru ini yang benaran nempel"
+  // — kerangka yang sama persis, dua kali. Monotoninya bukan kekurangan model;
+  // ia dihasilkan oleh pengukur yang cuma mengenali satu cara bicara.
+  "penemuan setelah gagal":
+    /\bakhirnya\b|\bganti-ganti\b|\bberkali-kali\b|\bbaru (yang )?ini\b|\bbolak-balik\b|\bnyobain?\b|\bpernah coba\b|\bkapok\b|\b(hampir )?nyerah\b|\bmenyerah\b|\bcuma ini\b|\bbaru nemu\b|\bsatu-satunya yang\b/i,
   // TIGA POLA DI BAWAH ditambahkan sebelum L-19 dijadikan gate keras — urutan
   // yang diminta reviewer A4: lengkapi dulu pengukurnya, baru dikeraskan.
   // Ketiganya perangkat NYATA yang dipakai hook produksi dan sama sekali tidak
@@ -184,7 +193,8 @@ export const PENANDA_PERANGKAT: Record<string, string> = {
   superlatif: '"paling", "terbaik", "termurah", "banget"',
   "pengakuan pribadi": '"aku", "gue", "saya", "kirain", "ternyata"',
   perbandingan: '"kayak", "mirip", "setara", "mendekati", "dibanding"',
-  "penemuan setelah gagal": '"akhirnya", "ganti-ganti", "berkali-kali", "baru ini"',
+  "penemuan setelah gagal":
+    '"akhirnya", "ganti-ganti", "berkali-kali", "baru ini", "bolak-balik", "nyobain", "kapok", "nyerah", "cuma ini", "baru nemu", "satu-satunya yang"',
   kejutan: '"tiba-tiba", "baru saja", "mendadak", "kaget"',
   "sudut mustahil": '"dari dalam", "dari balik", "dari atas", "sedekat ini"',
   "ajakan lihat": '"coba tebak", "perhatiin", "lihat dulu"',
@@ -202,6 +212,30 @@ export function panduanPerangkatHook(): string {
     "HOOK DEVICE — the first segment MUST use at least one recognisable rhetorical device.",
     "  A flat description of the product is rejected. Pick ONE of these and make it audible:",
     ...baris,
-    "  This is measured mechanically on the hook line, so the marker must actually appear in it.",
+    "  This is measured mechanically on the hook line, so one marker from the chosen device",
+    "  must actually appear in it — but the marker is the ONLY thing that is fixed.",
+    "  VARY EVERYTHING ELSE. Each device lists several markers on purpose: pick a different",
+    "  one than the most obvious, and build your own sentence around it. Reusing the same",
+    "  opening skeleton (same marker, same word order, same clause shape) across scripts is",
+    "  a defect, even when every individual script passes.",
   ].join("\n");
+}
+
+/**
+ * Perangkat yang DISARANKAN untuk varian ke-i, beserta penandanya.
+ *
+ * Panduan lengkap hidup di blok aturan yang di-cache dan karena itu identik
+ * untuk setiap varian — jadi ketiga varian melihat daftar yang sama, dalam
+ * urutan yang sama, dan wajar saja kalau ketiganya memilih baris pertama yang
+ * paling jelas. Saran ini dikirim lewat blok TUGAS (per permintaan, tidak
+ * di-cache), sehingga varian 1, 2, dan 3 berangkat dari perangkat berbeda.
+ *
+ * DISARANKAN, BUKAN DIWAJIBKAN: gerbang L-19 tetap menerima perangkat apa pun
+ * yang dikenali. Memaksa akan menukar satu monotoni dengan monotoni lain —
+ * yang dituju adalah titik berangkat yang berbeda, bukan kandang baru.
+ */
+export function perangkatUntukVarian(variantIndex: number): { nama: string; penanda: string } {
+  const daftar = Object.entries(PENANDA_PERANGKAT);
+  const [nama, penanda] = daftar[((variantIndex % daftar.length) + daftar.length) % daftar.length];
+  return { nama, penanda };
 }

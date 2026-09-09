@@ -1,3 +1,4 @@
+import { perangkatUntukVarian } from "./hook-devices";
 import { HARI_RIWAYAT, riwayatMekanikMerek } from "./riwayat-mekanik";
 import type { IdMekanik } from "./idea-mechanics";
 // Mesin skrip (FSD F-02): hasilkan 3 varian skrip 15 dtk dari 3 keluarga hook berbeda.
@@ -41,6 +42,16 @@ export interface ProductInput {
   category: string;
   /** URL sumber produk (dari link extract) — menentukan istilah keranjang di CTA. */
   sourceUrl?: string | null;
+  /**
+   * WUJUD produk, hasil Gemini vision atas fotonya. Sampai 9 Sep 2026 kolom ini
+   * hanya dipakai shot-planner (supaya model video MENGGAMBAR produk yang
+   * benar) dan tidak pernah sampai ke penulis naskah — jadi videonya benar
+   * sementara naskahnya bicara soal produk lain. Lihat blokProdukNyata().
+   */
+  productVisualDesc?: string | null;
+  /** Arahan kreatif bebas dari brand. Sama seperti di atas: sudah dipakai
+   *  shot-planner, belum pernah sampai ke penulis. */
+  brandBrief?: string | null;
   /** Add-on Promo & Urgency (lib/promo.ts) — opsional semua. */
   promoPriceBeforeIdr?: number | null;
   promoEndsAt?: string | null;
@@ -181,16 +192,19 @@ const MAX_REGEN = 2; // FSD F-02.3: regenerate maksimal 2x
 const MAKS_PERBAIKAN_LLM = 3;
 
 const CATEGORY_SPACE: Record<string, string> = {
+  otomotif: "Garasi",
   beauty: "Meja skincare", fashion: "Isi lemari", muslim_fashion: "Isi lemari",
   home: "Dapur", kitchen: "Dapur", gadget: "Meja kerja", food: "Stok cemilan",
   kids: "Ruang main", default: "Rumah",
 };
 const CATEGORY_AKTIVITAS: Record<string, string> = {
+  otomotif: "cuci kendaraan tiap minggu",
   beauty: "skincare-an malem", fashion: "mix and match baju", muslim_fashion: "styling hijab",
   home: "beres-beres rumah", kitchen: "masak tiap hari", gadget: "ganti-ganti aksesori hp",
   food: "jajan online", kids: "belanja kebutuhan anak", default: "belanja online",
 };
 const CATEGORY_IDENTITAS: Record<string, string> = {
+  otomotif: "yang sayang kendaraannya",
   beauty: "tim glowing", fashion: "anak ootd", muslim_fashion: "anak hijab",
   home: "tim rumah rapi", kitchen: "tim masak rumahan", gadget: "anak gadget",
   food: "anak jajan", kids: "bunda kekinian", default: "anak tiktok",
@@ -482,8 +496,10 @@ async function generateOne(
       try {
         const segs = await tulisNaskah({
           productName: product.name, productCategory: product.category,
+          productVisualDesc: product.productVisualDesc, brandBrief: product.brandBrief,
           priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
           register, hookFamily: family, hookLevel: "normal", format,
+          perangkatDisarankan: perangkatUntukVarian(variantIndex),
           // Penutup TVC menyebut MEREK, bukan seluruh nama SKU — lihat T-01.
           merek: tokenMerek(product.name),
           contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
@@ -749,6 +765,7 @@ export async function generateScripts(opts: {
     ide = await pilihIde({
       mekanikBaruDipakai,
         productName: product.name, productCategory: product.category,
+        productVisualDesc: product.productVisualDesc, brandBrief: product.brandBrief,
         kategoriNoun: pick(product.category, CATEGORY_NOUN),
         priceIdr: product.price_idr ?? 0, durationSec,
         contentType: opts.contentType ?? "affiliate", register,
@@ -803,7 +820,16 @@ export async function generateScripts(opts: {
       opts.format);
   };
 
-  const LEBAR = 2;
+  // LEBAR 2 -> 3 (9 Sep 2026). Dengan tiga varian, lebar dua berarti DUA
+  // gelombang: dua varian bersamaan, lalu satu varian sendirian memakai satu
+  // dari dua jalur yang tersedia. Gelombang kedua itu membeli satu naskah
+  // dengan harga waktu satu gelombang penuh.
+  //
+  // Tiga sekaligus menyelesaikan permintaan retail bawaan dalam SATU gelombang.
+  // Pagarnya tetap ada dan masih di bawah enam permintaan serentak yang dulu
+  // ditakutkan; dashboard brand yang meminta 6 varian tetap terbagi jadi dua
+  // gelombang, bukan enam sekaligus.
+  const LEBAR = 3;
   for (let mulai = 0; mulai < families.length; mulai += LEBAR) {
     await Promise.all(
       families.slice(mulai, mulai + LEBAR).map((_, k) => satuVarian(mulai + k)),

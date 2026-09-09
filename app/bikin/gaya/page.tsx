@@ -226,7 +226,7 @@ export default function GayaPage() {
           tulisan di tombol. Pada koneksi lambat itu tak bisa dibedakan dari
           aplikasi menggantung — dan gerbang viral membuat penantian terburuk
           jadi tiga kali lipat. Lihat catatan di TungguNaskah.tsx. */}
-      <TungguNaskah terlihat={loading} />
+      <TungguNaskah terlihat={loading} tier={tier} />
       <FlowHeader title="Gaya Video" step={2} />
       <div className="space-y-7 px-4">
         <section className="space-y-3">

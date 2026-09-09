@@ -37,7 +37,7 @@ test("halaman buat-skrip benar-benar merender lapisan tunggu, terikat ke loading
   const halaman = baca("app/bikin/gaya/page.tsx");
   assert.match(halaman, /import \{ TungguNaskah \}/, "komponennya tidak diimpor");
   assert.match(
-    halaman, /<TungguNaskah terlihat=\{loading\} \/>/,
+    halaman, /<TungguNaskah terlihat=\{loading\}/,
     "lapisan tunggu tidak terikat ke keadaan yang sama dengan yang mematikan tombol",
   );
   // Ia harus muncul pada permintaan yang MEMANG lama, yaitu generate().
@@ -51,7 +51,14 @@ test("indikatornya tidak mengarang persentase", () => {
   assert.doesNotMatch(kode, /setPersen|persen\b/, "ada penghitung persentase karangan");
   // Yang boleh ditampilkan hanyalah yang benar-benar diketahui.
   assert.match(komponen, /Berjalan \{jam\}/, "waktu berjalan yang sungguhan tidak ditampilkan");
-  assert.match(komponen, /Biasanya 20–40 detik/, "perkiraan lama tidak disebut");
+  // PERKIRAANNYA SEKARANG IKUT TIER (9 Sep 2026). "20–40 detik" dulu berlaku
+  // untuk semua orang, padahal premium terukur 147 detik — jadi janji itulah
+  // yang membuat penantian normal terasa seperti kerusakan. Yang diuji kini
+  // bukan satu kalimat tetap, melainkan bahwa KEDUA perkiraan disebut dan
+  // dipilih oleh tier.
+  assert.match(komponen, /JANJI_WAKTU\.naskahIde/, "perkiraan premium tidak disebut");
+  assert.match(komponen, /JANJI_WAKTU\.naskahCepat/, "perkiraan standard tidak disebut");
+  assert.match(kode, /pakaiIde \?/, "perkiraan tidak dipilih berdasarkan tier");
 });
 
 test("waktu dihitung dari selisih jam, bukan dengan menambah sendiri tiap detik", () => {

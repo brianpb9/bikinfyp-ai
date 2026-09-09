@@ -14,6 +14,7 @@
  * ide adalah keputusan paling menentukan di seluruh pipeline dan paling jarang
  * diulang, jadi di sinilah anggaran model paling layak dibelanjakan.
  */
+import { blokProdukNyata } from "./blok-produk";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -249,6 +250,10 @@ export function biayaKosong(): AkumulasiBiaya {
 export interface PermintaanIde {
   productName: string;
   productCategory: string;
+  /** Wujud produk dari foto. Ide adalah keputusan paling menentukan di seluruh
+   *  pipeline — kalau ia salah paham produknya, semua varian ikut salah. */
+  productVisualDesc?: string | null;
+  brandBrief?: string | null;
   /** Kata benda kategori, mis. "skincare" — dipakai menilai keumuman one-liner. */
   kategoriNoun: string;
   priceIdr: number;
@@ -390,6 +395,7 @@ function blokTugasIde(r: PermintaanIde): string {
       ];
   return [
     `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah.`,
+    blokProdukNyata(r),
     `VIDEO: ${r.durationSec} seconds, ${r.contentType}, register ${r.register}.`,
     ...ruangIde,
     r.klaim?.length ? `ALLOWED CLAIMS (nothing beyond these): ${r.klaim.join("; ")}` : "ALLOWED CLAIMS: none.",
