@@ -6,6 +6,7 @@ import { config } from "@/lib/config";
 import { TombolStatusOrg } from "./_TombolStatusOrg";
 import { TombolTokenOrg } from "./_TombolTokenOrg";
 import { createSignedUrl } from "@/lib/signed-url";
+import { uraikanGalat, golonganGalat } from "@/lib/urai-galat";
 
 // DASHBOARD ADMIN — BACA SAJA.
 //
@@ -536,10 +537,39 @@ async function Provider() {
               <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-zinc-600">
                 {r.cost_actual_idr ? rupiah(r.cost_actual_idr) : "—"}
               </td>
+              {/* GALAT DIURAI, BUKAN DIPOTONG.
+                  Dipotong 180 karakter, kalimat yang menjelaskan sebabnya
+                  terpotong tepat di tengah ("may contain sensiti") dan yang
+                  tersisa di layar cuma pembungkus kita sendiri. Sekarang
+                  golongannya di depan, intinya di bawahnya, rantai pembungkus
+                  dan teks utuh di balik "urai". */}
               <td className="px-2 py-1.5 text-[10px]">
-                {sebab(r.alasan) && <div className="text-red-700">{sebab(r.alasan)!.slice(0, 180)}</div>}
-                {r.qc_gagal && <div className="text-amber-700">QC gagal: {r.qc_gagal}</div>}
-                {!sebab(r.alasan) && !r.qc_gagal && <span className="text-zinc-400">—</span>}
+                {(() => {
+                  const mentah = sebab(r.alasan);
+                  const u = uraikanGalat(mentah);
+                  if (!u && !r.qc_gagal) return <span className="text-zinc-400">—</span>;
+                  return (
+                    <>
+                      {u && (
+                        <>
+                          <span className="mr-1 rounded bg-red-100 px-1.5 py-0.5 font-bold text-red-800">
+                            {golonganGalat(u.inti)}
+                          </span>
+                          {u.httpStatus && <span className="text-zinc-500">HTTP {u.httpStatus}</span>}
+                          <div className="mt-0.5 text-red-700">{u.inti.slice(0, 260)}</div>
+                          <details className="mt-0.5 text-zinc-500">
+                            <summary className="cursor-pointer">urai</summary>
+                            {u.lapisan.length > 0 && (
+                              <div className="mt-0.5">rantai: {u.lapisan.join(" → ")}</div>
+                            )}
+                            <p className="mt-0.5 break-words font-mono text-[9px] text-zinc-600">{mentah}</p>
+                          </details>
+                        </>
+                      )}
+                      {r.qc_gagal && <div className="mt-0.5 text-amber-700">QC jatuh: {r.qc_gagal}</div>}
+                    </>
+                  );
+                })()}
               </td>
               <td className="px-2 py-1.5">
                 {/* PRATINJAU HASIL. Tanpa ini, "berhasil" cuma label — dan label

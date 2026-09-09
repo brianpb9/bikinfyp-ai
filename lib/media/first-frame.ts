@@ -24,6 +24,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config";
+import { catatProvider } from "../provider-log";
 
 const MODEL = "gemini-3.1-flash-image";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -38,6 +39,9 @@ const MIME: Record<string, string> = {
 };
 
 export interface FirstFrameInput {
+  /** Untuk mengaitkan baris log ke job/scene-nya. Tidak memengaruhi gambar. */
+  jobId?: string | null;
+  shotIndex?: number | null;
   /** Foto produk asli brand — dikirim sebagai referensi identitas produk. */
   productPhotoPath: string;
   /** Prompt shot dari perencana. Yang menentukan komposisi dan tempatnya. */
@@ -115,6 +119,16 @@ export async function generateFirstFrame(input: FirstFrameInput): Promise<{ path
 
   fs.mkdirSync(path.dirname(input.outPath), { recursive: true });
   fs.writeFileSync(input.outPath, Buffer.from(b64, "base64"));
+  // Gemini SINKRON dan tidak memberi task id — kolomnya kosong, dan itu bukan
+  // kelalaian melainkan sifat API-nya. Tetap dicatat karena ia panggilan
+  // BERBAYAR: log yang melewatkannya membuat total biaya di dasbor tidak pernah
+  // cocok dengan tagihan.
+  void catatProvider({
+    jobId: input.jobId ?? null, shotIndex: input.shotIndex ?? null,
+    provider: "gemini-image", model: MODEL, fase: "selesai",
+    biayaIdr: BIAYA_FRAME_IDR,
+    requestRingkas: `frame pertama · ratio=${input.ratio ?? "9:16"} tahanProduk=${input.withholdProduct === true}`,
+  });
   return { path: input.outPath, biayaIdr: BIAYA_FRAME_IDR };
 }
 

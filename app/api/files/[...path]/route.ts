@@ -6,9 +6,10 @@ import { verifySignedUrl } from "@/lib/signed-url";
 import { mediaStorage } from "@/lib/storage";
 import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import pg from "pg";
 import { getPool } from "@/lib/postgres/pool";
+import { apakahAdmin } from "@/lib/admin-auth";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -61,6 +62,21 @@ function contentDisposition(url: URL, relPath: string): Record<string, string> {
   const base = raw.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
   const name = (base || "video") + (base.toLowerCase().endsWith(ext) ? "" : ext);
   return { "content-disposition": `attachment; filename="${name}"` };
+}
+
+/**
+ * Catat pembukaan berkas oleh admin.
+ *
+ * Menelan galatnya sendiri: gagal mencatat tidak boleh menghalangi admin
+ * memeriksa hasil — tapi ia harus terlihat di log server, supaya kalau
+ * pencatatannya rusak itu ketahuan sebelum jejaknya hilang berbulan-bulan.
+ */
+async function catatAksesAdmin(adminId: string, relPath: string): Promise<void> {
+  try {
+    if (postgresRuntimeEnabled()) await pgAudit(adminId, "admin.buka_berkas", "files", relPath, {});
+  } catch (e) {
+    console.error("[files] gagal mencatat akses admin:", e instanceof Error ? e.message : e);
+  }
 }
 
 /** A valid HMAC link is a bearer capability, never proof of account ownership. */
@@ -157,7 +173,22 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
   }
 
   const user = await getAuthUser(req);
-  if (!user || !(await fileBelongsToUser(relPath, user.id))) {
+
+  // ADMIN BOLEH MEMBUKA BERKAS MILIK SIAPA PUN — dan itu DICATAT.
+  //
+  // Brian 9 Sep 2026: tombol pratinjau di /admin menjawab FILE_FORBIDDEN,
+  // karena penjaga ini menuntut kepemilikan dan admin bukan pemiliknya. Dasbor
+  // yang menampilkan tombol lalu menolak tombolnya sendiri lebih buruk daripada
+  // tidak punya tombol.
+  //
+  // Ini pelonggaran keamanan yang nyata, jadi dua syaratnya dipegang keras:
+  // hanya email di ADMIN_EMAILS, dan SETIAP pembukaan ditulis ke audit_log.
+  // Kewenangan yang tidak meninggalkan jejak adalah kewenangan yang tidak bisa
+  // ditinjau — dan yang dibuka di sini foto produk serta video pelanggan.
+  const admin = apakahAdmin(user?.email);
+  if (user && admin) {
+    void catatAksesAdmin(user.id, relPath);
+  } else if (!user || !(await fileBelongsToUser(relPath, user.id))) {
     // Do not distinguish a leaked/foreign link from a missing session.
     return Response.json({ code: "FILE_FORBIDDEN", message_id: "File ini bukan milik akun kamu." }, { status: 403 });
   }
