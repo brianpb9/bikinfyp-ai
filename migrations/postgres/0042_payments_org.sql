@@ -1,0 +1,35 @@
+-- PEMBAYARAN MILIK ORGANISASI — brand membeli jatah video sendiri dari dashboard.
+--
+-- ---------------------------------------------------------------------------
+-- KENAPA
+-- ---------------------------------------------------------------------------
+-- Brian 9 Sep 2026: "untuk level organisasi mekanisme topup quantity per
+-- kategori video dapat dilakukan dari dashboard. Saat ini topup-nya masih
+-- berupa rupiah."
+--
+-- Migrasi 0041 sudah memindahkan DOMPET brand ke jatah per jenis, tapi
+-- pembeliannya belum: halaman /dashboard/credits masih menjual "token" dengan
+-- kurs 1 token = Rp1. Jadi brand memegang jatah video, membelinya dalam rupiah,
+-- dan harus menerjemahkan sendiri di kepala.
+--
+-- ---------------------------------------------------------------------------
+-- KENAPA KOLOM DI payments, BUKAN TABEL PEMBAYARAN KEDUA
+-- ---------------------------------------------------------------------------
+-- Callback Duitku sudah punya satu jalur penyelesaian yang teruji: idempoten,
+-- urut, dan menolak menebak isi pesanan. Tabel kedua berarti menyalin seluruh
+-- jalur itu — termasuk semua pelajaran yang tertulis di komentarnya — dan
+-- menunggu salah satu salinan menyimpang.
+--
+-- Dengan satu kolom, webhook cukup bertanya "dompet siapa?" pada baris yang
+-- sudah ia baca.
+--
+-- NULL = pembayaran retail, persis seperti credit_ledger dan kredit_video.
+-- Baris lama tidak perlu disentuh dan tidak berubah artinya.
+ALTER TABLE payments ADD COLUMN org_id TEXT REFERENCES organizations(id);
+CREATE INDEX idx_payments_org ON payments(org_id) WHERE org_id IS NOT NULL;
+
+-- Indeks unik kredit_video untuk tipe 'beli' menjaga idempotensi callback:
+-- (payment_id, jenis). Ia sudah ada dan TIDAK berubah — dompet mana yang
+-- dikreditkan ditentukan payments.org_id, bukan kunci idempotensinya. Kalau
+-- kuncinya ikut diubah, callback ulangan untuk pembayaran lama akan lolos dan
+-- memberi jatah dua kali.

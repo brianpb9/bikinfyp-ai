@@ -88,3 +88,70 @@ test("dashboard brand mengembalikan sisa per jenis", () => {
   const r = kode("app/api/dashboard/org/route.ts");
   assert.match(r, /sisa_video/, "sisa per jenis tidak dikirim ke layar");
 });
+
+// ── BRAND MEMBELI JATAH SENDIRI DARI DASHBOARD ──────────────────────────────
+test("dompet penerima ditentukan SERVER dari keanggotaan, bukan dikirim klien", () => {
+  // Kalau org_id boleh datang dari body, siapa pun yang tahu sebuah id
+  // organisasi bisa mengarahkan pembelian orang lain ke dompetnya sendiri.
+  const r = kode("app/api/kredit-video/checkout/route.ts");
+  assert.match(r, /async function orgUntukPembelian/, "penentu dompet tidak ada");
+  assert.match(r, /FROM org_members m JOIN organizations o/, "dompet tidak dibaca dari keanggotaan");
+  assert.doesNotMatch(r, /body\.org_id/, "org_id diterima dari klien");
+
+  const ui = kode("app/dashboard/_components/BeliJatahOrg.tsx");
+  assert.doesNotMatch(ui, /org_id/, "klien mengirim org_id");
+});
+
+test("pembelian org hanya untuk jatah satuan, bukan langganan", () => {
+  // Paket langganan dijual per pengguna retail dan jalur pemakaiannya untuk org
+  // memang belum ada — mengizinkannya berarti menjual barang yang tidak bisa
+  // dipakai.
+  const r = kode("app/api/kredit-video/checkout/route.ts");
+  assert.match(r, /orgId && jenisPesanan !== "topup_video"/, "langganan org tidak ditolak");
+});
+
+test("webhook mengkreditkan dompet yang TERCATAT DI PEMBAYARAN", () => {
+  // Callback Duitku tahu order-nya, bukan siapa dompetnya. Menebak di sana
+  // berarti suatu hari brand membayar lalu jatahnya mendarat di kantong pribadi
+  // orang yang menekan tombolnya.
+  const kv = kode("lib/postgres/kredit-video.ts");
+  const i = kv.indexOf("async kreditkanTopup");
+  const blok = kv.slice(i, i + 1400);
+  assert.match(blok, /SELECT org_id FROM payments/, "dompet tidak dibaca dari payments");
+  assert.ok(blok.indexOf("SELECT org_id FROM payments") < blok.indexOf("INSERT INTO kredit_video"),
+    "dompet dibaca setelah menulis jatah");
+
+  // HASILNYA HARUS DIPAKAI, bukan sekadar dikueri.
+  //
+  // Versi pertama tes ini cuma memastikan kuerinya ADA. Mutasi yang mengganti
+  // `const orgId = bayar.rows[0]?.org_id` jadi `const orgId = null` lolos
+  // begitu saja: kuerinya tetap jalan, hasilnya dibuang, dan setiap pembelian
+  // brand mendarat di dompet retail tanpa satu pun tanda.
+  assert.match(blok, /const orgId = bayar\.rows\[0\]\?\.org_id/, "hasil kueri dompet tidak dipakai");
+  assert.doesNotMatch(blok, /const orgId = null/, "dompet dipaku null");
+  // Dan nilainya benar-benar sampai ke baris yang ditulis.
+  assert.match(blok, /\[this\.uuid\(\), userId, orgId,/, "orgId tidak ikut ditulis ke baris jatah");
+});
+
+test("idempotensi callback TIDAK ikut berubah", () => {
+  // Kunci uniknya (payment_id, jenis). Kalau ikut diubah saat menambah org_id,
+  // callback ulangan untuk pembayaran LAMA lolos dan memberi jatah dua kali.
+  const kv = kode("lib/postgres/kredit-video.ts");
+  const i = kv.indexOf("async kreditkanTopup");
+  assert.match(kv.slice(i, i + 1400), /ON CONFLICT DO NOTHING/, "penjaga idempotensi hilang");
+});
+
+test("halaman kredit brand menjual JUMLAH VIDEO, bukan token rupiah", () => {
+  const hal = kode("app/dashboard/(app)/credits/page.tsx");
+  assert.match(hal, /BeliJatahOrg/, "komponen beli jatah tidak dipasang");
+  assert.doesNotMatch(hal, /CreditPlans/, "masih memasang penjual token rupiah");
+  assert.doesNotMatch(hal, /1 token = Rp1/, "masih menyebut kurs token");
+  assert.match(hal, /Sisa jatah organisasi/, "saldo tidak ditampilkan sebagai jatah");
+});
+
+test("total disebut sebelum tombol bayar", () => {
+  // Yang menekan tombol harus sudah tahu angkanya, bukan menemukannya di
+  // halaman gateway.
+  const ui = kode("app/dashboard/_components/BeliJatahOrg.tsx");
+  assert.ok(ui.indexOf("rupiah(total)") < ui.indexOf("Lanjut bayar"), "total muncul setelah tombol");
+});

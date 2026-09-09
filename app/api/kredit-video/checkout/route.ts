@@ -22,6 +22,7 @@ import { PesananTidakSah, rapikanItem, totalTagihan, type ItemTopup } from "@/li
 import { KUALITAS } from "@/lib/kualitas-video";
 import { emailOrderDibuat } from "@/lib/email-pembayaran";
 import { pastikanSegar } from "@/lib/kredensial";
+import { dariBrand } from "@/lib/asal-brand";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,8 +35,31 @@ export const dynamic = "force-dynamic";
  * ada invoice hidup di sisi mereka yang tidak dikenal sistem ini — dan
  * callback-nya nanti tidak menemukan apa pun untuk dikreditkan.
  */
+/**
+ * Organisasi yang dompetnya dipakai, atau null untuk retail.
+ *
+ * Dibaca dari keanggotaan aktif, dan hanya bila permintaannya memang datang
+ * dari host dashboard brand. Pengguna yang kebetulan anggota sebuah organisasi
+ * tetap membeli untuk DIRINYA SENDIRI saat berbelanja di aplikasi retail —
+ * kalau tidak, orang yang ikut satu brand tidak akan pernah bisa membeli jatah
+ * pribadinya lagi.
+ */
+async function orgUntukPembelian(req: Request, userId: string): Promise<string | null> {
+  if (!dariBrand(req) || !postgresRuntimeEnabled()) return null;
+  const r = await getPool(config.databaseUrl).query<{ org_id: string }>(
+    `SELECT m.org_id FROM org_members m JOIN organizations o ON o.id = m.org_id
+      WHERE m.user_id = $1 AND o.status = 'active' ORDER BY m.created_at LIMIT 1`,
+    [userId],
+  );
+  return r.rows[0]?.org_id ?? null;
+}
+
 async function simpanPesanan(input: {
   userId: string;
+  /** Dompet ORGANISASI, bila pembelian ini dilakukan dari dashboard brand.
+   *  NULL = retail. Webhook membaca kolom ini untuk tahu jatahnya masuk ke
+   *  dompet siapa — lihat migrations/postgres/0042_payments_org.sql. */
+  orgId?: string | null;
   orderId: string;
   amountIdr: number;
   jenisPesanan: "topup_video" | "langganan" | "campuran";
@@ -52,9 +76,9 @@ async function simpanPesanan(input: {
   });
   if (postgresRuntimeEnabled()) {
     await getPool(config.databaseUrl).query(
-      `INSERT INTO payments (id,user_id,gateway,gateway_ref,amount_idr,credits,status,raw_payload,created_at,jenis_pesanan,paket_id)
-       VALUES ($1,$2,'duitku',$3,$4,0,'pending',$5,$6,$7,$8) ON CONFLICT (gateway_ref) DO NOTHING`,
-      [uuid(), input.userId, input.orderId, input.amountIdr, payload, now(), input.jenisPesanan, input.paketId],
+      `INSERT INTO payments (id,user_id,org_id,gateway,gateway_ref,amount_idr,credits,status,raw_payload,created_at,jenis_pesanan,paket_id)
+       VALUES ($1,$2,$3,'duitku',$4,$5,0,'pending',$6,$7,$8,$9) ON CONFLICT (gateway_ref) DO NOTHING`,
+      [uuid(), input.userId, input.orgId ?? null, input.orderId, input.amountIdr, payload, now(), input.jenisPesanan, input.paketId],
     );
   } else {
     getDb().prepare(
@@ -287,9 +311,28 @@ export async function POST(req: Request) {
       );
     }
 
+    // DOMPET ORGANISASI kalau permintaannya datang dari dashboard brand.
+    //
+    // Ditentukan dari KEANGGOTAAN yang tercatat, bukan dari body permintaan.
+    // Kalau org_id boleh dikirim klien, siapa pun yang tahu sebuah id
+    // organisasi bisa mengisi dompet orang lain — atau lebih buruk, mengarahkan
+    // pembelian orang lain ke dompetnya sendiri.
+    //
+    // Langganan sengaja TIDAK dibolehkan untuk org: paket langganan dijual per
+    // pengguna retail (lihat catatan orgId di pakaiDenganClient), dan
+    // mengizinkannya di sini berarti membuat produk yang jalur pemakaiannya
+    // belum ada.
+    const orgId = await orgUntukPembelian(req, user.id);
+    if (orgId && jenisPesanan !== "topup_video") {
+      throw ERR.BAD_REQUEST(
+        "Akun brand baru bisa membeli jatah video satuan, belum paket langganan.",
+        "Organization checkout supports topup_video only.",
+      );
+    }
+
     const orderId = newOrderId(user.id);
     await simpanPesanan({
-      userId: user.id, orderId, amountIdr: rincian.amountIdr,
+      userId: user.id, orgId, orderId, amountIdr: rincian.amountIdr,
       jenisPesanan, paketId, items, harga,
     });
 

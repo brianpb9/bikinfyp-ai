@@ -4,7 +4,11 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgLedger } from "@/lib/postgres/org";
 import { tokens } from "../../_components/format";
-import { CreditPlans } from "../../_components/CreditPlans";
+import { BeliJatahOrg } from "../../_components/BeliJatahOrg";
+import { pgSisaOrg } from "@/lib/kredit-video-runtime";
+import { hargaKredit } from "@/lib/kredit-video-runtime";
+import { JENIS_VIDEO } from "@/lib/kredit-video";
+import { KUALITAS } from "@/lib/kualitas-video";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +30,16 @@ export default async function CreditsPage() {
   const balance = pg ? await pgGetOrgBalance(membership.org_id) : getOrgBalance(membership.org_id);
   const ledger: LedgerRow[] = pg ? ((await pgGetOrgLedger(membership.org_id, 30)) as LedgerRow[]) : [];
 
+  // JATAH PER JENIS — satuan yang sama dengan dompetnya (migrasi 0041).
+  const sisa = pg ? await pgSisaOrg(membership.org_id) : null;
+  const harga = await hargaKredit();
+  const jenisJual = JENIS_VIDEO.map((j) => ({
+    id: j,
+    nama: KUALITAS[j].label,
+    harga_idr: harga[j] ?? 0,
+    bisa_ditopup: Boolean(harga[j]),
+  }));
+
   return (
     <div className="space-y-8">
       <div>
@@ -33,18 +47,31 @@ export default async function CreditsPage() {
         <h1 className="font-display text-2xl font-bold text-zinc-900">Token &amp; tagihan</h1>
       </div>
 
+      {/* SATUANNYA VIDEO, BUKAN RUPIAH.
+          Dompetnya memang berisi jatah per jenis sejak migrasi 0041; menampilkan
+          "token" di atasnya berarti brand memegang satu barang dan membaca dua
+          satuan untuknya. */}
       <section className="rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 shadow-sm">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-          <Wallet size={13} /> Token organisasi
+          <Wallet size={13} /> Sisa jatah organisasi
         </p>
-        <p className="mt-2 font-display text-4xl font-bold text-white">{tokens(balance)}</p>
-        <p className="mt-2 text-xs text-zinc-400">
-          Token dipakai bersama seluruh anggota organisasi. Token ditahan saat render dimulai
-          dan dikembalikan otomatis kalau rendernya gagal. 1 token = Rp1.
+        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-3">
+          {JENIS_VIDEO.map((j) => (
+            <div key={j}>
+              <p className="font-display text-3xl font-bold tabular-nums text-white">
+                {sisa?.[j]?.total ?? 0}
+              </p>
+              <p className="text-[11px] capitalize text-zinc-400">{KUALITAS[j].label}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-3 text-xs text-zinc-400">
+          Jatah dipakai bersama seluruh anggota. Satu video memotong satu jatah, dan
+          dikembalikan otomatis kalau rendernya gagal.
         </p>
       </section>
 
-      <CreditPlans />
+      <BeliJatahOrg jenis={jenisJual} />
 
       <section className="space-y-3">
         <h2 className="text-sm font-bold text-zinc-900">Riwayat pemakaian</h2>

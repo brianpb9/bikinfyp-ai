@@ -319,17 +319,34 @@ export class PgKreditVideo {
       const items = await client.query<{ jenis: JenisVideo; qty: number }>(
         "SELECT jenis, qty FROM pesanan_item WHERE payment_id = $1", [paymentId],
       );
+
+      // DOMPETNYA DIBACA DARI BARIS PEMBAYARAN, bukan dioper pemanggil.
+      //
+      // Callback Duitku tahu order-nya, bukan siapa dompetnya — dan menebak di
+      // sana berarti suatu hari brand membayar lalu jatahnya mendarat di
+      // kantong pribadi orang yang menekan tombolnya. Kolomnya ditambahkan
+      // migrasi 0042; NULL berarti retail, persis seperti kredit_video.
+      const bayar = await client.query<{ org_id: string | null }>(
+        "SELECT org_id FROM payments WHERE gateway_ref = $1 OR id = $1", [paymentId],
+      );
+      const orgId = bayar.rows[0]?.org_id ?? null;
+
       let diberi = 0;
       for (const it of items.rows) {
+        // ON CONFLICT DO NOTHING adalah PENJAGA IDEMPOTENSI, bukan kerapian:
+        // callback gateway datang berkali-kali, dan pernah begitu. Kuncinya
+        // (payment_id, jenis) sengaja TIDAK ikut berubah saat org_id ditambah —
+        // mengubahnya membuat callback ulangan untuk pembayaran lama lolos dan
+        // memberi jatah dua kali.
         const r = await client.query(
-          `INSERT INTO kredit_video (id,user_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
-           VALUES ($1,$2,$3,'topup',$4,'beli',NULL,NULL,$5,NULL,$6)
+          `INSERT INTO kredit_video (id,user_id,org_id,jenis,ember,delta,tipe,langganan_id,job_id,payment_id,catatan,dibuat_pada)
+           VALUES ($1,$2,$3,$4,'topup',$5,'beli',NULL,NULL,$6,NULL,$7)
            ON CONFLICT DO NOTHING`,
-          [this.uuid(), userId, it.jenis, it.qty, paymentId, this.now()],
+          [this.uuid(), userId, orgId, it.jenis, it.qty, paymentId, this.now()],
         );
         diberi += r.rowCount ? it.qty : 0;
       }
-      if (diberi) await this.audit(client, userId, "kredit_video.topup", "payments", paymentId, { diberi });
+      if (diberi) await this.audit(client, userId, "kredit_video.topup", "payments", paymentId, { diberi, org_id: orgId });
       return diberi;
     });
   }
