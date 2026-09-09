@@ -38,6 +38,7 @@ const TAB = [
   { id: "pesanan", label: "Pesanan" },
   { id: "pemakaian", label: "Pemakaian" },
   { id: "job", label: "Job" },
+  { id: "provider", label: "Log Provider" },
 ] as const;
 
 type IdTab = (typeof TAB)[number]["id"];
@@ -425,7 +426,87 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {aktif === "pesanan" && <Pesanan />}
       {aktif === "pemakaian" && <Pemakaian />}
       {aktif === "job" && <Job />}
+      {aktif === "provider" && <LogProvider />}
     </main>
+  );
+}
+
+/**
+ * Riwayat panggilan provider video — generation id, status, dan galatnya.
+ *
+ * Diminta Brian 9 Sep 2026. Sebelum ini satu-satunya jejaknya adalah log
+ * kontainer, dan deploy blue/green menghapusnya beberapa kali sehari: saat
+ * sebuah job gagal, mengetahui task id-nya bergantung pada apakah kita sempat
+ * membukanya sebelum deploy berikutnya.
+ */
+async function LogProvider() {
+  const pool = getPool(config.databaseUrl);
+  const { rows } = await pool.query<{
+    created_at: string; provider: string; model: string | null; task_id: string | null;
+    fase: string; job_id: string | null; shot_index: number | null;
+    durasi_ms: number | null; token_terpakai: number | null;
+    error: string | null; response_ringkas: string | null; request_ringkas: string | null;
+  }>(`SELECT created_at, provider, model, task_id, fase, job_id, shot_index,
+             durasi_ms, token_terpakai, error, response_ringkas, request_ringkas
+        FROM provider_log ORDER BY created_at DESC LIMIT 200`);
+
+  const gagal = rows.filter((r) => r.fase === "gagal").length;
+
+  return (
+    <section className="space-y-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-zinc-900">Log provider ({rows.length})</h2>
+        {gagal > 0 && (
+          <span className="rounded-lg bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700">
+            {gagal} gagal
+          </span>
+        )}
+      </div>
+      <p className="text-[11px] leading-relaxed text-zinc-500">
+        200 panggilan terakhir. Generation id bisa dipakai menelusuri pekerjaan di sisi provider.
+        Badan permintaan sengaja TIDAK disimpan — ia memuat foto produk sebagai base64.
+      </p>
+      {rows.length === 0 ? (
+        <Kosong pesan="Belum ada panggilan provider yang tercatat. Baris pertama muncul saat video berikutnya dirender." />
+      ) : (
+        <Tabel kepala={["Waktu", "Fase", "Generation ID", "Model", "Job / shot", "Durasi", "Token", "Catatan"]}>
+          {rows.map((r, i) => (
+            <tr key={`${r.task_id ?? "-"}-${i}`} className="border-t border-zinc-100 align-top">
+              <td className="whitespace-nowrap px-2 py-1.5 text-zinc-500">
+                {new Date(r.created_at).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}
+              </td>
+              <td className="px-2 py-1.5">
+                <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                  r.fase === "gagal" ? "bg-red-100 text-red-700"
+                  : r.fase === "selesai" ? "bg-emerald-100 text-emerald-700"
+                  : "bg-zinc-100 text-zinc-600"
+                }`}>{r.fase}</span>
+              </td>
+              {/* Generation id dipilih-semua saat diketuk: ia dipakai dengan
+                  cara disalin ke dashboard provider, bukan dibaca. */}
+              <td className="px-2 py-1.5 font-mono text-[10px] text-zinc-800 select-all break-all">
+                {r.task_id ?? "—"}
+              </td>
+              <td className="px-2 py-1.5 text-[10px] text-zinc-600">{r.model ?? "—"}</td>
+              <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[10px] text-zinc-500">
+                {r.job_id ? `${r.job_id.slice(0, 8)}${r.shot_index !== null ? ` #${r.shot_index}` : ""}` : "—"}
+              </td>
+              <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-zinc-600">
+                {r.durasi_ms ? `${Math.round(r.durasi_ms / 1000)}s` : "—"}
+              </td>
+              <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-zinc-600">
+                {r.token_terpakai?.toLocaleString("id-ID") ?? "—"}
+              </td>
+              <td className="px-2 py-1.5 text-[10px] text-zinc-600">
+                {r.error
+                  ? <span className="text-red-700">{r.error.slice(0, 220)}</span>
+                  : (r.response_ringkas ?? r.request_ringkas ?? "—").slice(0, 220)}
+              </td>
+            </tr>
+          ))}
+        </Tabel>
+      )}
+    </section>
   );
 }
 

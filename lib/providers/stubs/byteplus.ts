@@ -18,6 +18,7 @@ import { taskMemo } from "../task-memo";
 import { kualitasDikenal, type Kualitas } from "../../kualitas-video";
 import { modelBerlaku } from "../../pemetaan-model";
 import { teksPromptShot } from "../teks-prompt";
+import { catatProvider } from "../../provider-log";
 
 // Tarif referensi (USD). Sumber:
 // - seedance-1-0-pro: $2,5/1M output tokens — https://docs.byteplus.com/docs/ModelArk/1587798
@@ -366,6 +367,16 @@ export const byteplusVideo: VideoProvider = {
 
     const perShotTimeoutMs = (config.stateTimeoutsMin.GENERATING_VISUAL * 60_000) / Math.max(1, spec.shots.length);
 
+    // Model yang benar-benar dipakai — dihitung sekali di sini supaya baris log
+    // menyebut model yang SAMA dengan yang dikirim createTask. Menghitungnya
+    // ulang di dua tempat berarti suatu hari lognya menyebut model yang tidak
+    // pernah dipanggil, dan itu jenis catatan yang lebih buruk daripada tidak
+    // ada catatan.
+    const modelDipakai = modelUntukSpec(
+      spec.qualityTier,
+      (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel,
+    );
+
     // Submit semua shot dulu (paralel), lalu polling — hemat waktu total.
     const memo = taskMemo();
     const submitted = await Promise.all(
@@ -385,13 +396,44 @@ export const byteplusVideo: VideoProvider = {
         // ingin dilindungi.
         await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId);
         console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
+        // Generation id dicatat DI SINI, bukan nanti saat selesai: kalau
+        // pollingnya yang gagal, id inilah satu-satunya cara menelusuri
+        // pekerjaan itu di sisi BytePlus — dan itu justru saat paling
+        // dibutuhkan. Ringkasan permintaan, BUKAN badannya: badannya memuat
+        // gambar acuan base64.
+        void catatProvider({
+          jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+          model: modelDipakai, taskId, fase: "submit",
+          requestRingkas: `durasi=${shot.durationSec}s ratio=${spec.ratio ?? "9:16"} audio=${spec.generateAudio}`,
+        });
         return { shot, taskId, startedAt: Date.now() };
       })
     );
 
     const assets: VideoAsset[] = [];
     for (const { shot, taskId, startedAt } of submitted) {
-      const result = await pollTask(taskId, startedAt, perShotTimeoutMs);
+      let result: TaskResponse;
+      try {
+        result = await pollTask(taskId, startedAt, perShotTimeoutMs);
+      } catch (err) {
+        // KEGAGALAN ADALAH ALASAN UTAMA log ini ada. Dicatat lalu dilempar
+        // ulang apa adanya — pencatatan tidak boleh mengubah perilaku.
+        void catatProvider({
+          jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+          model: modelDipakai, taskId, fase: "gagal",
+          durasiMs: Date.now() - startedAt,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      void catatProvider({
+        jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+        taskId, fase: "selesai", durasiMs: Date.now() - startedAt,
+        // Jawabannya diringkas oleh bersihkan(); yang penting di sini status
+        // dan usage, bukan seluruh badan jawaban.
+        response: { status: result.status, usage: result.usage },
+        tokenTerpakai: result.usage?.total_tokens ?? null,
+      });
       const videoUrl = result.content?.video_url;
       if (!videoUrl) throw new ProviderApiError("byteplus", `task ${taskId} sukses tapi tanpa video_url`);
 

@@ -16,6 +16,7 @@ import { prosesStoryboard } from "../lib/postgres/storyboard-worker";
 import { processPromoJob } from "../lib/promo/worker";
 import { mulaiPenyegaranKredensial } from "../lib/kredensial";
 import { mulaiPenyegaranPemetaan } from "../lib/pemetaan-model";
+import { pangkasProviderLog } from "../lib/provider-log";
 
 // Kredensial yang diganti lewat halaman admin harus ikut terpakai di sini.
 // Tanpa ini worker memakai nilai .env sampai container di-recreate — dan
@@ -185,6 +186,20 @@ const sweepTimer = setInterval(() => {
   }
 }, 60_000);
 sweepTimer.unref();
+
+// PEMANGKASAN LOG PROVIDER.
+//
+// Tabelnya tumbuh per SHOT, bukan per job: satu video 6 shot menulis belasan
+// baris. Tanpa pemangkasan ia jadi tabel terbesar di basis data dalam beberapa
+// bulan, dan tidak ada yang menyadarinya sampai pencadangan mulai lambat.
+//
+// Sekali sehari sudah cukup — ini kebersihan, bukan sesuatu yang mendesak.
+const pangkasTimer = setInterval(() => {
+  void pangkasProviderLog().then((n) => {
+    if (n > 0) console.log(`[worker] log provider dipangkas: ${n} baris lebih tua dari 90 hari`);
+  });
+}, 24 * 60 * 60_000);
+pangkasTimer.unref();
 
 let monitorInFlight = false;
 async function runMonitorOnce(event: string) {
