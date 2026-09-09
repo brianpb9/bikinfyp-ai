@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { apiFetch } from "./api";
+import { TombolPasang } from "./TombolPasang";
 
 // Menu akun retail — sebelum ini pengguna retail TIDAK PUNYA cara keluar sama
 // sekali. Tombol keluar cuma ada di dashboard brand; siapa pun yang login di
@@ -66,6 +67,12 @@ export function AccountMenu() {
           >
             <span aria-hidden="true">👤</span> Profil &amp; riwayat
           </a>
+          {/* ALAMAT TETAP untuk memasang aplikasi.
+              Banner AjakPasang cuma muncul 6 detik sekali dan bisa terlewat;
+              tanpa pintu permanen, pertanyaan "di mana tombolnya?" tidak punya
+              jawaban yang bisa ditunjuk. Menyembunyikan dirinya sendiri kalau
+              sudah terpasang atau browsernya tidak mendukung. */}
+          <TombolPasang className="min-h-[48px] border-b border-zinc-100 px-4 text-sm text-zinc-800" />
           {admin && (
             <>
               <a

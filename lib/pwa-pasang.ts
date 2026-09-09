@@ -23,15 +23,38 @@ export const KUNCI_TUNDA = "aiugc.pasang.tunda";
 /**
  * Halaman yang TIDAK boleh menampilkan ajakan.
  *
- * /bikin/** adalah alur berbayar: orang di sana sedang mengisi form, meninjau
- * storyboard, atau menunggu render. Menaruh banner di atas itu berarti menutupi
- * pekerjaan yang sedang ia bayar.
+ * Yang dikecualikan adalah ALUR KERJA BERBAYAR, bukan seluruh aplikasi: di sana
+ * orang sedang mengisi form, meninjau storyboard, atau menunggu render yang ia
+ * bayar, dan banner di atas itu menutupi pekerjaannya sendiri.
  *
  * /onboarding juga dikecualikan — pengunjung pertama belum tahu ini apa, dan
  * mengajaknya memasang sebelum ia melihat satu video pun adalah urutan yang
  * terbalik.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA "/dashboard" TIDAK LAGI DIBLOKIR SELURUHNYA
+ * ---------------------------------------------------------------------------
+ * Versi pertama daftar ini memuat "/dashboard" polos. Akibatnya: pengguna BRAND
+ * tidak pernah melihat ajakan di halaman MANA PUN — seluruh aplikasi mereka ada
+ * di bawah awalan itu. Brian melaporkannya 9 Sep 2026 setelah mencoba di ponsel
+ * dan tidak menemukan apa-apa.
+ *
+ * Yang diblokir sekarang hanya alur kerjanya (campaign, matrix), bukan beranda,
+ * kredit, library, atau tim — dan justru brand yang paling diuntungkan memasang
+ * aplikasi, karena mereka membukanya tiap hari.
  */
-const JALUR_TERLARANG = ["/bikin", "/onboarding", "/admin", "/dashboard"];
+const JALUR_TERLARANG = [
+  "/bikin",
+  "/onboarding",
+  "/admin",
+  "/dashboard/campaign",
+  "/dashboard/matrix",
+  // Layar tunggu & tolak: orang di sini belum tentu jadi pengguna.
+  "/dashboard/menunggu",
+  "/dashboard/suspended",
+  "/dashboard/request-access",
+  "/dashboard/onboarding",
+];
 
 export interface KeadaanPasang {
   pathname: string;

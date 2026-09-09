@@ -7,6 +7,7 @@ import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Menu,
 import { tokens } from "./format";
 import { SidebarLogout } from "./ProfileActions";
 import { LogoBrands } from "../../_components/Logo";
+import { TombolPasang } from "../../_components/TombolPasang";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
 // SiteChrome (that's mobile bottom-tab, max-w-md, wrong context entirely).
@@ -174,6 +175,12 @@ export function DashboardChrome({
             <FOOTER_NAV.icon size={18} strokeWidth={2} aria-hidden="true" />
             {FOOTER_NAV.label}
           </Link>
+          {/* ALAMAT TETAP untuk memasang aplikasi.
+              Brand membuka dashboard ini tiap hari — merekalah yang paling
+              diuntungkan memasangnya. Banner berjangka waktu bisa terlewat;
+              ini pintu yang selalu bisa ditunjuk. Menyembunyikan dirinya
+              sendiri kalau sudah terpasang atau browsernya tidak mendukung. */}
+          <TombolPasang className="rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-400 hover:bg-white/5 hover:text-white" />
         </div>
         <div className="border-t border-white/10 p-3">
           <Link

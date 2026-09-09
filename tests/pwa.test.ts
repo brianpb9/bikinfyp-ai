@@ -96,20 +96,50 @@ test("ajakan TIDAK muncul saat aplikasi sudah terpasang", () => {
 });
 
 test("ajakan TIDAK muncul di alur berbayar dan halaman kerja", () => {
-  // /bikin/** adalah alur berbayar: orang sedang mengisi form, meninjau
-  // storyboard, atau menunggu render yang ia bayar. Banner di atas itu menutupi
-  // pekerjaannya sendiri.
-  for (const p of ["/bikin/produk", "/bikin/storyboard", "/onboarding", "/admin", "/dashboard/menunggu"]) {
+  // Yang dikecualikan adalah ALUR KERJA, bukan seluruh aplikasi: di sana orang
+  // sedang mengisi form, meninjau storyboard, atau menunggu render yang ia bayar.
+  for (const p of ["/bikin/produk", "/bikin/storyboard", "/onboarding", "/admin",
+                   "/dashboard/campaign", "/dashboard/matrix", "/dashboard/menunggu"]) {
     assert.equal(bolehTampil({
       pathname: p, sudahTerpasang: false, adaPrompt: true, iosSafari: false,
       tundaSampai: null, sekarang: 1_000,
     }), false, `masih muncul di ${p}`);
   }
   // Dan MUNCUL di halaman biasa — kalau tidak, fiturnya cuma mati.
-  assert.equal(bolehTampil({
-    pathname: "/video", sudahTerpasang: false, adaPrompt: true, iosSafari: false,
-    tundaSampai: null, sekarang: 1_000,
-  }), true);
+  for (const p of ["/", "/video", "/kredit"]) {
+    assert.equal(bolehTampil({
+      pathname: p, sudahTerpasang: false, adaPrompt: true, iosSafari: false,
+      tundaSampai: null, sekarang: 1_000,
+    }), true, `tidak muncul di ${p}`);
+  }
+});
+
+test("BRAND melihat ajakan — seluruh /dashboard sempat terblokir", () => {
+  // Bug yang Brian temukan 9 Sep 2026: daftar blokir memuat "/dashboard" polos,
+  // dan SELURUH aplikasi brand ada di bawah awalan itu. Akibatnya pengguna
+  // brand tidak pernah melihat ajakan di halaman mana pun — padahal merekalah
+  // yang membuka aplikasi ini tiap hari dan paling diuntungkan memasangnya.
+  for (const p of ["/dashboard", "/dashboard/credits", "/dashboard/library", "/dashboard/team"]) {
+    assert.equal(bolehTampil({
+      pathname: p, sudahTerpasang: false, adaPrompt: true, iosSafari: false,
+      tundaSampai: null, sekarang: 1_000,
+    }), true, `brand masih tidak melihat ajakan di ${p}`);
+  }
+});
+
+test("ada PINTU PERMANEN, bukan cuma banner berjangka waktu", () => {
+  // Banner muncul 6 detik sekali lalu diam 30 hari kalau ditutup. Fitur yang
+  // hanya hidup di sana tidak punya alamat tetap: pertanyaan "di mana
+  // tombolnya?" tidak punya jawaban yang bisa ditunjuk.
+  const menu = readFileSync(join(process.cwd(), "app/_components/AccountMenu.tsx"), "utf8");
+  const brand = readFileSync(join(process.cwd(), "app/dashboard/_components/DashboardChrome.tsx"), "utf8");
+  assert.match(menu, /<TombolPasang/, "menu akun retail tanpa pintu pasang");
+  assert.match(brand, /<TombolPasang/, "sidebar brand tanpa pintu pasang");
+
+  // Dan tombolnya menyembunyikan diri kalau tidak ada yang bisa dikerjakan —
+  // tombol mati lebih buruk daripada tidak ada tombol.
+  const tb = readFileSync(join(process.cwd(), "app/_components/TombolPasang.tsx"), "utf8");
+  assert.match(tb, /if \(terpasang \|\| \(!ev && !ios\)\) return null;/, "tombol mati tetap ditampilkan");
 });
 
 test("ditutup berarti diam, dan diamnya berakhir", () => {
