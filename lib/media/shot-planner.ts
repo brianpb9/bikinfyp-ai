@@ -619,6 +619,18 @@ function klausaLafalMerek(namaProduk: string): string {
  * di tengah prompt panjang. Lapis 3 (label dialog) dirakit di tempat dialog
  * disusun; tiga lapis lain di sini.
  *
+ * PENEGASAN "never in English" TIDAK DITULIS DI KALIMAT UCAPAN (9 Sep 2026).
+ *
+ * Panduan Seedance 2.5 memintanya, dan sempat saya pasang di tiap cabang
+ * ucapan. Tes oracle menolaknya: "never in English, her lips" menempatkan
+ * negasi tiga kata sebelum kata ganti orang, dan model video merender apa yang
+ * dinegasikan — persis cacat yang sudah dibersihkan dari berkas ini.
+ *
+ * Tidak ada yang hilang: pengecualian bahasa Inggris SUDAH dijaga lapis 4 di
+ * bawah, sebagai penutup terpisah yang tidak berdekatan dengan kata orang.
+ * Menambahkannya lagi di kalimat ucapan cuma menduplikasi aturan yang ada
+ * sambil melanggar aturan lain.
+ *
  * "no English speech" SENGAJA di prompt positif, bukan negative: frasaNegatifBersih()
  * membuang awalan "no " di blok negatif, sehingga kalimat ini justru akan
  * berubah menjadi perintah "English speech" kalau ditaruh di sana.
@@ -1789,14 +1801,43 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         //
         // Yang tersisa: pemisahan antar baris tetap diminta, tapi sebagai
         // PERGANTIAN yang wajar, bukan sebagai kesenyapan yang ditakar.
-        ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): {${dialogue}} `
+        ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, at a natural conversational pace, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): {${dialogue}} `
         : lipSyncPresenter
           ? bukaTanpaWajah
             // Preseden job a1192101: frasa "presenter speaks to camera" membuat
             // model MENGGAMBAR wajah pembicara di shot yang harus tanpa wajah.
             // Shot pembuka memakai kalimat VO hands_only; presenter bicara ke
             // kamera baru mulai shot 2.
-            ? `A warm female VOICEOVER speaks in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
+            ? `A warm female VOICEOVER speaks in natural Jakarta Indonesian, at a natural conversational pace, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
+            // DISEIMBANGKAN LAGI 9 Sep 2026 — KOREKSI BERLEBIH TERUKUR.
+            //
+            // Perbaikan 4 Sep membuang "natural pauses" karena kata itu
+            // membekukan mulut, dan menggantinya dengan tiga perintah yang
+            // semuanya melarang diam: "launches straight into the line",
+            // "speaking continuously for the whole shot", dan "voice carrying
+            // all the way to the final frame".
+            //
+            // Diukur pada job 9789aa55 (video yang Brian kirim 9 Sep) dengan
+            // ffmpeg silencedetect, pada TIGA ambang berbeda:
+            //
+            //   -20 dB, -25 dB, -30 dB  ->  NOL jeda >= 0,2 dtk dalam 15,1 dtk
+            //
+            // Lima belas detik bicara tanpa satu tarikan napas pun. Kata-katanya
+            // sendiri benar — transkrip cocok kata demi kata dengan naskah —
+            // tapi penyampaiannya menyatu, dan itulah yang Brian sebut "memble".
+            // Tempo bukan sebabnya: 31 kata / 15,1 dtk = 2,05 kata/detik, di
+            // bawah pita haul 3,1-4,2.
+            //
+            // Panduan Seedance 2.5 yang Brian kirim menyebut ini langsung:
+            // "Jangan menulis blok PACING yang menuntut 'no pause, no breath' —
+            // terbukti membuat kata bertabrakan."
+            //
+            // "breathing naturally" dipakai, bukan "pauses": frasa itu ada di
+            // aturan ekor hidup panduan yang sama dan tidak membekukan mulut,
+            // sementara "pauses" terbukti membekukannya. Yang menjaga terhadap
+            // udara mati tetap ada — suaranya masih dituntut hadir di frame
+            // terakhir — yang dibuang hanya larangan bernapasnya.
+            //
             // ARAHAN AKTIF, bukan "unhurried pace with natural pauses".
             //
             // Kalimat lama secara harfiah menyuruh model berhenti bicara, dan
@@ -1816,10 +1857,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // yang persis dibersihkan hari ini karena model video merender apa
             // yang dinegasikan. "Suaranya terbawa sampai frame terakhir"
             // mengatakan hal yang sama tanpa satu pun larangan.
-            : `The presenter launches straight into the line and talks to camera in natural Jakarta Indonesian, never in English, speaking continuously for the whole shot with her lips moving on every syllable and her voice carrying all the way to the final frame, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: {${dialogue}} `
+            : `The presenter talks to camera in natural Jakarta Indonesian, her lips moving on every syllable and her voice still present at the final frame, breathing naturally between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: {${dialogue}} `
           : bukaTanpaWajah
-          ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, at a natural conversational pace, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
-          : `A warm female VOICEOVER narrates in natural Jakarta Indonesian, never in English, over this footage at a natural conversational pace, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: {${dialogue}} `;
+          ? `A warm female VOICEOVER narrates in natural Jakarta Indonesian, at a natural conversational pace, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): {${dialogue}} `
+          : `A warm female VOICEOVER narrates in natural Jakarta Indonesian, over this footage at a natural conversational pace, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: {${dialogue}} `;
     const pacing =
       format === "tvc"
         ? !dialogue.trim()
