@@ -50,7 +50,9 @@ function useTapHaptics() {
 
 // /dashboard (2026-08-11, F-ENT-01): desktop-first enterprise dashboard,
 // punya chrome sendiri (DashboardChrome) — bottom-tab mobile ini salah konteks total.
-const NO_CHROME = ["/onboarding", "/coba", "/mulai", "/dashboard", "/brands", "/harga"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan
+const NO_CHROME = ["/onboarding", "/coba", "/mulai", "/dashboard", "/brands", "/harga", "/admin"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan.
+// "/admin" ditambahkan 9 Sep 2026: ia alat DESKTOP, dan pagu max-w-md di bawah
+// memaksa setiap tabelnya menggulir menyamping. Lihat app/admin/layout.tsx.
 const NO_NAV_PREFIX = ["/bikin", "/onboarding"];
 
 /** Header + nav bawah global. Disembunyikan di layar tertentu. */

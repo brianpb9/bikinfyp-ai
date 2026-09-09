@@ -323,30 +323,78 @@ async function ambilJob() {
  *
  * Ukuran hurufnya ikut mengecil di layar sempit, bukan dipaksa satu ukuran.
  */
-function Kartu({ label, nilai, catatan }: { label: string; nilai: string; catatan?: string }) {
+/**
+ * Widget angka.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA DIBESARKAN (Brian 9 Sep 2026)
+ * ---------------------------------------------------------------------------
+ * "Widget terlalu kecil dan jadinya tidak informatif."
+ *
+ * Sebab utamanya lebar halaman — /admin dulu terkunci di cangkang mobile
+ * (max-w-md), lihat app/admin/layout.tsx. Tapi kartunya sendiri juga menahan
+ * diri: angkanya text-base, sekelas teks paragraf, padahal ANGKA ITULAH isi
+ * kartunya. Yang paling penting justru yang paling kecil.
+ *
+ * Sekarang angkanya text-3xl dan tidak lagi dipotong `truncate` — label yang
+ * terpotong jadi "VIDEO GRATIS DIBERI…" memaksa orang menebak, dan menebak di
+ * dasbor keuangan adalah hal terakhir yang kita inginkan.
+ *
+ * `nada` memberi arti pada angkanya. Margin negatif dan job gagal tidak boleh
+ * terbaca sama netralnya dengan jumlah pengguna: kalau semua abu-abu, mata
+ * berhenti membedakan dan dasbornya berhenti memperingatkan.
+ */
+function Kartu({
+  label, nilai, catatan, nada = "netral", ikon,
+}: {
+  label: string; nilai: string; catatan?: string;
+  nada?: "netral" | "baik" | "buruk" | "perhatian";
+  ikon?: string;
+}) {
+  const warnaNilai = {
+    netral: "text-zinc-900",
+    baik: "text-emerald-700",
+    buruk: "text-red-700",
+    perhatian: "text-amber-700",
+  }[nada];
+  const garis = {
+    netral: "border-zinc-200",
+    baik: "border-l-4 border-l-emerald-500 border-zinc-200",
+    buruk: "border-l-4 border-l-red-500 border-zinc-200",
+    perhatian: "border-l-4 border-l-amber-500 border-zinc-200",
+  }[nada];
   return (
-    <div className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-zinc-200 bg-white p-3">
-      <p className="truncate text-[11px] uppercase tracking-wide text-zinc-500" title={label}>{label}</p>
-      <p className="font-display text-base font-bold tabular-nums leading-tight break-words text-zinc-900 sm:text-lg">
+    <div className={`flex min-w-0 flex-col rounded-2xl border bg-white p-4 shadow-sm ${garis}`}>
+      <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-zinc-500">
+        {ikon && <span aria-hidden>{ikon}</span>}
+        {label}
+      </p>
+      <p className={`mt-1.5 font-display text-2xl font-bold tabular-nums leading-none break-words sm:text-3xl ${warnaNilai}`}>
         {nilai}
       </p>
-      {catatan && <p className="mt-0.5 text-[11px] leading-snug text-zinc-500">{catatan}</p>}
+      {catatan && <p className="mt-2 text-xs leading-snug text-zinc-500">{catatan}</p>}
     </div>
   );
 }
 
 function Tabel({ kepala, children }: { kepala: string[]; children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-zinc-200 bg-white">
-      <table className="w-full min-w-[42rem] text-left text-xs">
-        <thead className="bg-zinc-50 text-[11px] uppercase tracking-wide text-zinc-500">
+    <div className="overflow-x-auto rounded-2xl border border-zinc-200 bg-white shadow-sm">
+      {/* text-[13px], bukan text-xs (12px): tabel ini dibaca berbaris-baris untuk
+          menelusuri kegagalan, dan satu piksel di ukuran huruf terasa jauh lebih
+          besar setelah baris kesepuluh. */}
+      <table className="w-full min-w-[52rem] text-left text-[13px]">
+      {/* KEPALA MENEMPEL saat digulir. Riwayat generation punya 100 baris
+          dan delapan kolom; tanpanya siapa pun yang menggulir ke bawah
+          kehilangan tahu kolom mana yang sedang ia baca. */}
+      <thead className="sticky top-0 z-10 bg-zinc-50 text-[11px] uppercase tracking-wide text-zinc-500 shadow-[0_1px_0_rgb(228_228_231)]">
           <tr>
             {kepala.map((h) => (
-              <th key={h} className="whitespace-nowrap p-2 font-semibold">{h}</th>
+              <th key={h} className="whitespace-nowrap px-3 py-2.5 font-semibold">{h}</th>
             ))}
           </tr>
         </thead>
-        <tbody className="divide-y divide-zinc-100">{children}</tbody>
+        <tbody className="divide-y divide-zinc-100 [&>tr:hover]:bg-amber-50/40">{children}</tbody>
       </table>
     </div>
   );
@@ -400,11 +448,22 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
   }
 
   return (
-    <main className="mx-auto max-w-6xl space-y-5 p-4 sm:p-6">
-      <header className="space-y-1">
-        <h1 className="font-display text-xl font-bold text-zinc-900">Admin</h1>
-        <p className="text-xs text-zinc-500">
-          Masuk sebagai {user.email} · <b>baca saja</b> — tidak ada aksi yang mengubah data
+    // max-w-[1600px], BUKAN max-w-6xl (1152px). Halaman ini penuh tabel lebar —
+    // riwayat generation punya delapan kolom — dan pagu 1152px membuat semuanya
+    // menggulir menyamping di layar yang sebenarnya cukup luas.
+    <main className="mx-auto max-w-[1600px] space-y-6 p-4 sm:p-6 lg:p-8">
+      <header className="flex flex-wrap items-end justify-between gap-3 border-b border-zinc-200 pb-4">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-zinc-900">Admin</h1>
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Masuk sebagai {user.email} · <b>baca saja</b> — tidak ada aksi yang mengubah data
+          </p>
+        </div>
+        {/* Waktu render disebut supaya angka yang dibaca punya umur.
+            Dasbor tanpa cap waktu membuat orang tidak pernah tahu apakah yang
+            ia lihat baru atau sisa tab yang terbuka sejak pagi. */}
+        <p className="text-[11px] text-zinc-400">
+          Dimuat {new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} WIB
         </p>
       </header>
 
@@ -599,28 +658,36 @@ async function Ringkasan() {
 
   return (
     <div className="space-y-4">
-      {/* Lima kartu di grid 4 kolom menyisakan SATU kartu yatim di baris
-          kedua — itu yang terbaca sebagai "berantakan". Lima kolom di layar
-          lebar membuatnya satu baris utuh; di layar sedang tiga kolom lebih
-          rapi daripada empat karena sisanya jadi dua, bukan satu. */}
-      <section className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+      {/* Lima kartu: satu baris utuh di layar lebar, tiga kolom di layar
+          sedang (sisanya jadi dua, bukan satu kartu yatim). */}
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
         <Kartu
+          ikon="💰"
           label="Pendapatan"
           nilai={rupiah(pendapatan)}
           catatan={`${angka(Number(uang?.transaksi ?? 0))} transaksi lunas · ${angka(Number(uang?.pembeli ?? 0))} pembeli`}
         />
-        <Kartu label="COGS terpakai" nilai={rupiah(cogs)} catatan={`${angka(Number(biaya?.selesai ?? 0))} job selesai`} />
+        <Kartu ikon="🧾" label="COGS terpakai" nilai={rupiah(cogs)}
+          catatan={`${angka(Number(biaya?.selesai ?? 0))} job selesai`} />
+        {/* Margin NEGATIF harus terbaca berbeda. Kalau ia abu-abu seperti
+            angka lain, kerugian bisa duduk berhari-hari tanpa ada yang
+            menyadarinya — dan itu satu-satunya angka di halaman ini yang
+            benar-benar menuntut tindakan. */}
         <Kartu
+          ikon="📈"
           label="Margin kotor"
           nilai={rupiah(margin)}
+          nada={margin < 0 ? "buruk" : persen >= 25 ? "baik" : "perhatian"}
           catatan={pendapatan > 0 ? `${persen}% dari pendapatan` : "belum ada pendapatan"}
         />
         <Kartu
+          ikon="👥"
           label="Pengguna"
           nilai={angka(Number(pengguna?.total ?? 0))}
           catatan={`${angka(Number(pengguna?.baru ?? 0))} baru 30 hari`}
         />
         <Kartu
+          ikon="🎁"
           label="Video gratis diberikan"
           nilai={angka(Number(gratis?.video ?? 0))}
           catatan={`${angka(Number(gratis?.penerima ?? 0))} pendaftar dapat paket gratis`}
@@ -632,9 +699,18 @@ async function Ringkasan() {
         {job.length === 0 ? (
           <Kosong pesan="Belum ada job dalam 7 hari terakhir." />
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
             {job.map((r) => (
-              <Kartu key={r.state} label={r.state} nilai={angka(Number(r.n))} />
+              <Kartu
+                key={r.state}
+                label={r.state}
+                nilai={angka(Number(r.n))}
+                // READY hijau, gagal merah, sisanya menunggu. Semua abu-abu
+                // membuat mata berhenti membedakan, dan dasbornya berhenti
+                // memperingatkan.
+                nada={r.state === "READY" ? "baik"
+                  : ["FAILED", "REFUNDED"].includes(r.state) ? "buruk" : "perhatian"}
+              />
             ))}
           </div>
         )}

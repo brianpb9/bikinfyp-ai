@@ -171,3 +171,48 @@ test("nilai jenis yang asing jatuh ke \"semua\", bukan menghasilkan galat", () =
   // menjatuhkan halaman.
   assert.match(q, /\? jenis : "semua"/, "tidak ada fallback ke \"semua\"");
 });
+
+test("/admin keluar dari cangkang mobile — ia alat desktop", () => {
+  // Brian 9 Sep 2026: "widget terlalu kecil dan jadinya tidak informatif."
+  // Sebab utamanya bukan ukuran kartu: /admin ikut SiteChrome, yang mengunci
+  // lebar ke max-w-md (~430px) dan menempelkan bilah nav mobile. Setiap tabel
+  // jadi menggulir menyamping di layar 1440px yang sebenarnya luas.
+  const chrome = fs.readFileSync(path.join(process.cwd(), "app/_components/SiteChrome.tsx"), "utf8");
+  const m = /const NO_CHROME = \[([^\]]*)\]/.exec(chrome);
+  assert.ok(m, "daftar NO_CHROME tidak ditemukan");
+  assert.match(m[1]!, /"\/admin"/, "/admin masih memakai cangkang mobile");
+
+  const src = kode("app/admin/page.tsx");
+  assert.doesNotMatch(src, /max-w-6xl">/, "lebar halaman masih dipagu 1152px");
+  assert.match(src, /max-w-\[1600px\]/, "halaman tidak dilebarkan");
+});
+
+test("angka adalah isi kartu, jadi ia yang paling besar", () => {
+  // Sebelumnya angkanya text-base — sekelas teks paragraf — padahal ANGKA
+  // ITULAH isi kartunya. Yang paling penting justru yang paling kecil.
+  const src = kode("app/admin/page.tsx");
+  const i = src.indexOf("function Kartu(");
+  const blok = src.slice(i, i + 1800);
+  assert.match(blok, /text-2xl[\s\S]*sm:text-3xl/, "angka kartu tidak dibesarkan");
+  // Label tidak lagi dipotong: "VIDEO GRATIS DIBERI…" memaksa orang menebak,
+  // dan menebak di dasbor keuangan adalah hal terakhir yang kita inginkan.
+  assert.doesNotMatch(blok.slice(0, blok.indexOf("{nilai}")), /truncate/, "label masih dipotong");
+});
+
+test("angka yang menuntut tindakan tidak terbaca netral", () => {
+  // Margin negatif dan job gagal tidak boleh seabu-abu jumlah pengguna. Kalau
+  // semuanya sama, mata berhenti membedakan dan dasbornya berhenti
+  // memperingatkan.
+  const src = kode("app/admin/page.tsx");
+  assert.match(src, /nada\?: "netral" \| "baik" \| "buruk" \| "perhatian"/, "kartu tidak punya nada");
+  assert.match(src, /nada=\{margin < 0 \? "buruk"/, "margin negatif tidak ditandai");
+  assert.match(src, /\["FAILED", "REFUNDED"\]\.includes\(r\.state\) \? "buruk"/, "job gagal tidak ditandai");
+});
+
+test("kepala tabel menempel saat digulir", () => {
+  // Riwayat generation punya 100 baris dan delapan kolom; tanpa kepala yang
+  // menempel, yang menggulir ke bawah kehilangan tahu kolom mana yang dibaca.
+  const src = kode("app/admin/page.tsx");
+  const i = src.indexOf("function Tabel(");
+  assert.match(src.slice(i, i + 900), /sticky top-0/, "kepala tabel tidak menempel");
+});
