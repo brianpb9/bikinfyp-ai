@@ -426,7 +426,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
       {aktif === "pesanan" && <Pesanan />}
       {aktif === "pemakaian" && <Pemakaian />}
       {aktif === "job" && <Job />}
-      {aktif === "provider" && <LogProvider />}
+      {aktif === "provider" && <Provider />}
     </main>
   );
 }
@@ -439,7 +439,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
  * sebuah job gagal, mengetahui task id-nya bergantung pada apakah kita sempat
  * membukanya sebelum deploy berikutnya.
  */
-async function LogProvider() {
+async function Provider() {
   const pool = getPool(config.databaseUrl);
   const { rows } = await pool.query<{
     created_at: string; provider: string; model: string | null; task_id: string | null;
