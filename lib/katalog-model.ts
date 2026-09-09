@@ -76,6 +76,31 @@ export const DETIK_PRODUKSI = 15;
  * tagihan terbit, tanpa harus mengulang penemuannya dari nol.
  */
 export const KATALOG_MODEL: ModelKatalog[] = [
+  // ── Ditambahkan Brian 9 Sep 2026, lewat kie.ai ─────────────────────────────
+  //
+  // Ketiganya punya BENTUK MASUKAN sendiri, dan bentuk itu hidup di
+  // lib/kie-payload.ts. Menambahkan baris di katalog ini saja TIDAK cukup:
+  // tanpa pembangun payload-nya, badanKieVideo() menolak — sengaja, supaya
+  // model yang belum siap gagal di sini alih-alih terkirim, ditagih, lalu gagal
+  // di sisi provider beberapa menit kemudian.
+  {
+    id: "bytedance/seedance-2-mini",
+    // 15 detik = durasi produksi kita, dan contoh resmi kie.ai memakai angka
+    // yang sama. Ditulis apa adanya; belum diuji dengan render berbayar.
+    maksDetik: 15,
+    label: "Seedance 2 mini (kie.ai)",
+    mesin: "kie-grok",
+    tarif: "brosur",
+    catatan: "Menerima frame awal (dan frame akhir bila ada). Tarif belum diukur dengan render sendiri.",
+  },
+  {
+    id: "bytedance/seedance-2-5",
+    maksDetik: 15,
+    label: "Seedance 2.5 (kie.ai)",
+    mesin: "kie-grok",
+    tarif: "brosur",
+    catatan: "Menerima banyak gambar acuan sekaligus. Tarif belum diukur dengan render sendiri.",
+  },
   {
     id: "grok-imagine/image-to-video",
     maksDetik: 15,  // batas keras Grok Imagine (MAKS_DETIK_PER_KLIP)

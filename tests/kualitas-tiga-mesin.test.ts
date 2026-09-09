@@ -180,8 +180,14 @@ test("larangan kepatuhan IKUT terkirim — aturan keras repo tidak boleh bolong 
   // logo karangan) — janji yang kami buat ke pengguna dan tidak punya bentuk
   // positif yang jujur.
   const b = buatBadanTask(spec("standard"), shot, "https://contoh.id/a.png");
-  assert.match(b.input.prompt, /Do not add any text overlay, caption bar, subtitle, watermark, or invented logo\./);
-  assert.match(b.input.prompt, /hands presenting product/);
+  // `input` kini Record<string, unknown> karena bentuknya berbeda per model
+  // (lib/kie-payload.ts). Promptnya diambil eksplisit — dan kalau ia BUKAN
+  // string, itu sendiri kegagalan yang pantas terlihat: model tanpa prompt
+  // menghasilkan video tanpa arahan.
+  const prompt = b.input.prompt;
+  assert.equal(typeof prompt, "string", "prompt hilang dari payload");
+  assert.match(prompt as string, /Do not add any text overlay, caption bar, subtitle, watermark, or invented logo\./);
+  assert.match(prompt as string, /hands presenting product/);
 });
 
 test("klip melebihi batas Grok ditolak SEBELUM dikirim, bukan sesudah dibayar", () => {

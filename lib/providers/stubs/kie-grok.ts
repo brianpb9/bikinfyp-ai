@@ -51,6 +51,7 @@ import { teksPromptShot } from "../teks-prompt";
 import { kualitasDikenal, type Kualitas } from "../../kualitas-video";
 import { modelBerlaku } from "../../pemetaan-model";
 import { catatProvider } from "../../provider-log";
+import { badanKieVideo } from "../../kie-payload";
 
 const PROVIDER_KEY = "kie-grok";
 
@@ -163,23 +164,30 @@ export function buatBadanTask(spec: VisualSpec, shot: ShotSpec, imageUrl: string
       `[kie-grok] shot ${shot.index}: ${shot.durationSec} detik melebihi batas ${MAKS_DETIK_PER_KLIP} detik.`,
     );
   }
+  // Model dari pemetaan admin kalau paketnya punya; config.kieGrokModel tetap
+  // jadi bawaan. Lihat lib/pemetaan-model.ts.
+  const model = kualitasDikenal(spec.qualityTier)
+    ? modelBerlaku(spec.qualityTier as Kualitas)
+    : config.kieGrokModel;
+
   return {
-    // Model dari pemetaan admin kalau paketnya punya; config.kieGrokModel
-    // tetap jadi bawaan. Lihat lib/pemetaan-model.ts.
-    model: kualitasDikenal(spec.qualityTier) ? modelBerlaku(spec.qualityTier as Kualitas) : config.kieGrokModel,
-    input: {
-      image_urls: [imageUrl],
-      index: 0,
+    model,
+    // BENTUK MASUKAN BERBEDA PER MODEL, dan itu bukan detail: seedance-2-mini
+    // menuntut first_frame_url sementara grok menuntut image_urls[]. Satu bentuk
+    // untuk semuanya berarti model yang baru dipilih admin kehilangan medan yang
+    // ia wajibkan, dan gagalnya baru terlihat beberapa menit kemudian di sisi
+    // provider — sesudah ditagih. Lihat lib/kie-payload.ts.
+    input: badanKieVideo(model, {
       // Teks yang PERSIS SAMA dengan yang dikirim ke BytePlus — disusun oleh
       // fungsi yang sama, bukan ditiru. Yang membedakan Standard dari Premium
       // dan Ultra hanya modelnya; promptnya tidak boleh berbeda satu byte pun.
       prompt: teksPromptShot(spec, shot),
-      mode: "normal",
-      aspect_ratio: rasioDari(spec),
-      duration: Math.round(shot.durationSec),
+      imageUrls: [imageUrl],
+      aspectRatio: rasioDari(spec),
+      durationSec: shot.durationSec,
       resolution: config.tiers[spec.qualityTier]?.resolution ?? "480p",
-      nsfw_checker: true,
-    },
+      generateAudio: spec.generateAudio,
+    }),
   };
 }
 
