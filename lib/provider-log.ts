@@ -89,6 +89,20 @@ export async function catatProvider(baris: BarisLog): Promise<void> {
         baris.durasiMs ?? null,
         baris.tokenTerpakai ?? null,
         baris.biayaIdr ?? null,
+        // KELIMA BELAS. Sampai 9 Sep 2026 nilai ini tidak pernah dikirim:
+        // daftar kolomnya 15 dan placeholder-nya $1..$15, tapi array-nya cuma
+        // 14 isi. Postgres menolak SETIAP baris dengan "bind message supplies
+        // 14 parameters, but prepared statement requires 15" — dan karena
+        // catatProvider sengaja menelan galatnya sendiri (mencatat tidak boleh
+        // menggagalkan render), kegagalannya cuma muncul sebagai satu baris
+        // console.warn di worker. Tabelnya kosong sejak hari pertama, dan tab
+        // "Provider" yang Brian minta tidak pernah punya apa pun untuk
+        // ditampilkan.
+        //
+        // Pelajarannya bukan "kurang teliti": jalur yang menelan galatnya
+        // sendiri WAJIB punya tes yang memanggilnya sungguhan, karena tidak
+        // ada satu pun sinyal lain yang akan memberitahu.
+        new Date().toISOString(),
       ],
     );
   } catch (e) {

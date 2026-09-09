@@ -35,7 +35,9 @@ def features(filename):
     mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((5, 5), np.uint8))
     contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     if not contours:
-        return {"area_fraction": 0.0, "solidity": 0.0, "valleys": 0, "hist": histogram(image), "eligible": False}
+        return {"gray": cv2.resize(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), (96, 96), interpolation=cv2.INTER_AREA).astype("float32"),
+                "skin_small": cv2.resize(mask, (96, 96), interpolation=cv2.INTER_NEAREST),
+                "area_fraction": 0.0, "solidity": 0.0, "valleys": 0, "hist": histogram(image), "eligible": False}
     contour = max(contours, key=cv2.contourArea)
     area = cv2.contourArea(contour)
     hull = cv2.convexHull(contour)
@@ -61,12 +63,28 @@ def features(filename):
         except (cv2.error, IndexError, ValueError) as err:
             print("qc-02: lembah jari dilewati (" + type(err).__name__ + ")", file=sys.stderr)
     return {
+        "gray": cv2.resize(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), (96, 96), interpolation=cv2.INTER_AREA).astype("float32"),
+        "skin_small": cv2.resize(mask, (96, 96), interpolation=cv2.INTER_NEAREST),
         "area_fraction": round(area / float(w * h), 5),
         "solidity": round(area / hull_area, 4),
         "valleys": int(min(valleys, 8)),
         "hist": histogram(image),
         "eligible": area / float(w * h) >= 0.008,
     }
+
+
+def latar_berubah(a, b):
+    """Seberapa besar LATAR (piksel bukan-kulit) berubah antara dua frame.
+
+    Kenapa latar: morphing tangan mengubah siluet kulit SEMENTARA adegannya
+    tetap — meja, dinding, dan produk di belakangnya tidak ke mana-mana. Ganti
+    adegan mengubah keduanya. Jadi latar adalah pembeda yang tidak bisa
+    dikelabui oleh dua adegan yang kebetulan sewarna.
+    """
+    keep = cv2.bitwise_or(a["skin_small"], b["skin_small"]) == 0
+    if keep.sum() < 500:
+        return 0.0
+    return float(np.mean(np.abs(a["gray"][keep] - b["gray"][keep]))) / 255.0
 
 
 def histogram(image):
@@ -76,14 +94,61 @@ def histogram(image):
 
 
 def main():
-    if len(sys.argv) < 3:
-        raise SystemExit("usage: qc_hand_morph_check.py <frame...>")
-    items = [{"file": f, **features(f)} for f in sys.argv[1:]]
+    # BATAS SHOT DIBERITAHUKAN, TIDAK LAGI DITEBAK DARI WARNA (9 Sep 2026).
+    #
+    # Deteksi potongan di bawah memakai jarak histogram warna dengan ambang
+    # 0.42. Pada job 615855d8 potongan nyata dari close-up spakbor motor ke
+    # presenter memegang botol mengukur 0.381 — DI BAWAH ambang, karena kedua
+    # shot sama-sama abu/hitam/putih. Potongan itu lalu dinilai sebagai
+    # transisi tangan: area siluet kulit naik 2.91x (seujung jari -> dua tangan
+    # + leher + dagu), soliditas berubah 0.227, dua sinyal, ditolak.
+    #
+    # Video yang benar dibuang tiga kali. Detektor warna memang tidak bisa
+    # melihat potongan antar dua adegan yang sewarna — dan produk otomotif,
+    # elektronik, dan kemasan gelap justru hampir selalu sewarna.
+    #
+    # Pemanggil TAHU di mana potongannya: video ini gabungan klip yang
+    # durasinya ia tentukan sendiri. Batas yang diberitahukan bersifat pasti;
+    # ambang warna dipertahankan sebagai jaring untuk potongan DI DALAM satu
+    # klip, yang memang tidak bisa diketahui dari luar.
+    cuts = []
+    fps = 2.0
+    argv = []
+    for a in sys.argv[1:]:
+        if a.startswith("--cuts="):
+            cuts = [float(x) for x in a[len("--cuts="):].split(",") if x.strip()]
+        elif a.startswith("--fps="):
+            fps = float(a[len("--fps="):]) or 2.0
+        else:
+            argv.append(a)
+    if len(argv) < 2:
+        raise SystemExit("usage: qc_hand_morph_check.py [--fps=N] [--cuts=a,b] <frame...>")
+    items = [{"file": f, "index": i, **features(f)} for i, f in enumerate(argv)]
     anomalies = []
     evaluated = 0
     for a, b in zip(items, items[1:]):
         # Hard edits/cuts are not a hand morph; ignore their boundary.
-        cut = cv2.compareHist(a["hist"].astype("float32"), b["hist"].astype("float32"), cv2.HISTCMP_BHATTACHARYYA) > 0.42
+        # Batas yang DIBERITAHUKAN menang atas tebakan warna.
+        t_a = a["index"] / fps
+        t_b = b["index"] / fps
+        cut_diketahui = any(t_a < c <= t_b + 1e-6 for c in cuts)
+        jarak_warna = cv2.compareHist(a["hist"].astype("float32"), b["hist"].astype("float32"), cv2.HISTCMP_BHATTACHARYYA)
+        # DUA TANDA TANGAN, karena satu saja bisa buta.
+        #
+        # Ambang warna tunggal 0.42 melewatkan potongan job 615855d8: close-up
+        # spakbor motor -> presenter memegang botol mengukur 0.381, sebab kedua
+        # adegan sama-sama abu/hitam/putih. Produk otomotif, elektronik, dan
+        # kemasan gelap hampir selalu begitu.
+        #
+        # Latarnya sendiri berubah 0.230 di transisi itu, sementara gerakan
+        # kamera DI DALAM satu adegan tertinggi 0.167. Keduanya masing-masing
+        # terlalu rapat untuk jadi ambang tunggal yang aman — tapi potongan
+        # adegan adalah satu-satunya hal yang menggerakkan KEDUANYA sekaligus.
+        # Jadi syarat gabungannya sengaja dibuat konjungtif: ia hanya menambah
+        # potongan yang terlewat, tidak pernah menambah kegagalan.
+        cut = (cut_diketahui
+               or jarak_warna > 0.42
+               or (jarak_warna > 0.28 and latar_berubah(a, b) > 0.20))
         if cut or not (a["eligible"] and b["eligible"]):
             continue
         evaluated += 1
@@ -100,7 +165,8 @@ def main():
                 "signals": signals,
             })
     # One strongly abnormal non-cut adjacent transition is enough to flag.
-    print(json.dumps({"sampled_frames": len(items), "evaluated_pairs": evaluated, "anomalies": anomalies}, default=lambda x: x.tolist()))
+    print(json.dumps({"sampled_frames": len(items), "evaluated_pairs": evaluated,
+                      "known_cuts": len(cuts), "anomalies": anomalies}, default=lambda x: x.tolist()))
 
 
 if __name__ == "__main__":

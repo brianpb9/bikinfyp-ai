@@ -507,7 +507,7 @@ export async function qcTextNotClipped(
  * or finger-valley proxy), so it is intentionally a conservative morphing
  * detector rather than an unreliable finger counter.
  */
-export async function qcHandMorphing(filePath: string, workDir: string): Promise<QcCheck> {
+export async function qcHandMorphing(filePath: string, workDir: string, shotPaths?: string[]): Promise<QcCheck> {
   const framesDir = path.join(workDir, "qc02_frames");
   fs.rmSync(framesDir, { recursive: true, force: true });
   fs.mkdirSync(framesDir, { recursive: true });
@@ -516,7 +516,33 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
   await runFfmpeg(["-y", "-v", "error", "-i", filePath, "-vf", "fps=2,scale=480:-2", "-frames:v", "32", pattern]);
   const frames = fs.readdirSync(framesDir).filter((f) => f.endsWith(".jpg")).sort().map((f) => path.join(framesDir, f));
   if (frames.length < 2) throw new Error("frame sampel QC-02 tidak cukup");
-  const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_hand_morph_check.py"), ...frames]);
+  // BATAS SHOT DIHITUNG, BUKAN DITEBAK. Video jadi adalah gabungan klip yang
+  // durasinya kita tentukan sendiri, jadi titik sambungnya diketahui persis.
+  // Tanpa ini, deteksi potongan bersandar pada jarak histogram warna — dan
+  // pada job 615855d8 potongan nyata mengukur 0.381 terhadap ambang 0.42
+  // karena kedua adegan sama-sama abu/hitam. Video benar ditolak 3x.
+  //
+  // GAGAL MENGUKUR = LANJUT TANPA BATAS. Ini lapisan ketelitian, bukan syarat
+  // hidup: kalau ffprobe gagal, pemeriksaan tetap berjalan seperti sebelumnya.
+  const batas: number[] = [];
+  if (shotPaths?.length) {
+    let kumulatif = 0;
+    for (const klip of shotPaths.slice(0, -1)) {
+      try {
+        kumulatif += await probeDurationSec(klip);
+        batas.push(Number(kumulatif.toFixed(3)));
+      } catch (err) {
+        console.warn(`[qc-02] durasi klip tidak terbaca, batas shot dilewati: ${(err as Error).message}`);
+        batas.length = 0;
+        break;
+      }
+    }
+  }
+  const argCuts = batas.length ? [`--cuts=${batas.join(",")}`] : [];
+  const { stdout } = await runFf(pythonBin(), [
+    path.join(process.cwd(), "lib", "media", "qc_hand_morph_check.py"),
+    "--fps=2", ...argCuts, ...frames,
+  ]);
   const data = JSON.parse(stdout) as HandMorphResult;
   const worst = data.anomalies[0];
   return {
@@ -525,7 +551,8 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
     status: worst ? "fail" : "pass",
     detail: worst
       ? `anomali siluet ${path.basename(worst.from)}→${path.basename(worst.to)}: area×${worst.area_ratio}, soliditas Δ${worst.solidity_delta}, lembah-jari Δ${worst.valley_delta}`
-      : `${data.sampled_frames} frame; ${data.evaluated_pairs} transisi tangan non-cut diperiksa`,
+      : `${data.sampled_frames} frame; ${data.evaluated_pairs} transisi tangan non-cut diperiksa`
+        + (batas.length ? ` (${batas.length} batas shot diketahui)` : ""),
   };
 }
 
@@ -927,7 +954,7 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "skip", detail: "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated." });
   } else {
     try {
-      checks.push(await qcHandMorphing(input.filePath, path.dirname(input.filePath)));
+      checks.push(await qcHandMorphing(input.filePath, path.dirname(input.filePath), input.shotPaths));
     } catch (err) {
       // Cannot inspect a hands_only/talking_head output safely: fail closed, rather than hide it.
       checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "fail", detail: `detektor gagal: ${err instanceof Error ? err.message : err}` });

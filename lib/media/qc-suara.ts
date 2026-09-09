@@ -24,6 +24,7 @@ import path from "node:path";
 import os from "node:os";
 import { config } from "../config";
 import { runFfmpeg } from "./ffmpeg";
+import { terbilang } from "../script-engine/terbilang";
 
 const MODEL = "gemini-flash-latest";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
@@ -50,27 +51,70 @@ export interface QcSuaraResult {
 const rapikan = (s: string) =>
   s.toLowerCase().replace(/[^\p{L}\p{N}\s]/gu, " ").replace(/\s+/g, " ").trim();
 
-/** Angka yang diucapkan bahasa Indonesia -> perkiraan digitnya.
+/**
+ * Apakah harga benar-benar TERDENGAR di VO.
  *
- *  Tidak lengkap dan tidak perlu lengkap: yang dicari cuma apakah nominal
- *  harga MUNCUL, bukan mem-parsing seluruh bahasa. Kalau ragu, hasilnya
- *  peringatan — bukan penolakan. */
-function memuatHarga(transkrip: string, priceIdr: number): boolean {
-  const t = rapikan(transkrip);
-  const ribu = Math.round(priceIdr / 1000);
-  // "189" atau "seratus delapan puluh sembilan" — dua bentuk paling umum.
-  if (t.includes(String(ribu))) return true;
-  if (t.includes(String(priceIdr))) return true;
-  const satuan = ["nol", "satu", "dua", "tiga", "empat", "lima", "enam", "tujuh", "delapan", "sembilan"];
-  const digit = String(ribu).split("").map((d) => satuan[Number(d)]);
-  // Semua digit harganya muncul, urut, di dalam jendela yang wajar.
-  let pos = 0;
-  for (const kata of digit) {
-    const i = t.indexOf(kata, pos);
-    if (i < 0) return false;
-    pos = i + kata.length;
+ * ────────────────────────────────────────────────────────────────────────────
+ * KEGAGALAN YANG MELAHIRKAN VERSI INI (job 615855d8, 9 Sep 2026)
+ * ────────────────────────────────────────────────────────────────────────────
+ * Naskahnya berbunyi, dan VO mengucapkannya dengan benar:
+ *
+ *   "Harganya cuma sembilan belas ribu sembilan ratus dong, cek keranjang ya."
+ *
+ * QC-12 menolaknya: "harga Rp19.900 tidak terdengar di VO". Video dibuang,
+ * tiga percobaan habis, kredit dikembalikan — untuk video yang benar.
+ *
+ * Sebabnya satu baris: versi lama menghitung `Math.round(priceIdr / 1000)`.
+ * Untuk 19.900 itu menghasilkan 20, lalu ia mencari "20" atau digit-digitnya
+ * yang dieja satu per satu — "dua", lalu "nol". Tidak ada penutur bahasa
+ * Indonesia yang mengucapkan "dua nol ribu", dan naskahnya sendiri tidak
+ * pernah memuat angka 20. Gerbang itu menuntut mendengar harga yang TIDAK
+ * PERNAH DIMINTA untuk diucapkan.
+ *
+ * Akibatnya bukan kasus tepi. Harga eceran Indonesia hampir selalu berakhir
+ * 9.900 / 4.900 / 9.500 — jadi pembulatannya meleset pada justru bentuk harga
+ * yang paling umum, dan gerbang ini menolak video yang benar secara sistematis.
+ *
+ * ────────────────────────────────────────────────────────────────────────────
+ * YANG DIPAKAI SEKARANG: SUMBER YANG SAMA DENGAN PENULIS NASKAH
+ * ────────────────────────────────────────────────────────────────────────────
+ * terbilang() adalah fungsi yang dipakai mesin naskah untuk MENULIS harga.
+ * Memakainya juga untuk MEMERIKSA harga membuat kedua sisi tidak bisa hanyut:
+ * yang kita tuntut didengar persis yang kita suruh diucapkan.
+ *
+ * Bentuk longgar ikut diterima karena VO manusiawi memang memendekkan:
+ * "sembilan belas ribu" saja, "19 ribu", "19.900". Yang TIDAK diterima adalah
+ * harga lain — itu tetap klaim komersial yang salah, dan tetap penghalang.
+ */
+export function bentukHargaDiterima(priceIdr: number): string[] {
+  const bentuk: string[] = [];
+  const penuh = rapikan(terbilang(priceIdr));
+  bentuk.push(penuh);
+
+  // Potongan "…ribu" tanpa ekor ratusan: "sembilan belas ribu sembilan ratus"
+  // -> "sembilan belas ribu". VO yang menyebut ini menyebut harga yang benar,
+  // cuma dibulatkan ke bawah sebagaimana orang bicara.
+  const iRibu = penuh.lastIndexOf(" ribu");
+  if (iRibu > 0) bentuk.push(penuh.slice(0, iRibu + " ribu".length));
+
+  // Bentuk angka. rapikan() membuang titik/koma, jadi "19.900" menjadi "19 900"
+  // dan "Rp19.900" menjadi "rp19 900" -> keduanya tertangkap oleh dua entri ini.
+  const ribuBulat = Math.floor(priceIdr / 1000);
+  bentuk.push(String(priceIdr));
+  if (ribuBulat > 0) {
+    const sisa = priceIdr % 1000;
+    bentuk.push(`${ribuBulat} ${String(sisa).padStart(3, "0")}`);
+    bentuk.push(`${ribuBulat} ribu`);
+    bentuk.push(`${ribuBulat}rb`);
   }
-  return true;
+  return bentuk.filter((b) => b.length > 0);
+}
+
+/** Diekspor untuk diuji: ini gerbang penghalang, dan gerbang yang tidak bisa
+ *  diuji langsung adalah gerbang yang cacatnya baru ketahuan di produksi. */
+export function memuatHarga(transkrip: string, priceIdr: number): boolean {
+  const t = rapikan(transkrip);
+  return bentukHargaDiterima(priceIdr).some((b) => t.includes(b));
 }
 
 /**
