@@ -50,6 +50,7 @@ import { terbitkanGambarProvider } from "../../gambar-provider";
 import { teksPromptShot } from "../teks-prompt";
 import { kualitasDikenal, type Kualitas } from "../../kualitas-video";
 import { modelBerlaku } from "../../pemetaan-model";
+import { catatProvider } from "../../provider-log";
 
 const PROVIDER_KEY = "kie-grok";
 
@@ -276,13 +277,39 @@ export const kieGrokVideo: VideoProvider = {
         const taskId = await buatTask(spec, shot);
         await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId);
         console.log(`[kie-grok] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
+        // Dicatat sama seperti BytePlus. Log yang cuma memuat satu provider
+        // tidak menjawab "kenapa job ini gagal" untuk paket yang memakai
+        // provider satunya — dan justru paket itulah yang paling sering
+        // dipertanyakan karena tarifnya berbeda.
+        void catatProvider({
+          jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+          model: config.kieGrokModel, taskId, fase: "submit",
+          requestRingkas: `durasi=${shot.durationSec}s ratio=${spec.ratio ?? "9:16"}`,
+        });
         return { shot, taskId, mulai: Date.now() };
       }),
     );
 
     const assets: VideoAsset[] = [];
     for (const { shot, taskId, mulai } of dikirim) {
-      const { url, kredit } = await tungguHasil(taskId, mulai, batasMs);
+      let url: string, kredit: number;
+      try {
+        ({ url, kredit } = await tungguHasil(taskId, mulai, batasMs));
+      } catch (err) {
+        void catatProvider({
+          jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+          model: config.kieGrokModel, taskId, fase: "gagal",
+          durasiMs: Date.now() - mulai,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
+      }
+      void catatProvider({
+        jobId: spec.jobId, shotIndex: shot.index, provider: PROVIDER_KEY,
+        model: config.kieGrokModel, taskId, fase: "selesai",
+        durasiMs: Date.now() - mulai, biayaIdr: biayaDariKredit(kredit),
+        response: { kredit },
+      });
       const unduh = await fetch(url);
       if (!unduh.ok) throw new Error(`[kie-grok] unduh video HTTP ${unduh.status}`);
       const berkas = path.join(outDir, `shot${shot.index}.mp4`);

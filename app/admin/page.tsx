@@ -5,6 +5,7 @@ import { getPool } from "@/lib/postgres/pool";
 import { config } from "@/lib/config";
 import { TombolStatusOrg } from "./_TombolStatusOrg";
 import { TombolTokenOrg } from "./_TombolTokenOrg";
+import { createSignedUrl } from "@/lib/signed-url";
 
 // DASHBOARD ADMIN — BACA SAJA.
 //
@@ -38,7 +39,7 @@ const TAB = [
   { id: "pesanan", label: "Pesanan" },
   { id: "pemakaian", label: "Pemakaian" },
   { id: "job", label: "Job" },
-  { id: "provider", label: "Log Provider" },
+  { id: "provider", label: "Generation" },
 ] as const;
 
 type IdTab = (typeof TAB)[number]["id"];
@@ -439,68 +440,117 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
  * sebuah job gagal, mengetahui task id-nya bergantung pada apakah kita sempat
  * membukanya sebelum deploy berikutnya.
  */
+/**
+ * Riwayat GENERATION — hasil tiap job plus panggilan provider di baliknya.
+ *
+ * ---------------------------------------------------------------------------
+ * KENAPA BERPUSAT PADA JOB, BUKAN PADA BARIS LOG
+ * ---------------------------------------------------------------------------
+ * Versi pertama tab ini hanya membaca provider_log, dan Brian menemukannya
+ * KOSONG: tabel itu baru dibuat, jadi ia cuma memuat panggilan setelah deploy.
+ * Sementara riwayat yang sebenarnya ada — 35 job, 8 berhasil, 27 gagal, 8 video
+ * jadi — tidak terlihat sama sekali.
+ *
+ * Log panggilan saja juga tidak menjawab pertanyaan yang benar-benar dipunyai
+ * orang: "job ini berhasil atau tidak, kalau gagal kenapa, dan videonya seperti
+ * apa". Jadi barisnya satu per JOB, dan panggilan providernya menempel di
+ * bawahnya — bukan sebaliknya.
+ *
+ * Sebab kegagalan diambil dari audit_log (failJob menulis `reason` ke sana),
+ * karena tabel jobs sendiri tidak menyimpan alasannya.
+ */
 async function Provider() {
   const pool = getPool(config.databaseUrl);
-  const { rows } = await pool.query<{
-    created_at: string; provider: string; model: string | null; task_id: string | null;
-    fase: string; job_id: string | null; shot_index: number | null;
-    durasi_ms: number | null; token_terpakai: number | null;
-    error: string | null; response_ringkas: string | null; request_ringkas: string | null;
-  }>(`SELECT created_at, provider, model, task_id, fase, job_id, shot_index,
-             durasi_ms, token_terpakai, error, response_ringkas, request_ringkas
-        FROM provider_log ORDER BY created_at DESC LIMIT 200`);
 
-  const gagal = rows.filter((r) => r.fase === "gagal").length;
+  const { rows } = await pool.query<{
+    id: string; state: string; quality_tier: string; format: string;
+    duration_s: number; provider_video: string | null; cost_actual_idr: number;
+    created_at: string; email: string | null; video_url: string | null;
+    alasan: string | null; panggilan: string | null; qc_gagal: string | null;
+  }>(`
+    SELECT j.id, j.state, j.quality_tier, j.format, j.duration_s,
+           j.provider_video, j.cost_actual_idr, j.created_at, u.email,
+           (SELECT o.video_url FROM outputs o WHERE o.job_id = j.id LIMIT 1) AS video_url,
+           -- Sebab kegagalan hidup di audit_log: failJob menulis {to, at, reason}
+           -- ke sana, dan tabel jobs tidak punya kolom untuk itu.
+           (SELECT a.meta FROM audit_log a
+             WHERE a.entity = 'jobs' AND a.entity_id = j.id AND a.action = 'job.transition'
+               AND a.meta LIKE '%reason%' ORDER BY a.created_at DESC LIMIT 1) AS alasan,
+           -- Panggilan provider yang tercatat untuk job ini. Kosong untuk job
+           -- lama — tabelnya baru ada 9 Sep 2026, dan itu dinyatakan apa adanya
+           -- alih-alih membuat barisnya hilang.
+           (SELECT string_agg(pl.fase || ':' || COALESCE(pl.task_id, '-'), ' · ' ORDER BY pl.created_at)
+              FROM provider_log pl WHERE pl.job_id = j.id) AS panggilan,
+           (SELECT string_agg(c ->> 'code', ',')
+              FROM json_array_elements(NULLIF(j.qc_result, '')::json -> 'checks') c
+             WHERE c ->> 'status' = 'fail') AS qc_gagal
+      FROM jobs j LEFT JOIN users u ON u.id = j.user_id
+     ORDER BY j.created_at DESC LIMIT 100`);
+
+  const berhasil = rows.filter((r) => r.state === "READY").length;
+  const gagal = rows.filter((r) => ["FAILED", "REFUNDED"].includes(r.state)).length;
+
+  const sebab = (meta: string | null): string | null => {
+    if (!meta) return null;
+    try { return (JSON.parse(meta) as { reason?: string }).reason ?? null; } catch { return null; }
+  };
 
   return (
     <section className="space-y-2">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-sm font-bold text-zinc-900">Log provider ({rows.length})</h2>
-        {gagal > 0 && (
-          <span className="rounded-lg bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700">
-            {gagal} gagal
-          </span>
-        )}
+      <div className="flex flex-wrap items-center gap-2">
+        <h2 className="text-sm font-bold text-zinc-900">Riwayat generation ({rows.length})</h2>
+        <span className="rounded-lg bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700">{berhasil} berhasil</span>
+        {gagal > 0 && <span className="rounded-lg bg-red-50 px-2 py-1 text-[11px] font-bold text-red-700">{gagal} gagal</span>}
       </div>
       <p className="text-[11px] leading-relaxed text-zinc-500">
-        200 panggilan terakhir. Generation id bisa dipakai menelusuri pekerjaan di sisi provider.
-        Badan permintaan sengaja TIDAK disimpan — ia memuat foto produk sebagai base64.
+        100 job terakhir beserta panggilan provider di baliknya. Kolom panggilan kosong untuk job
+        sebelum 9 Sep 2026 — pencatatannya baru ada sejak itu, dan itu dinyatakan apa adanya.
       </p>
       {rows.length === 0 ? (
-        <Kosong pesan="Belum ada panggilan provider yang tercatat. Baris pertama muncul saat video berikutnya dirender." />
+        <Kosong pesan="Belum ada job." />
       ) : (
-        <Tabel kepala={["Waktu", "Fase", "Generation ID", "Model", "Job / shot", "Durasi", "Token", "Catatan"]}>
-          {rows.map((r, i) => (
-            <tr key={`${r.task_id ?? "-"}-${i}`} className="border-t border-zinc-100 align-top">
+        <Tabel kepala={["Waktu", "Hasil", "Paket", "Provider", "Generation ID", "Biaya", "Sebab / QC", "Video"]}>
+          {rows.map((r) => (
+            <tr key={r.id} className="border-t border-zinc-100 align-top">
               <td className="whitespace-nowrap px-2 py-1.5 text-zinc-500">
                 {new Date(r.created_at).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}
+                <div className="font-mono text-[10px] text-zinc-400">{r.id.slice(0, 8)}</div>
               </td>
               <td className="px-2 py-1.5">
                 <span className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                  r.fase === "gagal" ? "bg-red-100 text-red-700"
-                  : r.fase === "selesai" ? "bg-emerald-100 text-emerald-700"
-                  : "bg-zinc-100 text-zinc-600"
-                }`}>{r.fase}</span>
+                  r.state === "READY" ? "bg-emerald-100 text-emerald-700"
+                  : ["FAILED", "REFUNDED"].includes(r.state) ? "bg-red-100 text-red-700"
+                  : "bg-amber-100 text-amber-700"
+                }`}>{r.state}</span>
               </td>
-              {/* Generation id dipilih-semua saat diketuk: ia dipakai dengan
-                  cara disalin ke dashboard provider, bukan dibaca. */}
-              <td className="px-2 py-1.5 font-mono text-[10px] text-zinc-800 select-all break-all">
-                {r.task_id ?? "—"}
+              <td className="whitespace-nowrap px-2 py-1.5 text-[10px] text-zinc-600">
+                {r.quality_tier}
+                <div className="text-zinc-400">{r.format} · {r.duration_s}s</div>
               </td>
-              <td className="px-2 py-1.5 text-[10px] text-zinc-600">{r.model ?? "—"}</td>
-              <td className="whitespace-nowrap px-2 py-1.5 font-mono text-[10px] text-zinc-500">
-                {r.job_id ? `${r.job_id.slice(0, 8)}${r.shot_index !== null ? ` #${r.shot_index}` : ""}` : "—"}
-              </td>
-              <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-zinc-600">
-                {r.durasi_ms ? `${Math.round(r.durasi_ms / 1000)}s` : "—"}
+              <td className="px-2 py-1.5 text-[10px] text-zinc-600">{r.provider_video ?? "—"}</td>
+              {/* Generation id dipilih-semua saat diketuk: dipakai dengan cara
+                  disalin ke dashboard provider, bukan dibaca. */}
+              <td className="px-2 py-1.5 font-mono text-[10px] text-zinc-700 select-all break-all">
+                {r.panggilan ?? <span className="font-sans text-zinc-400">belum tercatat</span>}
               </td>
               <td className="whitespace-nowrap px-2 py-1.5 tabular-nums text-zinc-600">
-                {r.token_terpakai?.toLocaleString("id-ID") ?? "—"}
+                {r.cost_actual_idr ? rupiah(r.cost_actual_idr) : "—"}
               </td>
-              <td className="px-2 py-1.5 text-[10px] text-zinc-600">
-                {r.error
-                  ? <span className="text-red-700">{r.error.slice(0, 220)}</span>
-                  : (r.response_ringkas ?? r.request_ringkas ?? "—").slice(0, 220)}
+              <td className="px-2 py-1.5 text-[10px]">
+                {sebab(r.alasan) && <div className="text-red-700">{sebab(r.alasan)!.slice(0, 180)}</div>}
+                {r.qc_gagal && <div className="text-amber-700">QC gagal: {r.qc_gagal}</div>}
+                {!sebab(r.alasan) && !r.qc_gagal && <span className="text-zinc-400">—</span>}
+              </td>
+              <td className="px-2 py-1.5">
+                {/* PRATINJAU HASIL. Tanpa ini, "berhasil" cuma label — dan label
+                    yang tidak bisa diperiksa persis yang membuat orang berhenti
+                    mempercayai dasbor. */}
+                {r.video_url
+                  ? <a href={createSignedUrl(r.video_url)} target="_blank" rel="noreferrer"
+                       className="whitespace-nowrap rounded border border-zinc-300 px-2 py-1 text-[10px] font-semibold text-zinc-700">
+                      ▶ Lihat
+                    </a>
+                  : <span className="text-[10px] text-zinc-400">—</span>}
               </td>
             </tr>
           ))}

@@ -81,7 +81,10 @@ test("ada pemangkasan — tabel tumbuh per SHOT, bukan per job", () => {
 
 test("admin punya tabnya, dan tabel tidak menyimpan badan permintaan", () => {
   const adm = kode("app/admin/page.tsx");
-  assert.match(adm, /id: "provider", label: "Log Provider"/, "tab tidak ada");
+  // Labelnya berubah jadi "Generation" 9 Sep 2026 saat tab-nya berhenti
+  // menjadi daftar panggilan dan mulai menjadi riwayat hasil. Yang dijaga tes
+  // ini adalah TAB-nya ada dan membaca tabelnya, bukan kata yang dipakai.
+  assert.match(adm, /id: "provider", label: "[^"]+"/, "tab tidak ada");
   assert.match(adm, /FROM provider_log/, "tab tidak membaca tabelnya");
 
   // Komentar SQL dibuang dulu: migrasinya MENJELASKAN bahwa header
@@ -115,4 +118,39 @@ test("layar storyboard menyebut SEBAB, bukan kalimat umum", () => {
   assert.match(hal, /Lihat pesan teknisnya/, "pesan teknis disembunyikan seluruhnya");
   // Dan pesan teknisnya benar-benar ditampilkan, bukan cuma disimpan.
   assert.match(hal, /\{data\.error\}/, "pesan teknis tidak pernah dirender");
+});
+
+test("tab admin membaca RIWAYAT JOB, bukan cuma tabel log yang baru", () => {
+  // Versi pertama tab ini hanya membaca provider_log dan Brian menemukannya
+  // KOSONG: tabelnya baru dibuat, jadi cuma memuat panggilan setelah deploy.
+  // Sementara riwayat yang benar-benar ada — 35 job, 8 berhasil, 27 gagal —
+  // tidak terlihat sama sekali.
+  const adm = kode("app/admin/page.tsx");
+  const i = adm.indexOf("async function Provider()");
+  const blok = adm.slice(i, i + 3500);
+  assert.match(blok, /FROM jobs j/, "tidak membaca riwayat job");
+  assert.match(blok, /FROM outputs o/, "tidak mengambil video hasil");
+  assert.match(blok, /FROM provider_log pl/, "panggilan provider tidak ikut");
+});
+
+test("hasil, sebab gagal, dan PRATINJAU ada di satu baris", () => {
+  // "Berhasil" tanpa cara memeriksanya cuma label — dan label yang tidak bisa
+  // diperiksa persis yang membuat orang berhenti mempercayai dasbor.
+  const adm = kode("app/admin/page.tsx");
+  const i = adm.indexOf("async function Provider()");
+  const blok = adm.slice(i, i + 6000);
+  assert.match(blok, /createSignedUrl\(r\.video_url\)/, "tidak ada pratinjau video");
+  assert.match(blok, /action = 'job\.transition'/, "sebab kegagalan tidak diambil");
+  assert.match(blok, /qc_gagal/, "kode QC yang gagal tidak ditampilkan");
+});
+
+test("kie.ai ikut tercatat, bukan cuma BytePlus", () => {
+  // Log yang cuma memuat satu provider tidak menjawab "kenapa job ini gagal"
+  // untuk paket yang memakai provider satunya — dan justru paket itu yang
+  // paling sering dipertanyakan karena tarifnya berbeda.
+  const kg = kode("lib/providers/stubs/kie-grok.ts");
+  assert.match(kg, /catatProvider\(/, "kie.ai tidak mencatat");
+  assert.match(kg, /fase: "submit"/, "generation id kie.ai tidak dicatat");
+  assert.match(kg, /fase: "gagal"/, "kegagalan kie.ai tidak dicatat");
+  assert.match(kg, /throw err;/, "galat ditelan pencatatan");
 });
