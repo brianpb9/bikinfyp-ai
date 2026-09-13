@@ -185,7 +185,7 @@ WHAT YOUR FILM MUST DO:
   spray landing on the grime, shirt keeping its shape after washing, sound filling the room — and set transformasi_en to the
   AFTER state of the very same frame. The BEFORE state must show the problem unmistakably (e.g. heavy black oily grime
   covering the surface); the AFTER state is realistically improved, never unrealistically brand-new. The edit dissolves
-  from before to after and labels it "Ilustrasi". It must show the PRODUCT causing the change, not water, a rag or a hand.
+  from before to after and adds the small label "Ilustrasi" itself (never write "Ilustrasi" in teks_layar). It must show the PRODUCT causing the change, not water, a rag or a hand.
 - CLAIMS: first list in klaim_sumber every benefit literally present in the seller's description or printed on the label.
   The VO, on-screen text and pictures may ONLY promise those. No absolute promises (dijamin, pasti, 100%, permanen),
   superlatives (terbaik, paling, nomor 1), durations (bertahun-tahun, instan), authority or endorsement (standar bengkel,
@@ -409,9 +409,16 @@ export async function auditKlaim(n: NaskahIklan, p: ProdukIklan, gambarProduk?: 
     fallbacks: "default",
     thinking: { type: "adaptive" },
     output_config: { effort: "medium", format: betaZodOutputFormat(SkemaAudit) },
-    system: "You audit Indonesian advertising copy for Indonesian consumer-protection compliance. List every fragment that promises a benefit, result, "
-      + "degree, duration, versatility, authority or feeling that is NOT supported by the seller's data or the label text. Neutral descriptions of the problem, "
-      + "the product name, the brand's own printed slogan and plain calls to action are fine. Be strict but do not flag emotional scene-setting that makes no product promise.",
+    // Putaran pertama audit menolak penggambaran MASALAH ("kerak tidak hilang
+    // hanya dengan lap") sebagai klaim, dan naskah gagal tiga kali untuk hal
+    // yang bukan janji tentang produk. Batasnya dinyatakan eksplisit.
+    system: "You audit Indonesian advertising copy for Indonesian consumer-protection compliance (UU Perlindungan Konsumen). "
+      + "Flag ONLY promises about THE PRODUCT that go beyond the seller's data or the label text: degree of result (total, maksimal, kinclong seperti baru), "
+      + "speed (instan, sekejap), effortlessness (cukup semprot, tanpa digosok), durability or long-lasting effect, versatility not stated (semua jenis mesin, "
+      + "motor dan mobil), authority or endorsement (standar bengkel, profesional), comparisons with competitors, or health/safety claims. "
+      + "Do NOT flag: the product's core function exactly as the data states it (e.g. data says 'pembersih kerak mesin' → showing or saying it cleans engine "
+      + "grime is fine); descriptions of the viewer's problem or everyday experience before the product; emotional scene-setting; the product name; the brand's "
+      + "own printed slogan; plain calls to action and the seller-given price.",
     messages: [{ role: "user", content: isi }],
   });
   const j = await stream.finalMessage();
@@ -449,8 +456,10 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
   const pesan: Anthropic.Beta.BetaMessageParam[] = [{ role: "user", content: isiAwal }];
   const usage = { input: 0, output: 0 };
   let galatTerakhir: string[] = [];
+  /** Semua pelanggaran yang pernah ditemukan — dikirim ulang supaya perbaikan tidak memunculkan yang lama lagi. */
+  const riwayatGalat: string[] = [];
 
-  for (let percobaan = 1; percobaan <= 3; percobaan++) {
+  for (let percobaan = 1; percobaan <= 5; percobaan++) {
     const stream = client.beta.messages.stream({
       model: MODEL_NASKAH_IKLAN,
       max_tokens: 32000,
@@ -487,13 +496,22 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
     }
 
     console.warn(`[iklan/naskah] percobaan ${percobaan}: ${galatTerakhir.length} pelanggaran — ${galatTerakhir.join(" | ")}`);
+    const lama = riwayatGalat.filter((g) => !galatTerakhir.includes(g));
+    riwayatGalat.push(...galatTerakhir.filter((g) => !riwayatGalat.includes(g)));
     pesan.push({ role: "assistant", content: jawaban.content as Anthropic.Beta.BetaContentBlockParam[] });
+    // PERBAIKAN MINIMAL. Render uji Faza v4: penulisan ulang total memperbaiki
+    // satu pelanggaran dan memunculkan tiga yang baru, empat kali berturut-turut.
     pesan.push({
       role: "user",
-      content: `Naskah ini melanggar aturan berikut. Tulis ulang naskah lengkap yang memperbaiki SEMUANYA tanpa menurunkan mutu cerita:\n- ${galatTerakhir.join("\n- ")}`,
+      content: [
+        "Naskah ini melanggar aturan berikut. Kembalikan naskah LENGKAP, tetapi ubah SEMINIMAL mungkin: perbaiki hanya shot/kalimat yang disebut,",
+        "pertahankan semua bagian lain persis seperti adanya. Jangan menambah janji baru tentang produk.",
+        `\nPelanggaran sekarang:\n- ${galatTerakhir.join("\n- ")}`,
+        lama.length ? `\nPelanggaran dari percobaan sebelumnya yang TIDAK BOLEH muncul lagi:\n- ${lama.join("\n- ")}` : "",
+      ].join("\n"),
     });
   }
-  throw new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 3 percobaan: ${galatTerakhir.join(" | ")}`);
+  throw new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 5 percobaan: ${galatTerakhir.join(" | ")}`);
 }
 
 function mimeGambar(b: Buffer): "image/png" | "image/webp" | "image/jpeg" {

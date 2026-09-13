@@ -218,7 +218,9 @@ export function buatAss(m: MasukanAss): string {
   n.shots.forEach((shot, i) => {
     if (i === lockupIdx) return;
     const s = slot[i];
-    const [utama = "", dukung = ""] = shot.teks_layar.split("|").map((x) => x.trim());
+    // Label "Ilustrasi" dipasang perakitan sendiri; bila penulis naskah ikut
+    // menulisnya sebagai teks layar (Faza v4), yang dari naskah dibuang.
+    const [utama = "", dukung = ""] = shot.teks_layar.split("|").map((x) => x.trim()).map((x) => (/^ilustrasi$/i.test(x) ? "" : x));
     if (shot.beat === "BUKTI") {
       // Sebelum→sesudah adalah gambaran, bukan rekaman — dinyatakan di layar.
       ev.push(`Dialogue: 2,${waktuAss(s.mulai + 0.1)},${waktuAss(s.mulai + s.durasi - 0.05)},Ilustrasi,,0,0,0,,{\\an7\\pos(40,${Math.round(H * 0.05)})}Ilustrasi`);
