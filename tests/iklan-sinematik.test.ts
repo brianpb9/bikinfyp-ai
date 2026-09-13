@@ -10,6 +10,8 @@ process.env.DB_PATH = `/tmp/racun-test-iklan-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-iklan-storage-${process.pid}`;
 
 const { periksaNaskah } = await import("../lib/iklan/naskah");
+const { adaPitaBlur } = await import("../lib/iklan/gerbang");
+const fs = await import("node:fs");
 const { susunTimeline, buatAss } = await import("../lib/iklan/susun");
 type NaskahIklan = import("../lib/iklan/naskah").NaskahIklan;
 type ShotIklan = import("../lib/iklan/naskah").ShotIklan;
@@ -97,11 +99,11 @@ test("timeline memperpanjang shot supaya kalimat VO tidak terpotong kalimat beri
   assert.equal(slot[5].durasi, 3);
 });
 
-test("kalimat yang tetap tidak muat dipercepat, maksimal 1,12x", () => {
+test("kalimat yang tetap tidak muat dipercepat, maksimal 1,15x", () => {
   const n = naskahContoh();
   const kalimat = [{ shot: 0, path: "a.wav", detik: 14 }, { shot: 2, path: "b.wav", detik: 2 }];
   const { slot } = susunTimeline(n, kalimat);
-  assert.ok((slot[0].voTempo ?? 1) <= 1.12 + 1e-9);
+  assert.ok((slot[0].voTempo ?? 1) <= 1.15 + 1e-9);
   assert.ok((slot[0].voTempo ?? 1) > 1);
 });
 
@@ -118,4 +120,40 @@ test("berkas ASS memuat teks kinetik per kata, subtitle VO, dan lockup merek + t
   assert.match(ass, /,Kontak,,.*WA 0812-0000-0000/);
   // VO di shot LOCKUP tidak ditampilkan sebagai subtitle: lockup milik merek.
   assert.equal((ass.match(/,Sub,,/g) ?? []).length, 1);
+});
+
+test("hook tidak dibengkakkan lebih dulu: kalimat dipercepat, shot hanya diperpanjang ≤ 0,8 dtk", () => {
+  // Render uji Faza: hook 3 dtk jadi 5 dtk. Kalimat 3,3 dtk di hook 3 dtk yang
+  // langsung disusul kalimat berikutnya.
+  const n = naskahContoh();
+  n.shots[1].vo = "Kalimat kedua.";
+  const kalimat = [{ shot: 0, path: "a.wav", detik: 3.3 }, { shot: 1, path: "b.wav", detik: 1.5 }];
+  const { slot } = susunTimeline(n, kalimat);
+  assert.ok((slot[0].voTempo ?? 1) > 1.001, "kalimat tidak dipercepat sebelum shot diperpanjang");
+  assert.ok(slot[0].durasi <= n.shots[0].durasi + 0.8 + 1e-9, `hook jadi ${slot[0].durasi} dtk`);
+  assert.ok(slot[0].voMulai! + 3.3 / slot[0].voTempo! <= slot[1].voMulai! - 0.1, "kalimat hook terpotong kalimat kedua");
+});
+
+test("VO yang tidak muat sebelum VO berikutnya ditolak naskah (tempo narator 2,3 kata/dtk)", () => {
+  const n = naskahContoh();
+  n.shots[0].vo = "Di balik kerak yang menumpuk lama sekali, mesin kehilangan wujud aslinya.";
+  n.shots[1].vo = "Kalimat berikutnya.";
+  assert.match(periksaNaskah(n, produk).join(" "), /Shot 1: VO \d+ kata tidak muat/);
+});
+
+test("teks layar yang hanya spesifikasi ditolak", () => {
+  const n = naskahContoh();
+  n.shots[5].teks_layar = "250 ml";
+  assert.match(periksaNaskah(n, produk).join(" "), /hanya spesifikasi/);
+});
+
+// Frame NYATA: dua dari video produksi yang berpita (9789aa55 kiri-kanan,
+// 49286d9f atas-bawah), lima dari iklan uji Faza — termasuk dua makro berlatar
+// gelap-bokeh yang dituduh detektor versi pertama.
+test("detektor pita blur: menangkap pita nyata, tidak menuduh bokeh", async () => {
+  const f = (n: string) => fs.readFileSync(new URL(`./fixtures/pita/${n}.jpg`, import.meta.url));
+  for (const n of ["pita-lr", "pita-tb"]) assert.equal((await adaPitaBlur(f(n))).pita, true, `${n} lolos`);
+  for (const n of ["bersih-kaos", "bokeh-01", "bokeh-06", "iklan-02", "iklan-12"]) {
+    assert.equal((await adaPitaBlur(f(n))).pita, false, `${n} dituduh berpita`);
+  }
 });

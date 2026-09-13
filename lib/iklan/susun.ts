@@ -58,19 +58,35 @@ export function susunTimeline(n: NaskahIklan, kalimat: KalimatVo[]): { slot: Slo
     const k = voPerShot.get(i)!;
     const batasAkhir = urutan + 1 < shotBersuara.length ? shotBersuara[urutan + 1] : n.shots.length;
     const akhirPenuh = batasAkhir === n.shots.length;
-    const butuh = AWAL_VO(i) + k.detik + (akhirPenuh ? 0.6 : JEDA);
+    const ekor = akhirPenuh ? 0.6 : JEDA;
     const rentang = () => dur.slice(i, batasAkhir).reduce((t, d) => t + d, 0);
-    let kurang = butuh - rentang();
-    // Perpanjang shot dalam rentang, dari yang paling pendek.
-    while (kurang > 0.01) {
-      const bisa = Array.from({ length: batasAkhir - i }, (_, j) => i + j).filter((j) => dur[j] < maksShot(j) - 0.01);
-      if (!bisa.length) break;
-      const j = bisa.sort((a, b) => dur[a] - dur[b])[0];
-      const tambah = Math.min(kurang, maksShot(j) - dur[j], 0.25);
-      dur[j] += tambah;
-      kurang -= tambah;
-    }
-    if (kurang > 0.01) tempo.set(i, Math.min(1.12, k.detik / Math.max(0.5, k.detik - kurang)));
+    let t = 1;
+    const kurang = () => AWAL_VO(i) + k.detik / t + ekor - rentang();
+    // Urutan penyelesaian, dari yang paling tidak terasa:
+    //   1. percepat kalimat sampai 1,08x (tidak terdengar)
+    //   2. perpanjang shot, maksimal +0,8 dtk dari rencana penulis
+    //   3. percepat lagi sampai 1,15x
+    //   4. baru perpanjang shot sampai batas klip
+    // Render uji pertama memperpanjang lebih dulu, dan shot hook 3 detik jadi
+    // 5 detik — shot yang paling tidak boleh lambat.
+    const percepat = (maks: number) => {
+      if (kurang() <= 0.01) return;
+      const ruang = rentang() - AWAL_VO(i) - ekor;
+      t = Math.min(maks, Math.max(t, k.detik / Math.max(0.5, ruang)));
+    };
+    const perpanjang = (batas: (j: number) => number) => {
+      while (kurang() > 0.01) {
+        const bisa = Array.from({ length: batasAkhir - i }, (_, j) => i + j).filter((j) => dur[j] < batas(j) - 0.01);
+        if (!bisa.length) break;
+        const j = bisa.sort((a, b) => dur[a] - dur[b])[0];
+        dur[j] += Math.min(kurang(), batas(j) - dur[j], 0.25);
+      }
+    };
+    percepat(1.08);
+    perpanjang((j) => Math.min(maksShot(j), n.shots[j].durasi + 0.8));
+    percepat(1.15);
+    perpanjang(maksShot);
+    if (t > 1.001) tempo.set(i, t);
   });
 
   const slot: SlotShot[] = [];
@@ -205,11 +221,11 @@ export async function susunIklan(m: MasukanSusun): Promise<{ path: string; total
   slot.forEach((s, i) => {
     f.push(
       `[${i}:v]trim=start=${BUANG_AWAL}:duration=${s.durasi},setpts=PTS-STARTPTS,fps=${FPS},`
-      + `scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H},setsar=1,format=yuv420p[v${i}]`,
+      + `scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H},setsar=1,format=yuv420p,settb=AVTB[v${i}]`,
     );
   });
   const kepala = Array.from({ length: nShot - 1 }, (_, i) => `[v${i}]`).join("");
-  f.push(`${kepala}concat=n=${nShot - 1}:v=1:a=0[badan]`);
+  f.push(`${kepala}concat=n=${nShot - 1}:v=1:a=0,fps=${FPS},settb=AVTB[badan]`);
   const offset = slot[nShot - 1].mulai - LARUT_LOCKUP;
   f.push(`[badan][v${nShot - 1}]xfade=transition=fade:duration=${LARUT_LOCKUP}:offset=${offset.toFixed(3)}[vgab]`);
   const fontsDir = path.join(process.cwd(), "assets", "fonts");

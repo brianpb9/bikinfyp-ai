@@ -45,7 +45,7 @@ export const SkemaNaskahIklan = z.object({
   nama_produk_pendek: z.string().describe("Short product name for the end card, ≤4 words."),
   ide_besar: z.string().describe("Bahasa Indonesia. The single big idea of the film in one sentence."),
   alasan_hook: z.string().describe("Bahasa Indonesia. Why the first 3 seconds make a stranger keep watching."),
-  tagline: z.string().describe("Bahasa Indonesia. End-card tagline, ≤6 words."),
+  tagline: z.string().describe("Bahasa Indonesia. End-card tagline, ≤6 words: natural, meaningful, memorable Indonesian that states the promise. No forced rhymes, no empty wordplay."),
   gaya_visual_en: z.string().describe("English. One locked look for every shot: palette, light quality, lens/depth of field, grade, time of day. 20–45 words."),
   suara_en: z.string().describe("English. Voice-over direction for the TTS narrator: gender, age, warmth, pace."),
   pemeran: z.array(z.object({
@@ -78,12 +78,14 @@ export const BATAS = {
   totalMin: 29,
   totalMaks: 35,
   shotDetikMin: 1.5,
-  shotDetikMaks: 4.5,
+  shotDetikMaks: 4,
   lockupMin: 3,
   lockupMaks: 5.5,
-  kataVoPerKalimatMaks: 14,
+  kataVoPerKalimatMaks: 11,
   kalimatVoMin: 5,
-  kataVoTotalMaks: 78,
+  kataVoTotalMaks: 62,
+  /** Kata per detik narator TTS kita — diukur pada render uji Faza v2 (2,07). Narator Blueprint 2,3–2,5. */
+  kataPerDetik: 2.1,
 } as const;
 
 /** Frasa yang membuat tiga video produksi 14 Sep 2026 terdengar identik. */
@@ -136,7 +138,9 @@ WHAT THEY SHARE — your film must do all of it:
 - Voice-over: 5–9 short sentences in warm, polished Bahasa Indonesia (baku tapi hangat, like a TV commercial
   narrator). No slang, no "Eh", "Sumpah", "Guys", "gue/lo", no marketplace talk ("keranjang", "checkout",
   "link"). Leave vo empty on shots where the picture should breathe.
-- On-screen text: short, meaningful, never repeating the VO word for word. Leave empty on most emotional shots.
+- On-screen text: short and meaningful — a benefit, a tension or a proof (e.g. "OPERASIONAL RIBET", "SEMUA DALAM SATU", "29 SERVICE CENTER").
+  Never a bare specification like "250 ml" or a product name. Never repeating the VO word for word. Leave empty on most emotional shots.
+- Tagline: natural, meaningful Indonesian that states the promise (like "Untuk langkah yang berarti"). No forced rhymes, no empty wordplay.
 
 MAKING IT RENDERABLE — the images come from an image model and the motion from a video model:
 - visual_en describes a single photograph of the FIRST frame: concrete subject, pose, setting, composition,
@@ -147,7 +151,11 @@ MAKING IT RENDERABLE — the images come from an image model and the motion from
 - The product must look exactly like the product photo. Do not change its colour, shape or label.
   If the product is small, use close_up/macro/insert shots for its moments.
 - gerak_en is the motion only: what moves and how the camera moves. Slow, controlled, cinematic.
-- Durations: 2–4 seconds per shot (LOCKUP 3–5). Total 30–35 seconds. 9–14 shots.
+- Durations: 2–3.5 seconds per shot is ideal, never above 4 (LOCKUP 3–5). Total 30–35 seconds. 9–14 shots.
+- Voice-over timing: the narrator speaks about 2.1 words per second. A VO sentence starting in shot i must fit before the next
+  VO sentence starts: words ≤ 2.1 × (sum of durations from shot i up to the next shot with VO − 0.5). Give long sentences
+  one or two following shots without VO.
+- Motion must stay inside the same place and moment for the whole shot: no arriving somewhere else, no day turning to night.
 - pemeran: 0–2 recurring characters with fixed appearance, reused verbatim.
 
 Pick the film type that fits the product best: an emotional story (like Eiger), a problem-to-solution
@@ -201,6 +209,24 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
     if (kata(x.teks_layar).length > 5) galat.push(`Shot ${i + 1}: teks layar lebih dari 5 kata.`);
     for (const id of x.pemeran) {
       if (!n.pemeran.some((p) => p.id === id)) galat.push(`Shot ${i + 1}: pemeran "${id}" tidak didefinisikan.`);
+    }
+  });
+  // Kalimat VO harus muat sebelum kalimat berikutnya mulai, pada tempo narator
+  // yang terukur. Render uji pertama tidak memeriksanya: iklan 33 detik keluar
+  // 43 detik karena timeline memanjangkan shot demi kalimat yang terlalu panjang.
+  const bersuara = s.map((x, i) => (x.vo.trim() ? i : -1)).filter((i) => i >= 0);
+  bersuara.forEach((i, u) => {
+    const akhir = u + 1 < bersuara.length ? bersuara[u + 1] : s.length;
+    const rentang = s.slice(i, akhir).reduce((t, x) => t + x.durasi, 0);
+    const muat = Math.floor(BATAS.kataPerDetik * Math.max(0, rentang - 0.5));
+    const jumlah = kata(s[i].vo).length;
+    if (jumlah > muat) {
+      galat.push(`Shot ${i + 1}: VO ${jumlah} kata tidak muat dalam ${rentang.toFixed(1)} dtk sebelum VO berikutnya (maks ${muat} kata) — pendekkan kalimat atau beri shot tanpa VO sesudahnya.`);
+    }
+  });
+  s.forEach((x, i) => {
+    if (/^\s*[\d.,]+\s*(ml|gr?|kg|l|cm|mm|inch|w|watt)?\s*$/i.test(x.teks_layar)) {
+      galat.push(`Shot ${i + 1}: teks layar "${x.teks_layar}" hanya spesifikasi — tulis manfaat, ketegangan, atau bukti.`);
     }
   });
   const ukuranBerbeda = new Set(s.map((x) => x.ukuran)).size;

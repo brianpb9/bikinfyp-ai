@@ -35,9 +35,14 @@ export interface KalimatVo {
 export async function buatVo(n: NaskahIklan, dir: string): Promise<{ kalimat: KalimatVo[]; biayaIdr: number }> {
   fs.mkdirSync(dir, { recursive: true });
   const suara = pilihSuara(n);
+  // TEMPO DIUKUR, BUKAN DIKIRA. Render uji pertama (Faza, 14 Sep 2026) memakai
+  // "unhurried" dan keluar 1,7 kata/detik; narator Blueprint 2,3–2,5
+  // kata/detik. Selisih itu memanjangkan iklan 33 detik jadi 43 detik dan
+  // membuat shot hook bertahan 5 detik.
   const gaya = [
     `Indonesian television commercial narrator. ${n.suara_en}`,
-    "Warm, confident, unhurried; clear articulation; natural pauses at commas; no exaggerated sales tone.",
+    "Confident, warm and brisk: a polished TV-commercial read at about 150 words per minute.",
+    "Clear articulation, only very short pauses at commas, no dragging vowels, no exaggerated sales tone.",
     "Speak Bahasa Indonesia with standard pronunciation.",
   ].join(" ");
   const kalimat: KalimatVo[] = [];

@@ -41,8 +41,11 @@ const PRODUK_EN: Record<ShotIklan["produk"], string> = {
     + "soft controlled light and subtle reflection, the upper third of the frame is calm empty space (for a title). Label facing camera, perfectly legible.",
 };
 
-export function promptKeyframe(n: NaskahIklan, shot: ShotIklan, acuan: { produk: boolean; pemeran: string[] }): string {
+export function promptKeyframe(n: NaskahIklan, shot: ShotIklan, acuan: { produk: boolean; pemeran: string[] }, catatan?: string): string {
   const bagian: string[] = [];
+  // Render uji pertama (Faza, shot 4): dua gambar acuan membuat Seedream
+  // menggambar kolase tiga panel. Dinyatakan di awal, sebelum apa pun.
+  bagian.push("Create ONE single continuous photograph that fills the whole frame — never a collage, grid, split screen, triptych or multiple panels.");
   let nomor = 1;
   if (acuan.produk) {
     bagian.push(
@@ -51,8 +54,14 @@ export function promptKeyframe(n: NaskahIklan, shot: ShotIklan, acuan: { produk:
     );
   }
   for (const id of acuan.pemeran) {
-    bagian.push(`REFERENCE IMAGE ${nomor++} shows the character "${id}". Keep exactly the same face, hair and clothing.`);
+    // Render uji pertama (Faza, shot 11): tanpa kalimat kedua, adegan "motor
+    // melaju saat matahari terbit" keluar sebagai pose jongkok dari acuan.
+    bagian.push(
+      `REFERENCE IMAGE ${nomor++} shows the character "${id}" for IDENTITY ONLY: keep exactly the same face, hair and clothing. `
+      + "Do NOT copy that image's pose, framing, location, lighting or action — the new shot below is a different moment.",
+    );
   }
+  if (catatan) bagian.push(catatan);
   bagian.push(`LOOK (identical for the whole film): ${n.gaya_visual_en}`);
   bagian.push(`${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`);
   const orang = n.pemeran.filter((p) => shot.pemeran.includes(p.id));
@@ -87,7 +96,6 @@ async function panggilSeedream(prompt: string, acuan: Buffer[]): Promise<Buffer>
       size: UKURAN,
       stream: false,
       watermark: false,
-      sequential_image_generation: "disabled",
     }),
     signal: AbortSignal.timeout(180_000),
   });
@@ -123,7 +131,10 @@ export interface HasilKeyframe {
  * Gambar semua keyframe ke `dir/kf-XX.jpg`. Berkas yang sudah ada TIDAK
  * digambar ulang — render uji bisa dilanjutkan tanpa membayar dua kali.
  */
-export async function buatKeyframes(n: NaskahIklan, fotoProduk: Buffer, dir: string, opts: { paralel?: number } = {}): Promise<HasilKeyframe> {
+export async function buatKeyframes(
+  n: NaskahIklan, fotoProduk: Buffer, dir: string,
+  opts: { paralel?: number; catatan?: Map<number, string> } = {},
+): Promise<HasilKeyframe> {
   fs.mkdirSync(dir, { recursive: true });
   const paths = n.shots.map((_, i) => path.join(dir, `kf-${String(i + 1).padStart(2, "0")}.jpg`));
   let jumlahDibuat = 0;
@@ -143,7 +154,7 @@ export async function buatKeyframes(n: NaskahIklan, fotoProduk: Buffer, dir: str
     const acuan: Buffer[] = [];
     if (pakaiProduk) acuan.push(fotoProduk);
     for (const id of pemeranAcuan) acuan.push(fs.readFileSync(paths[jangkar.get(id)!]));
-    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, pemeran: pemeranAcuan });
+    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, pemeran: pemeranAcuan }, opts.catatan?.get(i));
     fs.writeFileSync(paths[i].replace(/\.jpg$/, ".prompt.txt"), prompt);
     const t0 = Date.now();
     const bytes = await panggilSeedream(prompt, acuan);
@@ -159,8 +170,10 @@ export async function buatKeyframes(n: NaskahIklan, fotoProduk: Buffer, dir: str
       for (let i = antre.shift(); i !== undefined; i = antre.shift()) await gambar(i);
     }));
   };
-  // Jangkar dulu, sisanya sesudah — supaya acuan wajahnya sudah ada.
-  await jalankan([...shotJangkar]);
+  // Jangkar dulu, BERURUTAN — jangkar pemeran kedua sering memuat pemeran
+  // pertama (shot 10 Faza: ayah + anak), dan acuan ayahnya harus sudah jadi.
+  // Sisanya paralel sesudahnya.
+  for (const i of [...shotJangkar].sort((a, b) => a - b)) await gambar(i);
   await jalankan(n.shots.map((_, i) => i).filter((i) => !shotJangkar.has(i)));
 
   return { paths, jumlahDibuat, biayaIdr: jumlahDibuat * BIAYA_GAMBAR_IDR };

@@ -21,6 +21,7 @@ import { buatKlip } from "../lib/iklan/klip";
 import { buatVo } from "../lib/iklan/suara";
 import { susunIklan } from "../lib/iklan/susun";
 import { periksaIklan } from "../lib/iklan/gerbang";
+import { catatanUlang, kurasiKeyframes } from "../lib/iklan/kurasi";
 
 const argv = process.argv.slice(2);
 const arg = (nama: string) => {
@@ -83,10 +84,50 @@ async function main() {
   const naskah = JSON.parse(fs.readFileSync(berkasNaskah, "utf8")) as NaskahIklan;
   if (sampai === "naskah") return;
 
-  // 2. KEYFRAME
-  const kf = await buatKeyframes(naskah, acuan, path.join(dir, "keyframe"));
+  // 2. KEYFRAME + KURASI
+  //
+  // Setiap gambar dinilai terhadap maksud shot-nya; yang ditolak digambar ulang
+  // dengan alasan penolakannya, maksimal dua putaran. Kurasi yang sudah lulus
+  // disimpan per berkas, jadi menjalankan ulang tidak menilai ulang gambar yang
+  // sama.
+  const dirKf = path.join(dir, "keyframe");
+  let kf = await buatKeyframes(naskah, acuan, dirKf);
   biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
   simpanBiaya();
+  const berkasKurasi = path.join(dirKf, "kurasi.json");
+  const lulusSebelumnya: Record<string, number> = fs.existsSync(berkasKurasi) ? JSON.parse(fs.readFileSync(berkasKurasi, "utf8")) : {};
+  const ukuranBerkas = (p: string) => fs.statSync(p).size;
+  for (let putaran = 1; putaran <= 3 && !bendera("tanpa-kurasi"); putaran++) {
+    const perluDinilai = kf.paths.map((p, i) => i).filter((i) => lulusSebelumnya[path.basename(kf.paths[i])] !== ukuranBerkas(kf.paths[i]));
+    if (!perluDinilai.length) break;
+    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, perluDinilai);
+    biaya.kurasi_idr = (biaya.kurasi_idr ?? 0) + biayaIdr;
+    simpanBiaya();
+    fs.writeFileSync(path.join(dirKf, `kurasi-putaran-${putaran}.json`), JSON.stringify(nilai, null, 2));
+    const catatan = new Map<number, string>();
+    for (const v of nilai) {
+      const i = v.shot - 1;
+      if (i < 0 || i >= kf.paths.length) continue;
+      if (v.lulus) {
+        lulusSebelumnya[path.basename(kf.paths[i])] = ukuranBerkas(kf.paths[i]);
+      } else {
+        console.log(`[uji] kurasi putaran ${putaran}: shot ${v.shot} DITOLAK — ${v.masalah.join("; ")}`);
+        catatan.set(i, catatanUlang(v));
+      }
+    }
+    fs.writeFileSync(berkasKurasi, JSON.stringify(lulusSebelumnya, null, 2));
+    if (!catatan.size) break;
+    if (putaran === 3) {
+      console.log(`[uji] ${catatan.size} gambar masih ditolak setelah 2 kali gambar ulang — dilanjutkan, dicatat untuk reviewer.`);
+      break;
+    }
+    for (const i of catatan.keys()) {
+      fs.renameSync(kf.paths[i], kf.paths[i].replace(/\.jpg$/, `.tolak${putaran}.jpg`));
+    }
+    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan });
+    biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
+    simpanBiaya();
+  }
   if (sampai === "keyframe") return;
 
   // 3. KLIP + VO

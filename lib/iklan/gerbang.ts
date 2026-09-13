@@ -44,36 +44,75 @@ async function volumeRata(berkas: string, mulai: number, detik: number): Promise
  * tengah frame. Diukur dengan simpangan Laplacian dari sharp.
  */
 export async function adaPitaBlur(gambar: Buffer): Promise<{ pita: boolean; rasio: number }> {
-  const img = sharp(gambar).greyscale();
-  const meta = await img.metadata();
-  const w = meta.width ?? 0;
-  const h = meta.height ?? 0;
-  if (!w || !h) return { pita: false, rasio: 1 };
-  const tajam = async (left: number, top: number, width: number, height: number) => {
-    const buf = await sharp(gambar).greyscale()
-      .extract({ left, top, width, height })
-      .convolve({ width: 3, height: 3, kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0] })
-      .raw().toBuffer();
-    let jumlah = 0, kuadrat = 0;
-    for (const v of buf) { jumlah += v; kuadrat += v * v; }
-    const rata = jumlah / buf.length;
-    return Math.sqrt(Math.max(0, kuadrat / buf.length - rata * rata));
+  // Versi pertama membandingkan ketajaman tepi dengan tengah, dan menuduh dua
+  // shot makro Faza yang latarnya gelap-bokeh. Pita yang sungguhan punya tiga
+  // ciri yang bokeh tidak punya sekaligus:
+  //   1. SIMETRIS — kiri dan kanan (atau atas dan bawah) sama lebar
+  //   2. TEPI TEGAS — ketajaman melompat di satu garis lurus
+  //   3. SEPANJANG FRAME — lompatannya ada di setiap baris, bukan sebagian
+  const LW = 180, LH = 320;
+  const lap = await sharp(gambar).greyscale().resize(LW, LH, { fit: "fill" })
+    .convolve({ width: 3, height: 3, kernel: [0, 1, 0, 1, -4, 1, 0, 1, 0], offset: 128 })
+    .raw().toBuffer();
+  const energi = (x: number, y: number) => Math.abs(lap[y * LW + x] - 128);
+
+  /** Profil energi per kolom (atau baris), dan untuk tiap kolom: sebagian baris yang ikut "tajam". */
+  const profil = (sumbu: "x" | "y") => {
+    const n = sumbu === "x" ? LW : LH;
+    const m = sumbu === "x" ? LH : LW;
+    return Array.from({ length: n }, (_, a) => {
+      let t = 0;
+      for (let b = 0; b < m; b++) t += sumbu === "x" ? energi(a, b) : energi(b, a);
+      return t / m;
+    });
   };
-  const lebarTepi = Math.round(w * 0.08);
-  const tinggiTepi = Math.round(h * 0.06);
-  const tengah = await tajam(Math.round(w * 0.35), Math.round(h * 0.3), Math.round(w * 0.3), Math.round(h * 0.4));
-  const kiri = await tajam(0, Math.round(h * 0.3), lebarTepi, Math.round(h * 0.4));
-  const kanan = await tajam(w - lebarTepi, Math.round(h * 0.3), lebarTepi, Math.round(h * 0.4));
-  const atas = await tajam(Math.round(w * 0.2), 0, Math.round(w * 0.6), tinggiTepi);
-  const bawah = await tajam(Math.round(w * 0.2), h - tinggiTepi, Math.round(w * 0.6), tinggiTepi);
-  const pasangan = Math.max(Math.min(kiri, kanan), Math.min(atas, bawah));
-  // Kedua sisi SEPASANG sama-sama nyaris rata = pita. Satu sisi lembut saja
-  // biasanya latar bokeh, dan itu disengaja.
-  const rasioLR = Math.max(kiri, kanan) / Math.max(1, tengah);
-  const rasioTB = Math.max(atas, bawah) / Math.max(1, tengah);
-  const rasio = Math.min(rasioLR, rasioTB);
-  void pasangan;
-  return { pita: rasio < 0.08 && tengah > 6, rasio: Number(rasio.toFixed(3)) };
+  const rata = (arr: number[], a: number, b: number) => arr.slice(a, b).reduce((t, v) => t + v, 0) / Math.max(1, b - a);
+
+  /**
+   * Sebagian garis melintang (baris untuk sumbu x, kolom untuk sumbu y) yang
+   * ketajamannya melompat tepat di posisi batas `k` — di kedua sisi.
+   * Pita: batasnya lurus sepanjang frame. Bokeh: lembutnya bergelombang.
+   */
+  const garisLurus = (sumbu: "x" | "y", k: number) => {
+    const n = sumbu === "x" ? LW : LH;
+    const m = sumbu === "x" ? LH : LW;
+    const w = Math.max(3, Math.round(n * 0.03));
+    const e = (a: number, b: number) => (sumbu === "x" ? energi(a, b) : energi(b, a));
+    const rataPotong = (b: number, a0: number, a1: number) => {
+      let t = 0;
+      for (let a = a0; a < a1; a++) t += e(a, b);
+      return t / Math.max(1, a1 - a0);
+    };
+    let ikut = 0;
+    for (let b = 0; b < m; b++) {
+      const kiri = rataPotong(b, k - w, k) * 2 + 1 < rataPotong(b, k, k + w);
+      const kanan = rataPotong(b, n - k, n - k + w) * 2 + 1 < rataPotong(b, n - k - w, n - k);
+      if (kiri && kanan) ikut++;
+    }
+    return ikut / m;
+  };
+
+  const periksaSumbu = (sumbu: "x" | "y") => {
+    const arr = profil(sumbu);
+    const n = arr.length;
+    const tengah = rata(arr, Math.round(n * 0.3), Math.round(n * 0.7));
+    let terbaik = { rasio: 1, pita: false };
+    // Coba lebar pita 6%–30% di KEDUA sisi sekaligus.
+    for (let k = Math.round(n * 0.06); k <= Math.round(n * 0.3); k++) {
+      const luarA = rata(arr, 0, k), luarB = rata(arr, n - k, n);
+      const dalamA = rata(arr, k, k + Math.round(n * 0.06)), dalamB = rata(arr, n - k - Math.round(n * 0.06), n - k);
+      const rasioLuar = Math.max(luarA, luarB) / Math.max(0.5, tengah);
+      const lompat = Math.min(dalamA / Math.max(0.3, luarA), dalamB / Math.max(0.3, luarB));
+      if (rasioLuar < 0.3 && lompat > 3 && tengah > 3 && garisLurus(sumbu, k) >= 0.35) {
+        return { rasio: Number(rasioLuar.toFixed(3)), pita: true };
+      }
+      if (rasioLuar < terbaik.rasio) terbaik = { rasio: Number(rasioLuar.toFixed(3)), pita: false };
+    }
+    return terbaik;
+  };
+  const lr = periksaSumbu("x");
+  const tb = periksaSumbu("y");
+  return { pita: lr.pita || tb.pita, rasio: Math.min(lr.rasio, tb.rasio) };
 }
 
 export async function periksaIklan(input: {
