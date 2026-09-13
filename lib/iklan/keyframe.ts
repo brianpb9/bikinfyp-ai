@@ -1,15 +1,25 @@
 /**
- * GAMBAR KUNCI PER SHOT — Seedream, 9:16 penuh, produk dan pemeran terkunci.
+ * GAMBAR KUNCI PER SHOT — Seedream, 9:16 penuh, produk dan aset terkunci.
  *
  * Setiap shot iklan dimulai dari gambar yang digambar sebagai ADEGAN, bukan
  * dari foto produk yang ditambal. Foto yang ditambal pita blur adalah sumber
  * pita blur di dua dari tiga video produksi yang dibedah 14 Sep 2026 — model
  * video meniru komposisi berpitanya sepanjang klip.
  *
- * KONSISTENSI PEMERAN: shot pertama tempat seorang pemeran muncul digambar
- * lebih dulu, lalu gambarnya ikut dilampirkan sebagai acuan wajah dan pakaian
- * untuk setiap shot berikutnya yang memuat pemeran yang sama. Teks deskripsi
- * saja tidak cukup: dua gambar dari kalimat yang sama menghasilkan dua orang.
+ * KONSISTENSI ASET: shot pertama tempat sebuah aset (orang ATAU properti —
+ * motor, mesin, ruangan) muncul digambar lebih dulu, lalu gambarnya dilampirkan
+ * sebagai acuan identitas untuk setiap shot berikutnya yang memuat aset itu.
+ * Render uji Faza memakai acuan hanya untuk orang, dan mesinnya berganti model
+ * tiga kali dalam satu iklan (creative director: "twin-cylinder engine in the
+ * hook, single-cylinder in the rinse").
+ *
+ * BUKTI SEBELUM→SESUDAH: shot BUKTI mendapat gambar kedua, digambar dari gambar
+ * pertamanya sebagai acuan, dengan bingkai yang sama dan hanya keadaan yang
+ * berubah. Perakitan menyapu dari satu ke yang lain.
+ *
+ * LOCKUP: latarnya digambar TANPA produk. Foto produk asli penjual ditempel di
+ * atasnya saat perakitan — label kecil yang digambar model selalu jadi huruf
+ * acak ("Besvio Karet, Melajo" pada render uji Faza).
  */
 
 import fs from "node:fs";
@@ -30,18 +40,21 @@ const UKURAN_EN: Record<ShotIklan["ukuran"], string> = {
   insert: "Insert shot of hands and object",
 };
 
-const PRODUK_EN: Record<ShotIklan["produk"], string> = {
+const PRODUK_EN: Record<Exclude<ShotIklan["produk"], "pahlawan">, string> = {
   tidak_tampil: "The product does NOT appear in this image.",
   dipakai:
-    "The product appears naturally in use as part of the scene, recognisable and identical to the reference, but not the only focus.",
+    "The product appears naturally in use as part of the scene, recognisable and identical to the reference, not the only focus.",
   jelas:
-    "The product is clearly visible and in sharp focus, fully inside the frame, label facing the camera and legible, never covered by hands.",
-  pahlawan:
-    "Premium hero packshot: the product alone, centred in the lower-middle of the frame on a clean surface that fits the film's look, "
-    + "soft controlled light and subtle reflection, the upper third of the frame is calm empty space (for a title). Label facing camera, perfectly legible.",
+    "The product is clearly visible, large in frame and in sharp focus, fully inside the frame, label facing the camera and legible, never covered by hands.",
 };
 
-export function promptKeyframe(n: NaskahIklan, shot: ShotIklan, acuan: { produk: boolean; pemeran: string[] }, catatan?: string): string {
+export const pathSesudah = (p: string) => p.replace(/\.jpg$/, "-sesudah.jpg");
+
+export function promptKeyframe(
+  n: NaskahIklan, shot: ShotIklan,
+  acuan: { produk: boolean; aset: string[] },
+  catatan?: string,
+): string {
   const bagian: string[] = [];
   // Render uji pertama (Faza, shot 4): dua gambar acuan membuat Seedream
   // menggambar kolase tiga panel. Dinyatakan di awal, sebelum apa pun.
@@ -53,27 +66,49 @@ export function promptKeyframe(n: NaskahIklan, shot: ShotIklan, acuan: { produk:
       + "Do NOT copy that photo's background, framing, text or graphics — build the new scene below.",
     );
   }
-  for (const id of acuan.pemeran) {
+  for (const id of acuan.aset) {
     // Render uji pertama (Faza, shot 11): tanpa kalimat kedua, adegan "motor
     // melaju saat matahari terbit" keluar sebagai pose jongkok dari acuan.
     bagian.push(
-      `REFERENCE IMAGE ${nomor++} shows the character "${id}" for IDENTITY ONLY: keep exactly the same face, hair and clothing. `
-      + "Do NOT copy that image's pose, framing, location, lighting or action — the new shot below is a different moment.",
+      `REFERENCE IMAGE ${nomor++} shows "${id}" for IDENTITY ONLY: keep exactly the same face/hair/clothing (person) or the same model, `
+      + "shape, colour and details (object). Do NOT copy that image's pose, framing, location, lighting or action — this is a different moment.",
     );
   }
   if (catatan) bagian.push(catatan);
-  bagian.push(`LOOK (identical for the whole film): ${n.gaya_visual_en}`);
+  bagian.push(`LOOK (identical for the whole film): ${n.gaya_visual_en} Bright, clean exposure that reads well on a phone screen.`);
+  if (shot.beat === "LOCKUP") {
+    bagian.push(
+      `${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`,
+      "END-CARD BACKGROUND: an uncluttered premium surface and softly blurred background in the film's look. The lower-middle of the frame is an EMPTY "
+      + "clean surface where a product will be placed later; the upper third is calm negative space for a title. NO product, NO bottle, NO packaging, NO people, NO text.",
+    );
+    return bagian.join("\n");
+  }
   bagian.push(`${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`);
-  const orang = n.pemeran.filter((p) => shot.pemeran.includes(p.id));
-  if (orang.length) bagian.push(`CHARACTERS: ${orang.map((p) => `${p.id}: ${p.deskripsi_en}`).join(" ")}`);
-  else bagian.push("No recurring character in this shot.");
-  bagian.push(PRODUK_EN[shot.produk]);
+  if (shot.ukuran === "insert" || shot.ukuran === "macro") {
+    bagian.push("FRAMING IS TIGHT: fill the frame with the object and at most hands/forearms. No full body, no face, no wide background.");
+  }
+  const muncul = n.aset.filter((a) => shot.aset.includes(a.id));
+  if (muncul.length) bagian.push(`RECURRING ELEMENTS: ${muncul.map((a) => `${a.id} (${a.jenis}): ${a.deskripsi_en}`).join(" ")}`);
+  bagian.push(PRODUK_EN[shot.produk === "pahlawan" ? "jelas" : shot.produk]);
   bagian.push(
     "High-end Indonesian TV commercial still, photographic realism, natural skin texture, correct hands with five fingers, "
-    + "believable physics. Absolutely no added text, captions, subtitles, watermarks, logos, signage lettering or user-interface elements.",
+    + "believable physics, liquids coming from their real source. Riders wear helmets. "
+    + "Absolutely no added text, captions, subtitles, watermarks, logos, signage lettering or user-interface elements.",
   );
   bagian.push("Vertical 9:16 full-bleed composition, no borders, no letterboxing.");
   return bagian.join("\n");
+}
+
+export function promptSesudah(n: NaskahIklan, shot: ShotIklan, catatan?: string): string {
+  return [
+    "REFERENCE IMAGE 1 is the BEFORE frame of this shot. Recreate the EXACT same photograph — identical camera position, lens, framing, "
+    + "lighting, objects, people, hands and product placement — with ONLY this change:",
+    shot.transformasi_en,
+    catatan ?? "",
+    `LOOK: ${n.gaya_visual_en}`,
+    "One single photograph, no split screen, no text, no added objects. Vertical 9:16 full-bleed.",
+  ].filter(Boolean).join("\n");
 }
 
 function dataUri(b: Buffer): string {
@@ -123,58 +158,85 @@ async function panggilSeedream(prompt: string, acuan: Buffer[]): Promise<Buffer>
 
 export interface HasilKeyframe {
   paths: string[];
+  /** Gambar SESUDAH untuk shot BUKTI, bila ada (indeks shot -> path). */
+  sesudah: Map<number, string>;
   jumlahDibuat: number;
   biayaIdr: number;
 }
 
 /**
- * Gambar semua keyframe ke `dir/kf-XX.jpg`. Berkas yang sudah ada TIDAK
- * digambar ulang — render uji bisa dilanjutkan tanpa membayar dua kali.
+ * Gambar semua keyframe ke `dir/kf-XX.jpg` (+ `kf-XX-sesudah.jpg` untuk BUKTI).
+ * Berkas yang sudah ada TIDAK digambar ulang — render uji bisa dilanjutkan
+ * tanpa membayar dua kali.
  */
 export async function buatKeyframes(
   n: NaskahIklan, fotoProduk: Buffer, dir: string,
-  opts: { paralel?: number; catatan?: Map<number, string> } = {},
+  opts: { paralel?: number; catatan?: Map<number, string>; catatanSesudah?: Map<number, string> } = {},
 ): Promise<HasilKeyframe> {
   fs.mkdirSync(dir, { recursive: true });
   const paths = n.shots.map((_, i) => path.join(dir, `kf-${String(i + 1).padStart(2, "0")}.jpg`));
   let jumlahDibuat = 0;
+  const ada = (p: string) => fs.existsSync(p) && fs.statSync(p).size > 1024;
 
-  // Jangkar pemeran: indeks shot pertama tempat tiap pemeran muncul.
+  // Jangkar aset: indeks shot pertama tempat tiap aset muncul (LOCKUP tidak dihitung).
   const jangkar = new Map<string, number>();
-  n.shots.forEach((s, i) => s.pemeran.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }));
+  n.shots.forEach((s, i) => { if (s.beat !== "LOCKUP") s.aset.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }); });
   const shotJangkar = new Set(jangkar.values());
 
   const gambar = async (i: number) => {
-    if (fs.existsSync(paths[i]) && fs.statSync(paths[i]).size > 1024) return;
+    if (ada(paths[i])) return;
     const shot = n.shots[i];
-    const pakaiProduk = shot.produk !== "tidak_tampil";
-    // Acuan pemeran hanya dari jangkar yang BUKAN shot ini sendiri, dan hanya
-    // bila gambar jangkarnya sudah jadi.
-    const pemeranAcuan = shot.pemeran.filter((id) => jangkar.get(id) !== i && fs.existsSync(paths[jangkar.get(id)!]));
+    const pakaiProduk = shot.beat !== "LOCKUP" && shot.produk !== "tidak_tampil";
+    // SHOT DEKAT HANYA MEMBAWA ACUAN PROPERTI, maksimal satu.
+    //
+    // Render uji Faza v3: insert "nozel masuk ke celah mesin" ditolak kurasi
+    // tiga kali berturut-turut karena keluar sebagai medium shot seluruh badan.
+    // Acuannya orang + motor + carport — gambar acuan berbingkai lebar menarik
+    // komposisi ke lebar, apa pun bunyi prompt-nya. Di insert/makro yang
+    // terlihat hanya tangan dan benda; wajah tidak perlu dikunci di sana.
+    const dekat = shot.ukuran === "insert" || shot.ukuran === "macro";
+    const asetAcuan = shot.beat === "LOCKUP"
+      ? []
+      : shot.aset
+        .filter((id) => jangkar.get(id) !== i && ada(paths[jangkar.get(id)!]))
+        .filter((id) => !dekat || n.aset.find((a) => a.id === id)?.jenis === "properti")
+        .slice(0, dekat ? 1 : 3);
     const acuan: Buffer[] = [];
     if (pakaiProduk) acuan.push(fotoProduk);
-    for (const id of pemeranAcuan) acuan.push(fs.readFileSync(paths[jangkar.get(id)!]));
-    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, pemeran: pemeranAcuan }, opts.catatan?.get(i));
+    for (const id of asetAcuan) acuan.push(fs.readFileSync(paths[jangkar.get(id)!]));
+    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, aset: asetAcuan }, opts.catatan?.get(i));
     fs.writeFileSync(paths[i].replace(/\.jpg$/, ".prompt.txt"), prompt);
     const t0 = Date.now();
-    const bytes = await panggilSeedream(prompt, acuan);
-    fs.writeFileSync(paths[i], bytes);
+    fs.writeFileSync(paths[i], await panggilSeedream(prompt, acuan));
     jumlahDibuat++;
     console.log(`[iklan/keyframe] shot ${i + 1}/${n.shots.length} (${shot.beat}, acuan=${acuan.length}) ${Math.round((Date.now() - t0) / 1000)}s`);
   };
 
   const paralel = opts.paralel ?? 4;
-  const jalankan = async (indeks: number[]) => {
+  const jalankan = async (indeks: number[], kerja: (i: number) => Promise<void>) => {
     const antre = [...indeks];
     await Promise.all(Array.from({ length: Math.min(paralel, antre.length) }, async () => {
-      for (let i = antre.shift(); i !== undefined; i = antre.shift()) await gambar(i);
+      for (let i = antre.shift(); i !== undefined; i = antre.shift()) await kerja(i);
     }));
   };
-  // Jangkar dulu, BERURUTAN — jangkar pemeran kedua sering memuat pemeran
-  // pertama (shot 10 Faza: ayah + anak), dan acuan ayahnya harus sudah jadi.
-  // Sisanya paralel sesudahnya.
+  // Jangkar dulu, BERURUTAN — jangkar aset kedua sering memuat aset pertama
+  // (shot 10 Faza: ayah + anak). Sisanya paralel sesudahnya.
   for (const i of [...shotJangkar].sort((a, b) => a - b)) await gambar(i);
-  await jalankan(n.shots.map((_, i) => i).filter((i) => !shotJangkar.has(i)));
+  await jalankan(n.shots.map((_, i) => i).filter((i) => !shotJangkar.has(i)), gambar);
 
-  return { paths, jumlahDibuat, biayaIdr: jumlahDibuat * BIAYA_GAMBAR_IDR };
+  // Gambar SESUDAH, dari gambar sebelumnya.
+  const sesudah = new Map<number, string>();
+  await jalankan(n.shots.map((s, i) => (s.transformasi_en.trim() ? i : -1)).filter((i) => i >= 0), async (i) => {
+    const p = pathSesudah(paths[i]);
+    if (!ada(p)) {
+      const prompt = promptSesudah(n, n.shots[i], opts.catatanSesudah?.get(i));
+      fs.writeFileSync(p.replace(/\.jpg$/, ".prompt.txt"), prompt);
+      fs.writeFileSync(p, await panggilSeedream(prompt, [fs.readFileSync(paths[i])]));
+      jumlahDibuat++;
+      console.log(`[iklan/keyframe] shot ${i + 1} SESUDAH`);
+    }
+    sesudah.set(i, p);
+  });
+
+  return { paths, sesudah, jumlahDibuat, biayaIdr: jumlahDibuat * BIAYA_GAMBAR_IDR };
 }

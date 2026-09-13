@@ -12,24 +12,27 @@ process.env.STORAGE_DIR = `/tmp/racun-test-iklan-storage-${process.pid}`;
 const { periksaNaskah } = await import("../lib/iklan/naskah");
 const { adaPitaBlur } = await import("../lib/iklan/gerbang");
 const fs = await import("node:fs");
-const { susunTimeline, buatAss } = await import("../lib/iklan/susun");
+const { susunTimeline, buatAss, titikMelenceng, BATAS_BAWAH } = await import("../lib/iklan/susun");
 type NaskahIklan = import("../lib/iklan/naskah").NaskahIklan;
 type ShotIklan = import("../lib/iklan/naskah").ShotIklan;
 
 const UKURAN: ShotIklan["ukuran"][] = ["wide", "close_up", "medium", "macro", "insert"];
 
 function naskahContoh(ubah: Partial<NaskahIklan> = {}): NaskahIklan {
-  const shots: ShotIklan[] = Array.from({ length: 10 }, (_, i) => ({
-    beat: i === 0 ? "HOOK" : i === 9 ? "LOCKUP" : i < 3 ? "KONTEKS" : i < 5 ? "REVEAL" : i < 8 ? "NILAI" : "BUKTI",
-    durasi: i === 9 ? 4 : 3,
+  const beat: ShotIklan["beat"][] = ["HOOK", "KONTEKS", "REVEAL", "BUKTI", "NILAI", "NILAI", "NILAI", "MAKNA", "MAKNA", "LOCKUP"];
+  const durasi = [2, 3, 3, 3.5, 3, 3, 3, 3, 3, 4];
+  const shots: ShotIklan[] = beat.map((b, i) => ({
+    beat: b,
+    durasi: durasi[i],
     ukuran: UKURAN[i % UKURAN.length],
     kamera: "slow push-in",
-    visual_en: "a mechanic wipes his forehead beside an old motorbike engine",
+    visual_en: "a mechanic wipes his forehead beside an automatic scooter engine",
     gerak_en: "he exhales and looks down",
-    pemeran: i < 3 ? ["montir"] : [],
-    produk: i === 9 ? "pahlawan" : i < 3 ? "tidak_tampil" : "jelas",
-    vo: [0, 2, 4, 6, 8].includes(i) ? "Mesin yang dirawat bercerita tentang pemiliknya." : "",
-    teks_layar: i === 5 ? "Bersih tanpa bongkar" : "",
+    aset: i < 3 ? ["montir", "skuter"] : [],
+    produk: b === "LOCKUP" ? "pahlawan" : i < 2 ? "tidak_tampil" : "jelas",
+    transformasi_en: b === "BUKTI" ? "the same engine casing now clean bright silver" : "",
+    vo: [0, 2, 4, 6, 8].includes(i) ? "Mesin terawat, perjalanan tenang." : "",
+    teks_layar: ["DILAP TAK HILANG", "", "CUKUP SEMPROT|kerak luruh sendiri", "BERSIH", "", "SELA SEMPIT", "", "TENANG BERANGKAT", "", ""][i],
   }));
   return {
     merek: "Faza Auto Care",
@@ -37,9 +40,13 @@ function naskahContoh(ubah: Partial<NaskahIklan> = {}): NaskahIklan {
     ide_besar: "Mesin yang bersih mengembalikan rasa bangga.",
     alasan_hook: "Wajah lelah montir langsung dikenali.",
     tagline: "Rawat yang membawamu pulang.",
-    gaya_visual_en: "warm late-afternoon light, shallow depth of field, teal-orange grade",
+    ajakan: "Cari: Faza Engine Degreaser",
+    gaya_visual_en: "bright morning light, shallow depth of field, clean natural grade",
     suara_en: "male narrator, 35, warm and calm",
-    pemeran: [{ id: "montir", deskripsi_en: "Indonesian man, 30s, short black hair, navy work shirt" }],
+    aset: [
+      { id: "montir", jenis: "pemeran", deskripsi_en: "Indonesian man, 30s, short black hair, navy work shirt" },
+      { id: "skuter", jenis: "properti", deskripsi_en: "white automatic scooter, 125cc, black seat" },
+    ],
     shots,
     ...ubah,
   };
@@ -107,31 +114,37 @@ test("kalimat yang tetap tidak muat dipercepat, maksimal 1,15x", () => {
   assert.ok((slot[0].voTempo ?? 1) > 1);
 });
 
-test("berkas ASS memuat teks kinetik per kata, subtitle VO, dan lockup merek + tagline + kontak", () => {
+test("berkas ASS: frasa kunci dua ketebalan, subtitle di atas zona aman, lockup lengkap dengan ajakan", () => {
   const n = naskahContoh();
-  const kalimat = [{ shot: 0, path: "a.wav", detik: 2.5 }, { shot: 9, path: "z.wav", detik: 2 }];
+  const kalimat = [{ shot: 0, path: "a.wav", detik: 1.5 }, { shot: 9, path: "z.wav", detik: 2 }];
   const { slot, total } = susunTimeline(n, kalimat);
-  const ass = buatAss(n, slot, kalimat, total, "WA 0812-0000-0000");
-  assert.match(ass, /Style: Kinetik,Poppins SemiBold/);
-  assert.match(ass, /\\t\(110,330,\\alpha&H00&\)\}TANPA/, "kata kedua teks kinetik tidak ditunda");
-  assert.match(ass, /,Sub,,.*Mesin yang dirawat/);
+  const ass = buatAss({ naskah: n, slot, kalimat, total, kontak: "WA 0812-0000-0000" });
+  assert.match(ass, /Style: Kunci,Poppins ExtraBold/);
+  assert.match(ass, /,Kunci,,.*CUKUP.*SEMPROT/);
+  assert.match(ass, /,Dukung,,.*kerak.*luruh.*sendiri/, "teks pendukung tidak ditampilkan");
+  // Hook bertulisan muncul segera.
+  assert.match(ass, /Dialogue: 2,0:00:00\.15,.*Kunci.*DILAP/);
+  // Subtitle berakhir tepat di batas aman bawah (MarginV dari bawah).
+  assert.match(ass, new RegExp(`,Sub,,0,0,${1280 - BATAS_BAWAH},,.*Mesin terawat`));
+  assert.ok(BATAS_BAWAH <= 1280 * 0.8, "subtitle masuk ke 20% bawah");
   assert.match(ass, /,Merek,,.*FAZA AUTO CARE/);
+  assert.match(ass, /,NamaProduk,,.*Engine Degreaser/);
   assert.match(ass, /,Tagline,,.*Rawat yang membawamu pulang\./);
+  assert.match(ass, /,Ajakan,,.*Cari: Faza Engine Degreaser/);
   assert.match(ass, /,Kontak,,.*WA 0812-0000-0000/);
-  // VO di shot LOCKUP tidak ditampilkan sebagai subtitle: lockup milik merek.
-  assert.equal((ass.match(/,Sub,,/g) ?? []).length, 1);
+  assert.equal((ass.match(/,Sub,,/g) ?? []).length, 1, "VO lockup ikut jadi subtitle");
 });
 
 test("hook tidak dibengkakkan lebih dulu: kalimat dipercepat, shot hanya diperpanjang ≤ 0,8 dtk", () => {
-  // Render uji Faza: hook 3 dtk jadi 5 dtk. Kalimat 3,3 dtk di hook 3 dtk yang
+  // Render uji Faza: hook 3 dtk jadi 5 dtk. Kalimat 2,3 dtk di hook 2 dtk yang
   // langsung disusul kalimat berikutnya.
   const n = naskahContoh();
   n.shots[1].vo = "Kalimat kedua.";
-  const kalimat = [{ shot: 0, path: "a.wav", detik: 3.3 }, { shot: 1, path: "b.wav", detik: 1.5 }];
+  const kalimat = [{ shot: 0, path: "a.wav", detik: 2.3 }, { shot: 1, path: "b.wav", detik: 1.5 }];
   const { slot } = susunTimeline(n, kalimat);
   assert.ok((slot[0].voTempo ?? 1) > 1.001, "kalimat tidak dipercepat sebelum shot diperpanjang");
   assert.ok(slot[0].durasi <= n.shots[0].durasi + 0.8 + 1e-9, `hook jadi ${slot[0].durasi} dtk`);
-  assert.ok(slot[0].voMulai! + 3.3 / slot[0].voTempo! <= slot[1].voMulai! - 0.1, "kalimat hook terpotong kalimat kedua");
+  assert.ok(slot[0].voMulai! + 2.3 / slot[0].voTempo! <= slot[1].voMulai! - 0.1, "kalimat hook terpotong kalimat kedua");
 });
 
 test("VO yang tidak muat sebelum VO berikutnya ditolak naskah (tempo narator 2,3 kata/dtk)", () => {
@@ -156,4 +169,47 @@ test("detektor pita blur: menangkap pita nyata, tidak menuduh bokeh", async () =
   for (const n of ["bersih-kaos", "bokeh-01", "bokeh-06", "iklan-02", "iklan-12"]) {
     assert.equal((await adaPitaBlur(f(n))).pita, false, `${n} dituduh berpita`);
   }
+});
+
+test("naskah tanpa adegan bukti, hook tanpa teks, atau produk terlambat ditolak", () => {
+  const n = naskahContoh();
+  n.shots[3].beat = "NILAI";
+  n.shots[3].transformasi_en = "";
+  n.shots[0].teks_layar = "";
+  n.shots[1].produk = "tidak_tampil";
+  n.shots[2].produk = "tidak_tampil";
+  n.shots[3].produk = "tidak_tampil";
+  const galat = periksaNaskah(n, produk).join(" ");
+  assert.match(galat, /tepat satu shot BUKTI/);
+  assert.match(galat, /HOOK wajib punya teks_layar/);
+  assert.match(galat, /Produk baru terlihat di detik/);
+});
+
+test("naskah yang hampir tanpa teks layar ditolak — iklan ditonton tanpa suara", () => {
+  const n = naskahContoh();
+  n.shots.forEach((s, i) => { if (i > 0) s.teks_layar = ""; });
+  assert.match(periksaNaskah(n, produk).join(" "), /shot bertulisan; minimal separuh/);
+});
+
+test("frasa keranjang boleh di LOCKUP, tidak di shot lain", () => {
+  const n = naskahContoh();
+  n.shots[9].vo = "Sekarang ada di keranjang kuning.";
+  assert.doesNotMatch(periksaNaskah(n, produk).join(" "), /keranjang kuning/);
+  n.shots[4].vo = "Cek keranjang kuning.";
+  assert.match(periksaNaskah(n, produk).join(" "), /Frasa terlarang dipakai di luar LOCKUP: "keranjang kuning"/);
+});
+
+test("klip yang melenceng ke adegan lain dipotong sebelum melenceng (profil nyata Faza)", () => {
+  // Jarak grid warna per frame (6 fps) dari dua klip render uji Faza, 14 Sep 2026.
+  const pushIn = [4, 3, 1, 0, 1, 3, 4, 6, 8, 10, 11, 13, 15, 17, 19, 20, 21, 22, 24, 25, 26, 28, 29, 31, 31, 32, 33, 33, 34, 34, 34, 35, 35, 35, 35, 35];
+  const keGarasi = [16, 12, 8, 3, 8, 12, 14, 17, 22, 25, 28, 31, 35, 42, 49, 56, 65, 72, 81, 86, 86, 84, 83, 82, 81, 79, 74, 72, 73, 76, 77, 77, 76, 76, 76, 77];
+  assert.equal(titikMelenceng(pushIn), null, "push-in makro dituduh melenceng");
+  const t = titikMelenceng(keGarasi)!;
+  assert.ok(t > 2 && t < 2.8, `titik melenceng ${t}`);
+});
+
+test("timeline tidak memakai klip melewati batas stabilnya", () => {
+  const n = naskahContoh();
+  const { slot } = susunTimeline(n, [], [undefined, 1.8]);
+  assert.ok(slot[1].durasi <= 1.8 + 1e-9, `shot 2 memakai ${slot[1].durasi} dtk dari klip yang stabil 1,8 dtk`);
 });

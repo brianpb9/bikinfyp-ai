@@ -96,42 +96,54 @@ async function main() {
   simpanBiaya();
   const berkasKurasi = path.join(dirKf, "kurasi.json");
   const lulusSebelumnya: Record<string, number> = fs.existsSync(berkasKurasi) ? JSON.parse(fs.readFileSync(berkasKurasi, "utf8")) : {};
-  const ukuranBerkas = (p: string) => fs.statSync(p).size;
+  const sidikBerkas = (p: string) => fs.statSync(p).size;
+  const sudahLulus = (p: string) => lulusSebelumnya[path.basename(p)] === sidikBerkas(p);
   for (let putaran = 1; putaran <= 3 && !bendera("tanpa-kurasi"); putaran++) {
-    const perluDinilai = kf.paths.map((p, i) => i).filter((i) => lulusSebelumnya[path.basename(kf.paths[i])] !== ukuranBerkas(kf.paths[i]));
-    if (!perluDinilai.length) break;
-    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, perluDinilai);
+    const utama = kf.paths.map((_, i) => i).filter((i) => !sudahLulus(kf.paths[i]));
+    const sesudah = new Map([...kf.sesudah].filter(([, p]) => !sudahLulus(p)));
+    if (!utama.length && !sesudah.size) break;
+    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, { utama, sesudah });
     biaya.kurasi_idr = (biaya.kurasi_idr ?? 0) + biayaIdr;
     simpanBiaya();
     fs.writeFileSync(path.join(dirKf, `kurasi-putaran-${putaran}.json`), JSON.stringify(nilai, null, 2));
     const catatan = new Map<number, string>();
+    const catatanSesudah = new Map<number, string>();
     for (const v of nilai) {
       const i = v.shot - 1;
       if (i < 0 || i >= kf.paths.length) continue;
+      const berkas = v.bagian === "sesudah" ? kf.sesudah.get(i) : kf.paths[i];
+      if (!berkas || !fs.existsSync(berkas)) continue;
       if (v.lulus) {
-        lulusSebelumnya[path.basename(kf.paths[i])] = ukuranBerkas(kf.paths[i]);
+        lulusSebelumnya[path.basename(berkas)] = sidikBerkas(berkas);
       } else {
-        console.log(`[uji] kurasi putaran ${putaran}: shot ${v.shot} DITOLAK — ${v.masalah.join("; ")}`);
-        catatan.set(i, catatanUlang(v));
+        console.log(`[uji] kurasi putaran ${putaran}: shot ${v.shot} ${v.bagian} DITOLAK — ${v.masalah.join("; ")}`);
+        (v.bagian === "sesudah" ? catatanSesudah : catatan).set(i, catatanUlang(v));
       }
     }
     fs.writeFileSync(berkasKurasi, JSON.stringify(lulusSebelumnya, null, 2));
-    if (!catatan.size) break;
+    if (!catatan.size && !catatanSesudah.size) break;
     if (putaran === 3) {
-      console.log(`[uji] ${catatan.size} gambar masih ditolak setelah 2 kali gambar ulang — dilanjutkan, dicatat untuk reviewer.`);
+      console.log(`[uji] ${catatan.size + catatanSesudah.size} gambar masih ditolak setelah 2 kali gambar ulang — dilanjutkan, dicatat untuk reviewer.`);
       break;
     }
     for (const i of catatan.keys()) {
       fs.renameSync(kf.paths[i], kf.paths[i].replace(/\.jpg$/, `.tolak${putaran}.jpg`));
+      // Gambar SESUDAH diturunkan dari gambar sebelum; bila sebelumnya diganti, sesudahnya ikut.
+      const s = kf.sesudah.get(i);
+      if (s && fs.existsSync(s)) fs.renameSync(s, s.replace(/\.jpg$/, `.tolak${putaran}.jpg`));
     }
-    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan });
+    for (const i of catatanSesudah.keys()) {
+      const s = kf.sesudah.get(i)!;
+      if (fs.existsSync(s)) fs.renameSync(s, s.replace(/\.jpg$/, `.tolak${putaran}.jpg`));
+    }
+    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan, catatanSesudah });
     biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
     simpanBiaya();
   }
   if (sampai === "keyframe") return;
 
   // 3. KLIP + VO
-  const klip = await buatKlip(naskah, kf.paths, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`);
+  const klip = await buatKlip(naskah, kf.paths, kf.sesudah, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`);
   biaya.klip_idr = klip.biayaIdr;
   biaya.klip_kredit_kie = klip.kredit;
   const vo = await buatVo(naskah, path.join(dir, "vo"));
@@ -141,7 +153,10 @@ async function main() {
 
   // 4. SUSUN + GERBANG
   const musik = path.join(process.cwd(), "assets", "music", arg("musik") ?? "bg-bed.m4a");
-  const hasil = await susunIklan({ naskah, klip: klip.paths, kalimat: vo.kalimat, musik, dir: path.join(dir, "hasil"), kontak: produk.kontak });
+  const hasil = await susunIklan({
+    naskah, klip: klip.paths, klipSesudah: klip.sesudah, keyframes: kf.paths, fotoProduk: [await sharp(foto).jpeg({ quality: 95 }).toBuffer(), fs.readFileSync(path.join(dir, "foto-acuan.jpg"))],
+    kalimat: vo.kalimat, musik, dir: path.join(dir, "hasil"), kontak: produk.kontak,
+  });
   const gerbang = await periksaIklan({ video: hasil.path, naskah, produk, slot: hasil.slot, total: hasil.total, dir: path.join(dir, "hasil") });
   fs.writeFileSync(path.join(dir, "hasil", "gerbang.json"), JSON.stringify(gerbang, null, 2));
   for (const x of gerbang) console.log(`${x.lulus ? "LULUS" : "GAGAL"}  ${x.id} — ${x.nilai}`);

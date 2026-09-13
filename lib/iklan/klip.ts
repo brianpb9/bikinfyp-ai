@@ -28,7 +28,10 @@ export function promptGerak(n: NaskahIklan, shot: ShotIklan): string {
     shot.produk === "tidak_tampil"
       ? ""
       : "The product stays exactly as in the first frame: same shape, colour and label, never morphing, never duplicating.",
-    "Cinematic commercial motion, smooth and controlled, natural physics, stable faces and hands.",
+    // Render uji Faza: shot "berangkat di jalan pagi" berakhir di dalam garasi
+    // malam — model video mengarang tujuan. Lokasi dan waktu dikunci eksplisit.
+    "LOCKED LOCATION: the place, time of day and lighting stay exactly the same for the whole shot; the camera never leaves this scene.",
+    "Cinematic commercial motion, smooth and controlled, natural physics, stable faces and hands. Riders keep their helmets on.",
     "No text appearing, no subtitles, no logos appearing, no one speaking to camera, no sudden new objects, no scene cut.",
   ].filter(Boolean).join(" ");
 }
@@ -47,7 +50,10 @@ async function kie(url: string, init?: RequestInit): Promise<Record<string, unkn
 }
 
 export interface HasilKlip {
+  /** Klip per shot; kosong ("") untuk LOCKUP, yang dibangun dari gambar diam. */
   paths: string[];
+  /** Klip SESUDAH untuk shot BUKTI (indeks shot -> path). */
+  sesudah: Map<number, string>;
   kredit: number;
   biayaIdr: number;
 }
@@ -57,20 +63,28 @@ export interface HasilKlip {
  * yang sudah dikirim diingat di `klip-XX.task` supaya proses yang terputus
  * MELANJUTKAN task berbayar, bukan mengirim ulang.
  */
-export async function buatKlip(n: NaskahIklan, keyframes: string[], dir: string, idUji: string): Promise<HasilKlip> {
+export async function buatKlip(
+  n: NaskahIklan, keyframes: string[], sesudahKf: Map<number, string>, dir: string, idUji: string,
+): Promise<HasilKlip> {
   if (!config.kieApiKey) throw new Error("KIE_API_KEY belum diisi.");
   fs.mkdirSync(dir, { recursive: true });
-  const paths = n.shots.map((_, i) => path.join(dir, `klip-${String(i + 1).padStart(2, "0")}.mp4`));
+  const nama = (i: number, akhiran = "") => path.join(dir, `klip-${String(i + 1).padStart(2, "0")}${akhiran}.mp4`);
+  const paths = n.shots.map((s, i) => (s.beat === "LOCKUP" ? "" : nama(i)));
+  const sesudah = new Map([...sesudahKf.keys()].map((i) => [i, nama(i, "-sesudah")] as const));
+  const tugas = [
+    ...n.shots.map((shot, i) => ({ shot, i, keluar: paths[i], gambar: keyframes[i], slotGambar: i })).filter((t) => t.keluar),
+    ...[...sesudah].map(([i, keluar]) => ({ shot: n.shots[i], i, keluar, gambar: sesudahKf.get(i)!, slotGambar: 100 + i })),
+  ];
   let kredit = 0;
 
-  await Promise.all(n.shots.map(async (shot, i) => {
-    if (fs.existsSync(paths[i]) && fs.statSync(paths[i]).size > 10_000) return;
-    const berkasTask = paths[i].replace(/\.mp4$/, ".task");
+  await Promise.all(tugas.map(async ({ shot, i, keluar, gambar, slotGambar }) => {
+    if (fs.existsSync(keluar) && fs.statSync(keluar).size > 10_000) return;
+    const berkasTask = keluar.replace(/\.mp4$/, ".task");
     let taskId = fs.existsSync(berkasTask) ? fs.readFileSync(berkasTask, "utf8").trim() : "";
     if (!taskId) {
-      const imageUrl = await terbitkanGambarProvider(keyframes[i], idUji, i);
+      const imageUrl = await terbitkanGambarProvider(gambar, idUji, slotGambar);
       const prompt = promptGerak(n, shot);
-      fs.writeFileSync(paths[i].replace(/\.mp4$/, ".prompt.txt"), prompt);
+      fs.writeFileSync(keluar.replace(/\.mp4$/, ".prompt.txt"), prompt);
       const data = await kie(`${config.kieBaseUrl}${config.kiePathCreate}`, {
         method: "POST",
         body: JSON.stringify({
@@ -84,7 +98,7 @@ export async function buatKlip(n: NaskahIklan, keyframes: string[], dir: string,
       taskId = String((data.data as Record<string, unknown> | undefined)?.taskId ?? data.taskId ?? "");
       if (!taskId) throw new Error(`[iklan/klip] createTask tanpa taskId: ${JSON.stringify(data).slice(0, 300)}`);
       fs.writeFileSync(berkasTask, taskId);
-      console.log(`[iklan/klip] shot ${i + 1}: task ${taskId}`);
+      console.log(`[iklan/klip] ${path.basename(keluar)}: task ${taskId}`);
     }
 
     const mulai = Date.now();
@@ -98,9 +112,9 @@ export async function buatKlip(n: NaskahIklan, keyframes: string[], dir: string,
         kredit += k;
         const unduh = await fetch(urls[0], { signal: AbortSignal.timeout(120_000) });
         if (!unduh.ok) throw new Error(`[iklan/klip] unduh HTTP ${unduh.status}`);
-        fs.writeFileSync(paths[i], Buffer.from(await unduh.arrayBuffer()));
-        fs.writeFileSync(paths[i].replace(/\.mp4$/, ".kredit"), String(k));
-        console.log(`[iklan/klip] shot ${i + 1}: selesai ${Math.round((Date.now() - mulai) / 1000)}s, ${k} kredit`);
+        fs.writeFileSync(keluar, Buffer.from(await unduh.arrayBuffer()));
+        fs.writeFileSync(keluar.replace(/\.mp4$/, ".kredit"), String(k));
+        console.log(`[iklan/klip] ${path.basename(keluar)}: selesai ${Math.round((Date.now() - mulai) / 1000)}s, ${k} kredit`);
         return;
       }
       const status = String(isi.state ?? isi.status ?? "").toLowerCase();
@@ -114,10 +128,10 @@ export async function buatKlip(n: NaskahIklan, keyframes: string[], dir: string,
   }));
 
   // Kredit dari klip yang dirender di proses sebelumnya ikut dihitung.
-  const totalKredit = paths.reduce((t, p) => {
+  const totalKredit = tugas.map((t) => t.keluar).reduce((t, p) => {
     const f = p.replace(/\.mp4$/, ".kredit");
     return t + (fs.existsSync(f) ? Number(fs.readFileSync(f, "utf8")) || 0 : 0);
   }, 0);
   void kredit;
-  return { paths, kredit: totalKredit, biayaIdr: Math.round(totalKredit * IDR_PER_KREDIT()) };
+  return { paths, sesudah, kredit: totalKredit, biayaIdr: Math.round(totalKredit * IDR_PER_KREDIT()) };
 }
