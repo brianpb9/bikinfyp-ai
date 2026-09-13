@@ -128,6 +128,25 @@ test("penolakan Duitku membawa alasannya, bukan cuma kode HTTP", () => {
   assert.match(src, /mentah\.slice\(0, 300\)/, "alasan penolakan tidak ikut di pesan galat");
 });
 
+// 13 Sep 2026: sandbox Duitku menjawab "HTTP 404 Merchant not found" selama
+// ~2 menit untuk merchant yang sah. Rute melempar ulang galatnya, dan pembeli
+// menerima 500 tanpa tahu apakah tagihannya sudah terbentuk.
+test("penolakan gateway dijawab 502 yang bisa dicoba lagi, bukan 500", async () => {
+  const { ERR, errorResponse } = await import("../lib/errors");
+  const res = errorResponse(ERR.PAYMENT_PROVIDER_FAILED());
+  assert.equal(res.status, 502);
+  const body = (await res.json()) as { code: string; message_id: string; retryable: boolean };
+  assert.equal(body.code, "PAYMENT_PROVIDER_FAILED");
+  assert.equal(body.retryable, true);
+  assert.match(body.message_id, /belum ada yang perlu dibayar/, "pembeli tidak diberi tahu bahwa belum ada tagihan");
+
+  const rute = baca("app/api/kredit-video/checkout/route.ts");
+  const tangkap = rute.slice(rute.indexOf("await tandaiGagalMulai(orderId"));
+  assert.match(tangkap, /return errorResponse\(ERR\.PAYMENT_PROVIDER_FAILED\(\)\)/, "galat gateway masih dilempar ulang jadi 500");
+  assert.ok(!/^\s*throw err;/m.test(tangkap.slice(0, tangkap.indexOf("simpanJejakProvider"))), "galat gateway masih dilempar ulang");
+  assert.match(tangkap, /payment_method: method \?\? null/, "kanal yang ditolak tidak dicatat");
+});
+
 // ── PERTAHANAN BAYAR DUA KALI ──────────────────────────────────────────────
 //
 // Cara paling umum orang membayar dua kali bukan karena serakah, melainkan

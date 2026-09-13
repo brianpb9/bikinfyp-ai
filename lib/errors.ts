@@ -96,6 +96,18 @@ export const ERR = {
       message_en: "Script contains forbidden words (overclaim/medical).",
       retryable: false,
     }),
+  // 502, BUKAN 500: yang menolak gateway pembayaran, bukan server kita. Pada
+  // 13 Sep 2026 sandbox Duitku menjawab "Merchant not found" selama ~2 menit
+  // untuk merchant yang sah, dan pembeli hanya melihat 500 tanpa tahu apakah
+  // tagihannya sudah terbentuk. Pesan ini menjawab pertanyaan itu.
+  PAYMENT_PROVIDER_FAILED: () =>
+    new ApiError(502, {
+      code: "PAYMENT_PROVIDER_FAILED",
+      message_id:
+        "Layanan pembayaran lagi gangguan, jadi tagihannya belum dibuat dan belum ada yang perlu dibayar. Coba lagi beberapa menit lagi ya.",
+      message_en: "Payment provider rejected or failed the transaction request.",
+      retryable: true,
+    }),
   INTERNAL: () =>
     new ApiError(500, {
       code: "INTERNAL",

@@ -342,18 +342,27 @@ export async function POST(req: Request) {
         ? await createDuitkuTransaction({ orderId, packageId: "", method, phone: user.phone ?? "", email: user.email ?? "", customerName: user.name ?? undefined, rincian })
         : await createDuitkuInvoice({ orderId, packageId: "", phone: user.phone ?? "", email: user.email ?? "", rincian });
     } catch (err) {
+      const pesanGalat = err instanceof Error ? err.message.slice(0, 500) : "unknown provider initiation error";
       await tandaiGagalMulai(orderId, {
         failed_at: new Date().toISOString(),
         // Galat provider disimpan untuk rekonsiliasi, TIDAK PERNAH kredensial.
-        error: err instanceof Error ? err.message.slice(0, 500) : "unknown provider initiation error",
+        error: pesanGalat,
+        // Kanal ikut dicatat: tanpanya penolakan yang hanya menimpa satu kanal
+        // tidak bisa dibedakan dari gangguan gateway secara keseluruhan.
+        // null = invoice POP (dashboard brand), bukan kanal tertentu.
+        payment_method: method ?? null,
       });
       if (err instanceof DuitkuNotConfigured || err instanceof DuitkuCallbackNotConfigured) {
         return Response.json(
-          { code: "PAYMENT_NOT_CONFIGURED", message_id: "Pembayaran online belum aktif. Hubungi tim kami ya.", message_en: err.message },
+          { code: "PAYMENT_NOT_CONFIGURED", message_id: "Pembayaran online belum aktif. Hubungi tim kami ya.", message_en: err.message, retryable: false },
           { status: 503 },
         );
       }
-      throw err;
+      // Gateway menolak atau tidak terjangkau. Pesanannya sudah ditandai gagal
+      // di atas, jadi pembeli boleh langsung mencoba lagi tanpa risiko tagihan
+      // ganda — dan ia perlu tahu itu, bukan menerima 500 tanpa penjelasan.
+      console.error("[checkout] gateway menolak:", { orderId, payment_method: method ?? null, error: pesanGalat });
+      return errorResponse(ERR.PAYMENT_PROVIDER_FAILED());
     }
 
     // Jejak jawaban gateway disimpan supaya pesanan yang sama bisa
