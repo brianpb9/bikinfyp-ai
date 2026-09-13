@@ -1,0 +1,113 @@
+/**
+ * RENDER UJI IKLAN SINEMATIK — dijalankan di container worker.
+ *
+ *   tsx scripts/iklan-uji.ts --dir storage/iklan-uji/faza --produk produk.json --foto foto.webp \
+ *       [--sampai naskah|keyframe|klip|susun] [--catatan "..."] [--ulang-naskah]
+ *
+ * Setiap tahap menyimpan hasilnya di --dir dan DILEWATI bila hasilnya sudah
+ * ada. Jadi naskah dan gambar kunci (murah) bisa ditinjau dulu sebelum klip
+ * (mahal) dirender, dan perakitan bisa diulang tanpa membayar render lagi.
+ *
+ * Biaya dicatat di biaya.json dari angka yang dilaporkan penyedia (kredit kie.ai)
+ * atau tarif perkiraan yang terdokumentasi (Seedream, TTS, LLM).
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import sharp from "sharp";
+import { tulisNaskahIklan, type NaskahIklan, type ProdukIklan } from "../lib/iklan/naskah";
+import { buatKeyframes } from "../lib/iklan/keyframe";
+import { buatKlip } from "../lib/iklan/klip";
+import { buatVo } from "../lib/iklan/suara";
+import { susunIklan } from "../lib/iklan/susun";
+import { periksaIklan } from "../lib/iklan/gerbang";
+
+const argv = process.argv.slice(2);
+const arg = (nama: string) => {
+  const i = argv.indexOf(`--${nama}`);
+  return i >= 0 ? argv[i + 1] : undefined;
+};
+const bendera = (nama: string) => argv.includes(`--${nama}`);
+
+const TAHAP = ["naskah", "keyframe", "klip", "susun"] as const;
+
+async function fotoAcuan(foto: string, nama: string, dir: string): Promise<Buffer> {
+  const siap = path.join(dir, "foto-acuan.jpg");
+  if (fs.existsSync(siap)) return fs.readFileSync(siap);
+  let sumber = foto;
+  try {
+    const { periksaFotoProduk, AMBANG_KATA_BANNER } = await import("../lib/media/foto-produk");
+    const periksa = await periksaFotoProduk(foto);
+    if (periksa.kataTerbaca >= AMBANG_KATA_BANNER) {
+      const { potongKeProduk } = await import("../lib/media/potong-produk");
+      const hasil = await potongKeProduk(foto, nama, path.join(dir, "potong"));
+      console.log(`[uji] foto poster (${periksa.kataTerbaca} kata) — ${hasil.alasan}`);
+      sumber = hasil.path;
+    }
+  } catch (err) {
+    console.warn("[uji] pemeriksaan/pemotongan foto gagal, dipakai apa adanya:", (err as Error).message);
+  }
+  const bytes = await sharp(sumber).jpeg({ quality: 92 }).toBuffer();
+  fs.writeFileSync(siap, bytes);
+  return bytes;
+}
+
+async function main() {
+  const dir = path.resolve(arg("dir") ?? "");
+  const berkasProduk = arg("produk");
+  const foto = arg("foto");
+  const sampai = (arg("sampai") ?? "susun") as (typeof TAHAP)[number];
+  if (!dir || !berkasProduk || !foto || !TAHAP.includes(sampai)) {
+    console.error("Pakai: --dir <folder> --produk <json> --foto <gambar> [--sampai naskah|keyframe|klip|susun]");
+    process.exit(2);
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  const produk = JSON.parse(fs.readFileSync(berkasProduk, "utf8")) as ProdukIklan;
+  const biayaPath = path.join(dir, "biaya.json");
+  const biaya: Record<string, number> = fs.existsSync(biayaPath) ? JSON.parse(fs.readFileSync(biayaPath, "utf8")) : {};
+  const simpanBiaya = () => fs.writeFileSync(biayaPath, JSON.stringify({ ...biaya, total_idr: Object.entries(biaya).filter(([k]) => k !== "total_idr").reduce((t, [, v]) => t + v, 0) }, null, 2));
+
+  const acuan = await fotoAcuan(foto, produk.nama, dir);
+
+  // 1. NASKAH
+  const berkasNaskah = path.join(dir, "naskah.json");
+  if (bendera("ulang-naskah") || !fs.existsSync(berkasNaskah)) {
+    const t0 = Date.now();
+    const { naskah, percobaan, usage } = await tulisNaskahIklan(produk, { gambarProduk: acuan, catatan: arg("catatan") });
+    fs.writeFileSync(berkasNaskah, JSON.stringify(naskah, null, 2));
+    // claude-opus-5: $5/1M input, $25/1M output; kurs perkiraan Rp16.500/USD.
+    biaya.naskah_llm_idr = (biaya.naskah_llm_idr ?? 0) + Math.round(((usage.input * 5 + usage.output * 25) / 1e6) * 16500);
+    simpanBiaya();
+    console.log(`[uji] naskah: ${naskah.shots.length} shot, ${percobaan} percobaan, ${Math.round((Date.now() - t0) / 1000)}s`);
+  }
+  const naskah = JSON.parse(fs.readFileSync(berkasNaskah, "utf8")) as NaskahIklan;
+  if (sampai === "naskah") return;
+
+  // 2. KEYFRAME
+  const kf = await buatKeyframes(naskah, acuan, path.join(dir, "keyframe"));
+  biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
+  simpanBiaya();
+  if (sampai === "keyframe") return;
+
+  // 3. KLIP + VO
+  const klip = await buatKlip(naskah, kf.paths, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`);
+  biaya.klip_idr = klip.biayaIdr;
+  biaya.klip_kredit_kie = klip.kredit;
+  const vo = await buatVo(naskah, path.join(dir, "vo"));
+  biaya.vo_idr = (biaya.vo_idr ?? 0) + vo.biayaIdr;
+  simpanBiaya();
+  if (sampai === "klip") return;
+
+  // 4. SUSUN + GERBANG
+  const musik = path.join(process.cwd(), "assets", "music", arg("musik") ?? "bg-bed.m4a");
+  const hasil = await susunIklan({ naskah, klip: klip.paths, kalimat: vo.kalimat, musik, dir: path.join(dir, "hasil"), kontak: produk.kontak });
+  const gerbang = await periksaIklan({ video: hasil.path, naskah, produk, slot: hasil.slot, total: hasil.total, dir: path.join(dir, "hasil") });
+  fs.writeFileSync(path.join(dir, "hasil", "gerbang.json"), JSON.stringify(gerbang, null, 2));
+  for (const x of gerbang) console.log(`${x.lulus ? "LULUS" : "GAGAL"}  ${x.id} — ${x.nilai}`);
+  console.log(`[uji] selesai: ${hasil.path} (${hasil.total.toFixed(2)} dtk). Biaya: ${fs.readFileSync(biayaPath, "utf8")}`);
+}
+
+main().then(() => process.exit(0)).catch((err) => {
+  console.error("[uji] GAGAL:", err instanceof Error ? err.stack ?? err.message : err);
+  process.exit(1);
+});
