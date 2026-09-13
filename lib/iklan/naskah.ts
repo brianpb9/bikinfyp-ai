@@ -46,7 +46,7 @@ export const SkemaShotIklan = z.object({
   visual_en: z.string().describe("English. The FIRST FRAME as a photograph: subject, pose, setting, composition, light. 25–60 words. No text or logos except the product's own label."),
   gerak_en: z.string().describe("English. What moves during the shot (one or two motions), staying in the same place and moment. 8–25 words."),
   aset: z.array(z.string()).describe("Ids from `aset` (recurring people AND recurring props/vehicles/places) visible in this shot."),
-  produk: z.enum(["tidak_tampil", "dipakai", "jelas", "pahlawan"]).describe("tidak_tampil = absent; dipakai = in use, not the focus; jelas = clearly visible focus; pahlawan = LOCKUP only."),
+  produk: z.enum(["tidak_tampil", "dipakai", "asli", "pahlawan"]).describe("tidak_tampil = absent; dipakai = in the hand or in use, recognisable by shape and colour but its lettering is never readable; asli = the REVEAL hero moment built from the seller's REAL product photo composited onto this shot's empty background (describe only the setting); pahlawan = LOCKUP only."),
   transformasi_en: z.string().describe("English. ONLY for the single BUKTI shot: the AFTER state of the exact same frame (same camera, same objects), e.g. 'the same engine fins now clean, bright silver metal, no grime'. Empty string for every other shot."),
   vo: z.string().describe("Bahasa Indonesia. One voice-over sentence starting in this shot, or empty string."),
   teks_layar: z.string().describe("Bahasa Indonesia on-screen text, or empty. Format 'UTAMA|pendukung': a 1–3 word KEY PHRASE, optionally '|' and 2–5 supporting words. E.g. 'DILAP TAK HILANG', 'CUKUP SEMPROT|kerak luruh sendiri', 'MOBILITAS|untuk berbagai jenis usaha'."),
@@ -60,11 +60,13 @@ export const SkemaAset = z.object({
 
 export const SkemaNaskahIklan = z.object({
   merek: z.string().describe("Brand name for the end card, from the product data; never invented."),
+  klaim_sumber: z.array(z.string()).describe("Bahasa Indonesia. Every benefit or claim that is LITERALLY present in the seller's description or printed on the product label in the photo. These are the ONLY claims the film may make."),
+  lafal: z.array(z.object({ tulisan: z.string(), ucapan: z.string() })).describe("How the Indonesian narrator should pronounce foreign brand/product words used in the VO, e.g. {tulisan: 'Degreaser', ucapan: 'di-gri-ser'}. Empty if none."),
   nama_produk_pendek: z.string().describe("Short product name for the end card, ≤4 words."),
   ide_besar: z.string().describe("Bahasa Indonesia. The single big idea of the film in one sentence."),
   alasan_hook: z.string().describe("Bahasa Indonesia. Why the first 2 seconds stop a stranger scrolling with the sound off."),
   tagline: z.string().describe("Bahasa Indonesia. End-card tagline, ≤6 words: natural, meaningful, memorable; states the promise. No forced rhymes, no empty wordplay."),
-  ajakan: z.string().describe("Bahasa Indonesia. One calm end-card call to action, ≤7 words, using only the purchase channel given in the product data (e.g. 'Tersedia di TikTok Shop dan Shopee'). If no channel is given, write 'Cari: <nama produk pendek>'."),
+  ajakan: z.string().describe("Bahasa Indonesia. One end-card call to action, ≤8 words, using only the purchase channel given in the product data (e.g. 'Tersedia di TikTok Shop dan Shopee'); if no channel is given, 'Cari: <nama produk pendek>'. If a price is given, start with it, e.g. 'Rp24.900 · Cari: Faza Engine Degreaser'."),
   gaya_visual_en: z.string().describe("English. One locked look for every shot: palette, light quality, exposure, lens/depth of field, grade, ONE time of day. 20–45 words."),
   suara_en: z.string().describe("English. Voice-over direction for the TTS narrator: gender, age, warmth."),
   aset: z.array(SkemaAset).describe("Every recurring person and every recurring prop/vehicle/engine/place that appears in more than one shot."),
@@ -83,6 +85,8 @@ export interface ProdukIklan {
   klaim?: string | null;
   /** Ringkasan visual dari foto produk, bila sudah ada. */
   visual?: string | null;
+  /** Harga jual dari penjual, bila ada — ditampilkan di ajakan. */
+  harga_idr?: number | null;
   /** Tempat membeli (mis. "TikTok Shop, Shopee"). Kosong = ajakan berupa "Cari: ...". */
   kanal?: string | null;
   /** Kontak untuk lockup (WA/situs/IG). Kosong = tidak ditampilkan. */
@@ -112,7 +116,27 @@ export const BATAS = {
   produkPalingLambat: 8,
   /** Bagian shot non-lockup yang wajib bertulisan — iklan ditonton tanpa suara. */
   porsiTeksMin: 0.5,
+  kataAjakanMaks: 8,
 } as const;
+
+/**
+ * KLAIM YANG TIDAK BOLEH MUNCUL TANPA BUKTI DARI PENJUAL.
+ *
+ * Render uji Faza v3, dua reviewer terpisah: "bertahun-tahun", "cukup semprot,
+ * kerak luruh sendiri", "standar bengkel" — tak satu pun ada di deskripsi
+ * penjual maupun di label. Iklan yang menjanjikan hasil yang tidak bisa
+ * dibuktikan penjual adalah risiko UU Perlindungan Konsumen, bukan soal gaya.
+ * Pola di sini menangkap yang bisa ditangkap regex; sisanya diaudit model
+ * (auditKlaim) terhadap klaim_sumber.
+ */
+export const KLAIM_BERISIKO: { pola: RegExp; alasan: string }[] = [
+  { pola: /\b(dijamin|garansi|pasti|100\s*%|permanen|selamanya)\b/i, alasan: "janji mutlak" },
+  { pola: /\b(terbaik|paling|nomor\s*1|no\.?\s*1|juara|nomor satu)\b/i, alasan: "superlatif" },
+  { pola: /\b(bertahun-tahun|sekejap|instan|detik saja|dalam \d+)\b/i, alasan: "janji waktu/lama" },
+  { pola: /\b(standar bengkel|ala bengkel|profesional|dokter|ahli|direkomendasikan|teruji klinis|bpom)\b/i, alasan: "otoritas/endorsemen" },
+  { pola: /\btanpa\s+(perlu\s+)?(bongkar|dilap|digosok|disikat|dibilas|usaha)\b/i, alasan: "menghapus langkah pemakaian" },
+  { pola: /\b(luruh|hilang|bersih)\s+sendiri\b/i, alasan: "hasil tanpa usaha" },
+];
 
 /** Frasa yang membuat tiga video produksi 14 Sep 2026 terdengar identik. Tidak berlaku di LOCKUP. */
 export const FRASA_TERLARANG = [
@@ -147,19 +171,34 @@ THE QUALITY BAR — three reference films the client approved. Match or beat the
    Agency office, editor cutting the video. Product boxed and shipped. Different brands. Logo + tagline over Indonesia at night.
 
 WHAT YOUR FILM MUST DO:
-- HOOK (shot 1, 1.5–2.5s): a person's face or hands in a recognisable, relatable pain or desire — or a striking
-  before-state — framed brightly enough to read on a phone, WITH a big on-screen KEY PHRASE naming the pain
-  (e.g. "DILAP TAK HILANG"). At most one short VO line. Never the product name, a greeting, a logo, or "Pernah nggak…".
-- The PRODUCT is on screen before second 8, inside the story (being picked up, used, worn, carried).
-- Exactly ONE BUKTI shot (3–4s): the product visibly doing its job in one continuous frame — spray landing on the grime,
-  shirt keeping its shape after washing, sound filling the room — and set transformasi_en to the AFTER state of the very
-  same frame. The edit wipes from before to after; this is the film's proof. It must show the PRODUCT causing the change,
-  not water, a rag or a hand doing the work.
-- NILAI shots: 2–4 benefits SHOWN as actions in different real contexts, one per shot.
-- MAKNA: an emotional payoff or a real proof from the product data. Anything set up earlier (a waiting child, a helmet
-  handed over) must be used or paid off. Never invent numbers, awards, certifications, prices or guarantees.
-- LOCKUP (last shot, 3–4.5s): calm premium surface/background in the film's look. The seller's real product photo is
-  composited on top later, so describe the setting only and keep the lower-middle of the frame empty and uncluttered.
+- HOOK (shot 1, 1.5–2.5s): the problem up close and unmistakable in frame 0 (e.g. an engine visibly caked in black grime
+  while a rag fails on it), with a face or body language that MATCHES the pain (never smiling at a problem), brightly
+  framed, WITH a big on-screen KEY PHRASE naming the pain (e.g. "DILAP TAK HILANG"). At most one short VO line.
+  Never the product name, a greeting, a logo, or "Pernah nggak…".
+- The PRODUCT's REVEAL (produk = asli) happens before second 8: a calm hero moment where the seller's REAL product photo
+  is composited onto the shot — describe only an uncluttered setting from the film's world with an empty centre and
+  lighting that suits a product. It is the only shot where the label is readable.
+- In every other shot the product is AI-drawn and its lettering always garbles, so it may only appear as "dipakai":
+  in hand or in use, recognisable by shape and colour, with the label turned away, small, or out of focus. Never ask for a
+  readable label outside the REVEAL and LOCKUP. Keep its real size relative to hands.
+- Exactly ONE BUKTI shot (3–4s, produk = dipakai): the product visibly doing its job in one continuous locked frame —
+  spray landing on the grime, shirt keeping its shape after washing, sound filling the room — and set transformasi_en to the
+  AFTER state of the very same frame. The BEFORE state must show the problem unmistakably (e.g. heavy black oily grime
+  covering the surface); the AFTER state is realistically improved, never unrealistically brand-new. The edit dissolves
+  from before to after and labels it "Ilustrasi". It must show the PRODUCT causing the change, not water, a rag or a hand.
+- CLAIMS: first list in klaim_sumber every benefit literally present in the seller's description or printed on the label.
+  The VO, on-screen text and pictures may ONLY promise those. No absolute promises (dijamin, pasti, 100%, permanen),
+  superlatives (terbaik, paling, nomor 1), durations (bertahun-tahun, instan), authority or endorsement (standar bengkel,
+  profesional, ahli, direkomendasikan) or effortless results (luruh sendiri, tanpa dilap) unless literally in klaim_sumber.
+- NILAI shots: 2–4 benefits from klaim_sumber SHOWN as actions in different real contexts, one per shot, each ending on a
+  visible result.
+- MAKNA: an emotional payoff, or turn the label's own slogan into a closing image. Anything set up earlier (a waiting
+  child, a helmet handed over) must be used or paid off. Never invent numbers, awards, certifications, prices or guarantees.
+- NO DEAD SHOTS: every shot except LOCKUP carries VO or on-screen text and a clear purpose.
+- LOCKUP (last shot, 3–4.5s): calm premium surface/background from the SAME world, light and time of day as the film
+  (not a different location). The seller's real product photo is composited on top later, so describe the setting only
+  and keep the lower-middle of the frame empty and uncluttered. Its VO names the brand and invites the viewer to find or
+  buy it (using the channel/price data when given).
 - VOICE-OVER SELLS, IT DOES NOT NARRATE. Never describe what the picture already shows ("semprotkan merata…",
   "dilap berulang kali…"). Say the tension, the benefit or the meaning. 5–8 short sentences, warm polished Bahasa
   Indonesia (baku tapi hangat). No slang, no "Eh", "Sumpah", "Guys", "gue/lo". Marketplace talk ("keranjang",
@@ -170,7 +209,9 @@ WHAT YOUR FILM MUST DO:
 - Tagline: natural, meaningful Indonesian that states the promise (like "Untuk langkah yang berarti"). No forced rhymes.
 - ajakan: one calm call to action for the end card using only the channel given in the product data.
 - SAFETY AND TRUST: riders wear helmets, drivers seatbelts; no unsafe, illegal or unhygienic acts; no disparaging
-  competitors; no health or medical claims beyond the product data.
+  competitors; no health or medical claims beyond the product data; no other brands' logos or badges on cars, clothes or
+  packaging.
+- lafal: give the narrator a phonetic spelling for any foreign brand or product word in the VO.
 
 MAKING IT RENDERABLE — images come from an image model, motion from a video model:
 - visual_en describes a single photograph of the FIRST frame: concrete subject, pose, setting, composition, light.
@@ -200,6 +241,7 @@ function blokProduk(p: ProdukIklan): string {
     p.deskripsi ? `Deskripsi: ${p.deskripsi}` : "",
     p.klaim ? `Klaim yang boleh dipakai: ${p.klaim}` : "Klaim yang boleh dipakai: hanya yang tertulis di deskripsi di atas.",
     p.visual ? `Tampilan produk (dari foto): ${p.visual}` : "",
+    p.harga_idr ? `Harga: Rp${p.harga_idr.toLocaleString("id-ID")}` : "Harga: tidak diberikan penjual.",
     p.kanal ? `Tempat membeli: ${p.kanal}` : "Tempat membeli: tidak diberikan penjual.",
     p.kontak ? `Kontak untuk end card: ${p.kontak}` : "",
   ];
@@ -241,7 +283,19 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
   if (bertransformasi.length !== 1 || (bukti[0] && !bukti[0].transformasi_en.trim())) {
     galat.push("transformasi_en wajib diisi tepat pada satu shot, yaitu shot BUKTI.");
   }
-  if (bukti[0] && !["dipakai", "jelas"].includes(bukti[0].produk)) galat.push("Shot BUKTI wajib memperlihatkan produk bekerja (produk = dipakai atau jelas).");
+  if (bukti[0] && bukti[0].produk !== "dipakai") galat.push("Shot BUKTI wajib memperlihatkan produk bekerja (produk = dipakai).");
+  const asli = s.filter((x) => x.produk === "asli");
+  if (asli.length !== 1 || asli[0].beat !== "REVEAL") galat.push("Wajib tepat satu shot produk = asli, dan itu shot REVEAL.");
+  if (lockup && !lockup.vo.trim()) galat.push("VO LOCKUP wajib ada: sebut merek dan ajak mencari/membeli.");
+  s.forEach((x, i) => {
+    if (x.beat !== "LOCKUP" && !x.vo.trim() && !teksPolos(x.teks_layar)) galat.push(`Shot ${i + 1}: shot kosong tanpa VO dan tanpa teks layar.`);
+  });
+  const semuaKlaim = s.map((x) => `${x.vo} ${teksPolos(x.teks_layar)}`).join(" ");
+  const sumber = `${p.deskripsi ?? ""} ${p.klaim ?? ""} ${n.klaim_sumber.join(" ")}`.toLowerCase();
+  for (const k of KLAIM_BERISIKO) {
+    const cocok = semuaKlaim.match(k.pola);
+    if (cocok && !sumber.includes(cocok[0].toLowerCase())) galat.push(`Klaim berisiko (${k.alasan}): "${cocok[0]}" tidak ada di data penjual.`);
+  }
 
   let t = 0;
   let produkMulai = Infinity;
@@ -297,7 +351,8 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
   if (kataVo > BATAS.kataVoTotalMaks) galat.push(`VO total ${kataVo} kata; maksimal ${BATAS.kataVoTotalMaks} agar tidak terburu-buru.`);
   if (n.aset.filter((a) => a.jenis === "pemeran").length > 2) galat.push("Maksimal 2 pemeran berulang.");
   if (kata(n.tagline).length > 6) galat.push("Tagline lebih dari 6 kata.");
-  if (!n.ajakan.trim() || kata(n.ajakan).length > 7) galat.push("ajakan wajib diisi, maksimal 7 kata.");
+  if (!n.ajakan.trim() || kata(n.ajakan).length > BATAS.kataAjakanMaks) galat.push(`ajakan wajib diisi, maksimal ${BATAS.kataAjakanMaks} kata.`);
+  if (p.harga_idr && !/rp/i.test(n.ajakan)) galat.push("Harga dari penjual wajib tampil di ajakan.");
 
   const bukanLockup = s.filter((x) => x.beat !== "LOCKUP").map((x) => `${x.vo} ${teksPolos(x.teks_layar)}`).join(" ").toLowerCase();
   for (const f of FRASA_TERLARANG) {
@@ -314,6 +369,60 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
 /* ── pemanggilan model ─────────────────────────────────────────────────── */
 
 export class NaskahIklanGagal extends Error {}
+
+const SkemaAudit = z.object({
+  tidak_didukung: z.array(z.object({
+    kutipan: z.string().describe("The exact VO or on-screen text fragment"),
+    alasan: z.string().describe("Bahasa Indonesia. Why it goes beyond the seller's data"),
+  })),
+});
+
+/**
+ * AUDIT KLAIM oleh model yang TIDAK menulis naskahnya.
+ *
+ * Regex KLAIM_BERISIKO menangkap kata-kata yang jelas; audit ini menangkap
+ * janji yang dirangkai tanpa kata terlarang ("satu botol untuk semua",
+ * "berkendara lebih tenang"). Sumber kebenarannya HANYA deskripsi penjual dan
+ * teks label di foto — bukan klaim_sumber yang ditulis penulis naskah sendiri.
+ */
+export async function auditKlaim(n: NaskahIklan, p: ProdukIklan, gambarProduk?: Buffer | null): Promise<{ temuan: { kutipan: string; alasan: string }[]; usage: { input: number; output: number } }> {
+  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const isi: Anthropic.Beta.BetaContentBlockParam[] = [];
+  if (gambarProduk) isi.push({ type: "image", source: { type: "base64", media_type: mimeGambar(gambarProduk), data: gambarProduk.toString("base64") } });
+  isi.push({
+    type: "text",
+    text: [
+      "DATA PENJUAL (satu-satunya sumber klaim yang sah):",
+      blokProduk(p),
+      gambarProduk ? "Ditambah teks yang benar-benar tercetak pada label di foto terlampir." : "",
+      "",
+      "KALIMAT IKLAN YANG DIAUDIT:",
+      ...n.shots.flatMap((x, i) => [x.vo && `Shot ${i + 1} VO: ${x.vo}`, teksPolos(x.teks_layar) && `Shot ${i + 1} teks: ${teksPolos(x.teks_layar)}`]).filter(Boolean),
+      `Tagline: ${n.tagline}`,
+      `Ajakan: ${n.ajakan}`,
+    ].filter((b) => b !== "").join("\n"),
+  });
+  const stream = client.beta.messages.stream({
+    model: MODEL_NASKAH_IKLAN,
+    max_tokens: 8000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium", format: betaZodOutputFormat(SkemaAudit) },
+    system: "You audit Indonesian advertising copy for Indonesian consumer-protection compliance. List every fragment that promises a benefit, result, "
+      + "degree, duration, versatility, authority or feeling that is NOT supported by the seller's data or the label text. Neutral descriptions of the problem, "
+      + "the product name, the brand's own printed slogan and plain calls to action are fine. Be strict but do not flag emotional scene-setting that makes no product promise.",
+    messages: [{ role: "user", content: isi }],
+  });
+  const j = await stream.finalMessage();
+  const teks = j.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+  const usage = { input: j.usage.input_tokens + (j.usage.cache_read_input_tokens ?? 0), output: j.usage.output_tokens };
+  try {
+    return { temuan: SkemaAudit.parse(JSON.parse(teks)).tidak_didukung, usage };
+  } catch {
+    return { temuan: [], usage };
+  }
+}
 
 export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Buffer | null; catatan?: string } = {}): Promise<{ naskah: NaskahIklan; percobaan: number; usage: { input: number; output: number } }> {
   if (!config.anthropicApiKey) throw new NaskahIklanGagal("ANTHROPIC_API_KEY belum diisi.");
@@ -369,7 +478,13 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
       continue;
     }
     galatTerakhir = periksaNaskah(naskah, p);
-    if (galatTerakhir.length === 0) return { naskah, percobaan, usage };
+    if (galatTerakhir.length === 0) {
+      const audit = await auditKlaim(naskah, p, opts.gambarProduk);
+      usage.input += audit.usage.input;
+      usage.output += audit.usage.output;
+      galatTerakhir = audit.temuan.map((t) => `Klaim tidak didukung data penjual: "${t.kutipan}" — ${t.alasan}`);
+      if (galatTerakhir.length === 0) return { naskah, percobaan, usage };
+    }
 
     console.warn(`[iklan/naskah] percobaan ${percobaan}: ${galatTerakhir.length} pelanggaran — ${galatTerakhir.join(" | ")}`);
     pesan.push({ role: "assistant", content: jawaban.content as Anthropic.Beta.BetaContentBlockParam[] });

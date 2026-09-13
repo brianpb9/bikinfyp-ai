@@ -50,18 +50,23 @@ Reject (lulus=false) when ANY of these is visible:
 - Physically impossible or absurd: detached parts held in hands, floating objects, liquid appearing from nowhere, spray
   missing its target, broken perspective.
 - Anatomy defects: extra/missing/fused fingers, twisted limbs, melted faces, duplicated people.
-- The product, when it should appear, looks different from the product photo (shape, colour, label design) or is cropped,
-  blurred or covered; or it appears when the shot says it must not.
+- The product, when it should appear ("dipakai"), has a different shape, colour or size than the product photo (e.g. a 250 ml
+  bottle drawn twice as tall as a hand), or ANY lettering on it is readable — AI-drawn labels garble, so readable label text
+  is a reject even if it looks close. It also must not appear when the shot says it must not.
 - A recurring element (person, vehicle, engine, room) that clearly differs from its ANCHOR image or description: different
   face, clothing, vehicle model, engine type, colour.
-- Added text, captions, watermarks, fake logos or gibberish lettering (the product's own label is allowed).
+- Added text, captions, watermarks, fake logos or gibberish lettering; any other brand's logo or badge (car makers, apparel).
+- The action misses its target (spraying the seat instead of the engine), or physically impossible effects (sand pouring out of metal).
 - Unsafe acts: riding without a helmet, driving without a seatbelt.
+- A face or body language that contradicts the shot's emotion (smiling at a problem).
 - Too dark to read on a phone when the look calls for bright exposure.
-For the LOCKUP background: reject if any product, bottle, packaging, person or text appears, or if the lower-middle is not an
-empty clean surface.
-For the BUKTI pair (utama = before, sesudah = after): judge the AFTER image — reject unless it keeps the same camera, framing,
-objects and light as the before image AND the change is clearly visible AND it plausibly results from the product, not water,
-a rag or someone else's action.
+For the LOCKUP background and the REVEAL background (product "asli"): reject if any product, bottle, packaging, person, hand or text
+appears, if the area where the product will be placed (LOCKUP: lower-middle; REVEAL: centre) is not an empty clean surface, or if
+the place/light clearly belongs to a different world than the film.
+For the BUKTI pair (utama = before, sesudah = after): the BEFORE image must show the problem unmistakably (e.g. heavy dark grime
+clearly covering the surface). Judge the AFTER image — reject unless it keeps the same camera, framing, objects and light as the
+before image AND the change is clearly visible AND it is realistically improved rather than unrealistically brand-new (mirror
+chrome) AND it plausibly results from the product, not water, a rag or someone else's action.
 
 Do not reject for taste alone. Be specific in masalah so the image can be regenerated correctly.`;
 
@@ -84,7 +89,7 @@ export async function kurasiKeyframes(
 
   // Jangkar aset yang tidak sedang dinilai ikut dilampirkan sebagai pembanding.
   const jangkar = new Map<string, number>();
-  n.shots.forEach((s, i) => { if (s.beat !== "LOCKUP") s.aset.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }); });
+  n.shots.forEach((s, i) => { if (s.beat !== "LOCKUP" && s.produk !== "asli") s.aset.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }); });
   const jangkarLuar = [...new Set([...jangkar.values()])].filter((i) => !pilihan.utama.includes(i) && fs.existsSync(keyframes[i]));
   for (const i of jangkarLuar) {
     isi.push({ type: "text", text: `ANCHOR (already approved) shot ${i + 1} — reference for ${n.shots[i].aset.join(", ")}:` });
@@ -96,7 +101,7 @@ export async function kurasiKeyframes(
     const s = n.shots[i];
     isi.push({
       type: "text",
-      text: `SHOT ${i + 1} utama (${s.beat}, ${s.ukuran}). Intended first frame: ${s.visual_en} Recurring: ${s.aset.join(", ") || "none"}. Product: ${s.beat === "LOCKUP" ? "NONE — end-card background only" : s.produk}.`,
+      text: `SHOT ${i + 1} utama (${s.beat}, ${s.ukuran}). Intended first frame: ${s.visual_en} Recurring: ${s.aset.join(", ") || "none"}. Product: ${s.beat === "LOCKUP" ? "NONE — end-card background only" : s.produk === "asli" ? "NONE — REVEAL background only, real photo composited later" : s.produk}.`,
     });
     isi.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: await b64(keyframes[i]) } });
     daftar.push(`${i + 1} utama`);

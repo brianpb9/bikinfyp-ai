@@ -29,13 +29,15 @@ function naskahContoh(ubah: Partial<NaskahIklan> = {}): NaskahIklan {
     visual_en: "a mechanic wipes his forehead beside an automatic scooter engine",
     gerak_en: "he exhales and looks down",
     aset: i < 3 ? ["montir", "skuter"] : [],
-    produk: b === "LOCKUP" ? "pahlawan" : i < 2 ? "tidak_tampil" : "jelas",
+    produk: b === "LOCKUP" ? "pahlawan" : b === "REVEAL" ? "asli" : i < 2 ? "tidak_tampil" : "dipakai",
     transformasi_en: b === "BUKTI" ? "the same engine casing now clean bright silver" : "",
-    vo: [0, 2, 4, 6, 8].includes(i) ? "Mesin terawat, perjalanan tenang." : "",
-    teks_layar: ["DILAP TAK HILANG", "", "CUKUP SEMPROT|kerak luruh sendiri", "BERSIH", "", "SELA SEMPIT", "", "TENANG BERANGKAT", "", ""][i],
+    vo: ["Kerak tak hilang.", "Mesin terawat, perjalanan tenang.", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "Mesin terawat, perjalanan tenang."][i],
+    teks_layar: ["DILAP TAK HILANG", "", "PEMBERSIH KERAK|untuk mesin motor", "BERSIH", "", "SELA SEMPIT", "", "TENANG BERANGKAT", "", ""][i],
   }));
   return {
     merek: "Faza Auto Care",
+    klaim_sumber: ["Pembersih Kerak Mesin"],
+    lafal: [{ tulisan: "Degreaser", ucapan: "di-gri-ser" }],
     nama_produk_pendek: "Engine Degreaser",
     ide_besar: "Mesin yang bersih mengembalikan rasa bangga.",
     alasan_hook: "Wajah lelah montir langsung dikenali.",
@@ -116,14 +118,16 @@ test("kalimat yang tetap tidak muat dipercepat, maksimal 1,15x", () => {
 
 test("berkas ASS: frasa kunci dua ketebalan, subtitle di atas zona aman, lockup lengkap dengan ajakan", () => {
   const n = naskahContoh();
-  const kalimat = [{ shot: 0, path: "a.wav", detik: 1.5 }, { shot: 9, path: "z.wav", detik: 2 }];
+  const kalimat = [{ shot: 0, path: "a.wav", detik: 1.2 }, { shot: 1, path: "b.wav", detik: 2 }, { shot: 9, path: "z.wav", detik: 2 }];
   const { slot, total } = susunTimeline(n, kalimat);
   const ass = buatAss({ naskah: n, slot, kalimat, total, kontak: "WA 0812-0000-0000" });
   assert.match(ass, /Style: Kunci,Poppins ExtraBold/);
-  assert.match(ass, /,Kunci,,.*CUKUP.*SEMPROT/);
-  assert.match(ass, /,Dukung,,.*kerak.*luruh.*sendiri/, "teks pendukung tidak ditampilkan");
-  // Hook bertulisan muncul segera.
-  assert.match(ass, /Dialogue: 2,0:00:00\.15,.*Kunci.*DILAP/);
+  assert.match(ass, /,Kunci,,.*PEMBERSIH.*KERAK/);
+  assert.match(ass, /,Dukung,,.*untuk.*mesin.*motor/, "teks pendukung tidak ditampilkan");
+  // Hook tampil UTUH sejak frame 0 — tanpa animasi per kata.
+  assert.match(ass, /Dialogue: 2,0:00:00\.00,[^\n]*Kunci,,0,0,0,,\{\\an5\\blur3\\pos\(360,\d+\)\}DILAP TAK HILANG/);
+  // Shot BUKTI diberi label ilustrasi.
+  assert.match(ass, /,Ilustrasi,,.*\}Ilustrasi/);
   // Subtitle berakhir tepat di batas aman bawah (MarginV dari bawah).
   assert.match(ass, new RegExp(`,Sub,,0,0,${1280 - BATAS_BAWAH},,.*Mesin terawat`));
   assert.ok(BATAS_BAWAH <= 1280 * 0.8, "subtitle masuk ke 20% bawah");
@@ -132,7 +136,9 @@ test("berkas ASS: frasa kunci dua ketebalan, subtitle di atas zona aman, lockup 
   assert.match(ass, /,Tagline,,.*Rawat yang membawamu pulang\./);
   assert.match(ass, /,Ajakan,,.*Cari: Faza Engine Degreaser/);
   assert.match(ass, /,Kontak,,.*WA 0812-0000-0000/);
-  assert.equal((ass.match(/,Sub,,/g) ?? []).length, 1, "VO lockup ikut jadi subtitle");
+  // Satu lapis teks: VO shot 1 bertabrakan dengan frasa hook → tidak jadi subtitle;
+  // VO shot 2 (shot tanpa teks layar) tampil; VO lockup tidak pernah jadi subtitle.
+  assert.equal((ass.match(/,Sub,,/g) ?? []).length, 1, `jumlah subtitle salah:\n${ass}`);
 });
 
 test("hook tidak dibengkakkan lebih dulu: kalimat dipercepat, shot hanya diperpanjang ≤ 0,8 dtk", () => {
@@ -176,13 +182,13 @@ test("naskah tanpa adegan bukti, hook tanpa teks, atau produk terlambat ditolak"
   n.shots[3].beat = "NILAI";
   n.shots[3].transformasi_en = "";
   n.shots[0].teks_layar = "";
-  n.shots[1].produk = "tidak_tampil";
   n.shots[2].produk = "tidak_tampil";
   n.shots[3].produk = "tidak_tampil";
   const galat = periksaNaskah(n, produk).join(" ");
   assert.match(galat, /tepat satu shot BUKTI/);
   assert.match(galat, /HOOK wajib punya teks_layar/);
   assert.match(galat, /Produk baru terlihat di detik/);
+  assert.match(galat, /tepat satu shot produk = asli/);
 });
 
 test("naskah yang hampir tanpa teks layar ditolak — iklan ditonton tanpa suara", () => {
@@ -212,4 +218,25 @@ test("timeline tidak memakai klip melewati batas stabilnya", () => {
   const n = naskahContoh();
   const { slot } = susunTimeline(n, [], [undefined, 1.8]);
   assert.ok(slot[1].durasi <= 1.8 + 1e-9, `shot 2 memakai ${slot[1].durasi} dtk dari klip yang stabil 1,8 dtk`);
+});
+
+test("klaim tanpa dasar dari penjual ditolak (temuan review Faza v3)", () => {
+  for (const kalimat of ["Kerak bertahun-tahun luntur.", "Standar bengkel di rumah.", "Kerak luruh sendiri.", "Dijamin bersih.", "Pembersih terbaik."]) {
+    const n = naskahContoh();
+    n.shots[4].vo = kalimat;
+    assert.match(periksaNaskah(n, produk).join(" "), /Klaim berisiko/, `"${kalimat}" lolos`);
+  }
+  // Klaim yang ada di data penjual boleh.
+  const n = naskahContoh();
+  n.shots[4].vo = "Pembersih kerak mesin.";
+  assert.doesNotMatch(periksaNaskah(n, produk).join(" "), /Klaim berisiko/);
+});
+
+test("shot kosong tanpa VO dan teks ditolak; harga penjual wajib di ajakan", () => {
+  const n = naskahContoh();
+  n.shots[5].teks_layar = "";
+  n.shots[5].vo = "";
+  const galat = periksaNaskah(n, { ...produk, harga_idr: 24900 }).join(" ");
+  assert.match(galat, /Shot 6: shot kosong/);
+  assert.match(galat, /Harga dari penjual wajib tampil di ajakan/);
 });

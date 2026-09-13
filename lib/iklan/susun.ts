@@ -202,7 +202,8 @@ export function buatAss(m: MasukanAss): string {
     "Style: Merek,Poppins ExtraBold,66,&H00FFFFFF,&H00FFFFFF,&H50000000,&H00000000,0,0,0,0,100,100,3,0,1,0,4,8,50,50,0",
     "Style: NamaProduk,Poppins SemiBold,38,&H00FFFFFF,&H00FFFFFF,&H50000000,&H00000000,0,0,0,0,100,100,1,0,1,0,3,8,50,50,0",
     "Style: Tagline,Poppins Medium,36,&H00FFFFFF,&H00FFFFFF,&H50000000,&H78000000,0,0,0,0,100,100,1,0,1,1.5,2,8,50,50,0",
-    "Style: Ajakan,Poppins SemiBold,34,&H00111111,&H00111111,&H00FFFFFF,&H00FFFFFF,0,0,0,0,100,100,1,0,3,14,0,5,50,50,0",
+    "Style: Ajakan,Poppins SemiBold,36,&H00111111,&H00111111,&H00FFFFFF,&H00FFFFFF,0,0,0,0,100,100,1,0,1,0,0,5,50,50,0",
+    "Style: Ilustrasi,Poppins Medium,24,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,0,0,0,0,100,100,1,0,4,6,0,7,40,40,0",
     "Style: Kontak,Poppins Medium,26,&H00FFFFFF,&H00FFFFFF,&H64000000,&H00000000,0,0,0,0,100,100,1,0,1,0,2,5,50,50,0",
     "",
     "[Events]",
@@ -212,18 +213,29 @@ export function buatAss(m: MasukanAss): string {
   const lockupIdx = n.shots.length - 1;
   const mulaiLockup = slot[lockupIdx].mulai - LARUT_LOCKUP;
 
+  /** Rentang waktu teks kinetik — subtitle tidak tampil bersamaan (satu lapis teks sekaligus). */
+  const rentangKinetik: [number, number][] = [];
   n.shots.forEach((shot, i) => {
     if (i === lockupIdx) return;
     const s = slot[i];
     const [utama = "", dukung = ""] = shot.teks_layar.split("|").map((x) => x.trim());
+    if (shot.beat === "BUKTI") {
+      // Sebelum→sesudah adalah gambaran, bukan rekaman — dinyatakan di layar.
+      ev.push(`Dialogue: 2,${waktuAss(s.mulai + 0.1)},${waktuAss(s.mulai + s.durasi - 0.05)},Ilustrasi,,0,0,0,,{\\an7\\pos(40,${Math.round(H * 0.05)})}Ilustrasi`);
+    }
     if (!utama && !dukung) return;
-    // Hook: muncul segera (0,15 dtk). Shot lain: 0,2 dtk sesudah potongan.
-    const a = s.mulai + (i === 0 ? 0.15 : 0.2);
+    // Hook: TAMPIL UTUH sejak frame 0 (creative director: "the headline is still
+    // typing on at t=0"). Shot lain: 0,2 dtk sesudah potongan, per kata.
+    const hook = i === 0;
+    const a = hook ? 0 : s.mulai + 0.2;
     const b = Math.min(s.mulai + s.durasi - 0.05, mulaiLockup);
+    rentangKinetik.push([a, b]);
     // Zona atas bila produk sedang tampil (tidak menutupi label), selain itu sepertiga atas.
     const y = shot.produk === "tidak_tampil" ? Math.round(H * 0.3) : Math.round(H * 0.17);
     if (utama) {
-      ev.push(`Dialogue: 2,${waktuAss(a)},${waktuAss(b)},Kunci,,0,0,0,,{\\an5\\blur3\\move(${W / 2},${y + 22},${W / 2},${y},0,420)\\fad(0,140)}${perKata(utama.toUpperCase())}`);
+      ev.push(hook
+        ? `Dialogue: 2,${waktuAss(a)},${waktuAss(b)},Kunci,,0,0,0,,{\\an5\\blur3\\pos(${W / 2},${y})}${escAss(utama.toUpperCase())}`
+        : `Dialogue: 2,${waktuAss(a)},${waktuAss(b)},Kunci,,0,0,0,,{\\an5\\blur3\\move(${W / 2},${y + 22},${W / 2},${y},0,420)\\fad(0,140)}${perKata(utama.toUpperCase())}`);
     }
     if (dukung) {
       const jeda = utama ? utama.split(/\s+/).length * 110 + 120 : 0;
@@ -236,8 +248,20 @@ export function buatAss(m: MasukanAss): string {
     if (k.shot === lockupIdx || s.voMulai === undefined) continue;
     const a = s.voMulai;
     const b = Math.min(a + k.detik / (s.voTempo ?? 1) + 0.25, mulaiLockup);
-    // MarginV dihitung dari bawah: garis dasar subtitle tepat di BATAS_BAWAH.
-    ev.push(`Dialogue: 1,${waktuAss(a)},${waktuAss(b)},Sub,,0,0,${H - BATAS_BAWAH},,{\\fad(100,100)}${escAss(n.shots[k.shot].vo.trim())}`);
+    // SATU LAPIS TEKS: bagian subtitle yang bertabrakan dengan teks kinetik
+    // dibuang; sisa yang cukup panjang (≥0,8 dtk) tetap tampil. Kedua reviewer
+    // Faza v3: "a headline and a dark subtitle box compete on every shot".
+    let potongan: [number, number][] = [[a, b]];
+    for (const [ka, kb] of rentangKinetik) {
+      potongan = potongan.flatMap(([pa, pb]): [number, number][] => {
+        const sisa: [number, number][] = kb <= pa || ka >= pb ? [[pa, pb]] : [[pa, ka], [kb, pb]];
+        return sisa.filter(([x, y]) => y - x > 0.01);
+      });
+    }
+    for (const [pa, pb] of potongan.filter(([x, y]) => y - x >= 0.8)) {
+      // MarginV dihitung dari bawah: garis dasar subtitle tepat di BATAS_BAWAH.
+      ev.push(`Dialogue: 1,${waktuAss(pa)},${waktuAss(pb)},Sub,,0,0,${H - BATAS_BAWAH},,{\\fad(100,100)}${escAss(n.shots[k.shot].vo.trim())}`);
+    }
   }
 
   // LOCKUP — tata letak tetap: merek, nama produk, tagline di atas; produk di
@@ -321,6 +345,60 @@ async function denganBayangan(potongan: string, keluar: string): Promise<string>
   return keluar;
 }
 
+/**
+ * Samakan terang produk asli dengan latarnya.
+ *
+ * Creative director, Faza v3: "lit like flat daylight against a dark workshop".
+ * Foto produk penjual difoto dalam cahayanya sendiri; ditempel mentah ke latar
+ * yang lebih gelap atau lebih terang, ia terlihat seperti stiker. Koreksinya
+ * sengaja kecil (0,82–1,12x): cukup untuk menyatu, tidak cukup untuk mengubah warna label.
+ */
+async function selaraskanCahaya(produkPng: string, latar: string, keluar: string): Promise<string> {
+  try {
+    const terang = async (b: ReturnType<typeof sharp>) => {
+      const st = await b.removeAlpha().greyscale().stats();
+      return st.channels[0].mean;
+    };
+    const meta = await sharp(latar).metadata();
+    const lw = meta.width ?? W, lh = meta.height ?? H;
+    const tengah = await terang(sharp(latar).extract({ left: Math.round(lw * 0.2), top: Math.round(lh * 0.3), width: Math.round(lw * 0.6), height: Math.round(lh * 0.5) }));
+    const { data, info } = await sharp(produkPng).raw().toBuffer({ resolveWithObject: true });
+    let jumlah = 0, bobot = 0;
+    for (let p = 0; p < data.length; p += info.channels) {
+      const a = data[p + 3] / 255;
+      if (a < 0.5) continue;
+      jumlah += (0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2]) * a;
+      bobot += a;
+    }
+    const produk = bobot ? jumlah / bobot : tengah;
+    const faktor = Math.min(1.12, Math.max(0.82, 1 + ((tengah - produk) / 255) * 0.35));
+    await sharp(produkPng).modulate({ brightness: faktor }).png().toFile(keluar);
+    return keluar;
+  } catch (err) {
+    console.warn("[iklan/susun] penyelarasan cahaya produk gagal, dipakai apa adanya:", (err as Error).message);
+    return produkPng;
+  }
+}
+
+/** Gradasi gelap atas (merek, nama, tagline) dan bawah (ajakan) untuk lockup. */
+async function buatScrim(keluar: string): Promise<string> {
+  await sharp(Buffer.from(
+    `<svg width="${W}" height="${H}"><defs>`
+    + `<linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.62"/><stop offset="0.3" stop-color="#000" stop-opacity="0.25"/><stop offset="0.42" stop-color="#000" stop-opacity="0"/>`
+    + `<stop offset="0.66" stop-color="#000" stop-opacity="0"/><stop offset="0.86" stop-color="#000" stop-opacity="0.45"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></linearGradient>`
+    + `</defs><rect width="${W}" height="${H}" fill="url(#a)"/></svg>`,
+  )).png().toFile(keluar);
+  return keluar;
+}
+
+/** Pil ajakan berujung bulat (teksnya dari ASS di atasnya). Lebar 84% layar. */
+async function buatPil(keluar: string): Promise<string> {
+  const lw = Math.round(W * 0.84), lh = 84;
+  await sharp(Buffer.from(`<svg width="${lw}" height="${lh}"><rect x="0" y="0" width="${lw}" height="${lh}" rx="${lh / 2}" ry="${lh / 2}" fill="#ffffff" fill-opacity="0.96"/></svg>`))
+    .png().toFile(keluar);
+  return keluar;
+}
+
 /* ── ffmpeg ─────────────────────────────────────────────────────────────── */
 
 async function ffmpeg(args: string[]): Promise<void> {
@@ -376,18 +454,23 @@ export async function susunIklan(m: MasukanSusun): Promise<{ path: string; total
   const tambah = (...a: string[]) => { args.push(...a); return masukan.push(a.at(-1)!) - 1; };
   const idxKlip = m.klip.map((k) => (k ? tambah("-i", k) : -1));
   const idxSesudah = new Map([...m.klipSesudah].map(([i, k]) => [i, tambah("-i", k)] as const));
-  const idxLatar = tambah("-loop", "1", "-framerate", String(FPS), "-t", String(slot[lockupIdx].durasi + 0.5), "-i", m.keyframes[lockupIdx]);
-  const idxProduk = tambah("-loop", "1", "-framerate", String(FPS), "-t", String(slot[lockupIdx].durasi + 0.5), "-i", produk.path);
-  // Gradasi gelap atas (merek, nama, tagline) dan bawah (ajakan): teks lockup
-  // tipis di atas latar ramai tidak terbaca pada render uji Faza v3.
-  const berkasScrim = path.join(m.dir, "lockup", "scrim.png");
-  await sharp(Buffer.from(
-    `<svg width="${W}" height="${H}"><defs>`
-    + `<linearGradient id="a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000" stop-opacity="0.62"/><stop offset="0.3" stop-color="#000" stop-opacity="0.25"/><stop offset="0.42" stop-color="#000" stop-opacity="0"/>`
-    + `<stop offset="0.66" stop-color="#000" stop-opacity="0"/><stop offset="0.86" stop-color="#000" stop-opacity="0.45"/><stop offset="1" stop-color="#000" stop-opacity="0.55"/></linearGradient>`
-    + `</defs><rect width="${W}" height="${H}" fill="url(#a)"/></svg>`,
-  )).png().toFile(berkasScrim);
-  const idxScrim = tambah("-loop", "1", "-framerate", String(FPS), "-t", String(slot[lockupIdx].durasi + 0.5), "-i", berkasScrim);
+  // SHOT PLAT: latar diam (keyframe tanpa produk) + foto produk ASLI. Dipakai
+  // LOCKUP dan REVEAL berproduk asli — satu-satunya tempat label terbaca.
+  const plat = slot.map((_, i) => i).filter((i) => i === lockupIdx || n.shots[i].produk === "asli");
+  const idxPlat = new Map<number, { latar: number; produk: number; scrim?: number; pil?: number }>();
+  for (const i of plat) {
+    const lama = String(slot[i].durasi + 0.5);
+    const produkSelaras = await selaraskanCahaya(produk.path, m.keyframes[i], path.join(m.dir, "lockup", `produk-plat-${i + 1}.png`));
+    const e: { latar: number; produk: number; scrim?: number; pil?: number } = {
+      latar: tambah("-loop", "1", "-framerate", String(FPS), "-t", lama, "-i", m.keyframes[i]),
+      produk: tambah("-loop", "1", "-framerate", String(FPS), "-t", lama, "-i", produkSelaras),
+    };
+    if (i === lockupIdx) {
+      e.scrim = tambah("-loop", "1", "-framerate", String(FPS), "-t", lama, "-i", await buatScrim(path.join(m.dir, "lockup", "scrim.png")));
+      e.pil = tambah("-loop", "1", "-framerate", String(FPS), "-t", lama, "-i", await buatPil(path.join(m.dir, "lockup", "pil.png")));
+    }
+    idxPlat.set(i, e);
+  }
   const idxVo0 = masukan.length;
   for (const k of m.kalimat) tambah("-i", k.path);
   const idxMusik = tambah("-stream_loop", "-1", "-i", m.musik);
@@ -395,40 +478,55 @@ export async function susunIklan(m: MasukanSusun): Promise<{ path: string; total
   const normal = `fps=${FPS},scale=${W}:${H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${W}:${H},setsar=1,format=yuv420p`;
   const f: string[] = [];
   slot.forEach((s, i) => {
-    if (i === lockupIdx) return;
+    if (idxPlat.has(i)) return;
     const potong = `trim=start=${BUANG_AWAL}:duration=${s.durasi},setpts=PTS-STARTPTS,${normal},settb=AVTB`;
     const iSesudah = idxSesudah.get(i);
     if (iSesudah === undefined) {
       f.push(`[${idxKlip[i]}:v]${potong}[v${i}]`);
       return;
     }
-    // Sebelum → sesudah: tahan keadaan sebelum ±45%, sapu ke kanan, tahan sesudah.
-    const offset = Math.max(0.6, s.durasi * 0.45);
-    f.push(`[${idxKlip[i]}:v]trim=start=${BUANG_AWAL}:duration=${s.durasi},setpts=PTS-STARTPTS,${normal},settb=AVTB[bs${i}]`);
-    f.push(`[${iSesudah}:v]trim=start=${BUANG_AWAL}:duration=${s.durasi},setpts=PTS-STARTPTS,${normal},settb=AVTB[bd${i}]`);
-    f.push(`[bs${i}][bd${i}]xfade=transition=wiperight:duration=${SAPU_BUKTI}:offset=${offset.toFixed(3)},trim=duration=${s.durasi},setpts=PTS-STARTPTS,settb=AVTB[v${i}]`);
+    // Sebelum → sesudah: tahan keadaan sebelum ±45%, LARUT silang, tahan sesudah.
+    // Larut, bukan sapu: garis sapu memotong botol di tangan jadi dua pada render
+    // uji Faza v3 ("ENGINE DEG|DEGREA").
+    const offset = Math.max(0.6, s.durasi * 0.42);
+    f.push(`[${idxKlip[i]}:v]${potong}[bs${i}]`);
+    f.push(`[${iSesudah}:v]${potong}[bd${i}]`);
+    f.push(`[bs${i}][bd${i}]xfade=transition=fade:duration=${SAPU_BUKTI}:offset=${offset.toFixed(3)},trim=duration=${s.durasi},setpts=PTS-STARTPTS,settb=AVTB[v${i}]`);
   });
 
-  // LOCKUP: latar diam dengan push-in 1,00 -> 1,05, sedikit diredupkan dan dilembutkan
-  // supaya produk asli di depannya menjadi pusat.
-  const dL = slot[lockupIdx].durasi;
-  const bingkai = Math.round(dL * FPS);
-  f.push(
-    `[${idxLatar}:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2},`
-    + `zoompan=z='1+0.05*on/${bingkai}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${FPS},`
-    + `gblur=sigma=3,eq=brightness=-0.06:saturation=0.95,trim=duration=${dL},setpts=PTS-STARTPTS,format=yuv420p,setsar=1[latar]`,
-  );
-  // Produk: dasar botol berhenti di 68% tinggi, tepat di atas kotak ajakan
-  // (±70–76%); puncaknya di bawah blok merek (berakhir ±21%). PNG sudah memuat
-  // bayangan dan bantalan 12% di tiap sisi, jadi tingginya dihitung dengan itu.
-  // Tinggi PNG termasuk bantalan: produk sendiri ±0,54/1,24 ≈ 44% tinggi layar.
-  const tinggiProduk = Math.round(H * (produk.jenis === "potongan" ? 0.54 : 0.38));
-  const dasarY = Math.round(H * 0.68);
-  const bantalanBawah = produk.jenis === "potongan" ? Math.round(tinggiProduk * 0.12 / 1.24) : 0;
-  f.push(`[${idxProduk}:v]format=rgba,scale=-2:${tinggiProduk}:flags=lanczos,trim=duration=${dL},setpts=PTS-STARTPTS,fade=t=in:st=0.15:d=0.5:alpha=1[prodf]`);
-  f.push(`[${idxScrim}:v]format=rgba,trim=duration=${dL},setpts=PTS-STARTPTS[scrim]`);
-  f.push(`[latar][scrim]overlay=0:0:format=auto[lat1]`);
-  f.push(`[lat1][prodf]overlay=x=(W-w)/2:y=${dasarY + bantalanBawah}-h:format=auto,format=yuv420p,settb=AVTB[v${lockupIdx}]`);
+  for (const [i, e] of idxPlat) {
+    const d = slot[i].durasi;
+    const bingkai = Math.round(d * FPS);
+    const lockup = i === lockupIdx;
+    // Latar diam dengan push-in 1,00 -> 1,05; lockup sedikit diredupkan supaya
+    // produk dan teks menjadi pusat.
+    f.push(
+      `[${e.latar}:v]scale=${W * 2}:${H * 2}:force_original_aspect_ratio=increase,crop=${W * 2}:${H * 2},`
+      + `zoompan=z='1+0.05*on/${bingkai}':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d=1:s=${W}x${H}:fps=${FPS},`
+      + `${lockup ? "gblur=sigma=3,eq=brightness=-0.06:saturation=0.95," : "gblur=sigma=1.5,"}trim=duration=${d},setpts=PTS-STARTPTS,format=yuv420p,setsar=1[latar${i}]`,
+    );
+    // Lockup: dasar produk di 68% tinggi, di atas pil ajakan (±71–78%), puncak
+    // di bawah blok merek (±21%). Reveal: dasar di 76%, lebih besar, teks kinetik
+    // di zona atas. PNG potongan memuat bantalan 12% untuk bayangan.
+    const tinggi = Math.round(H * (produk.jenis === "potongan" ? (lockup ? 0.54 : 0.62) : (lockup ? 0.38 : 0.44)));
+    const dasarY = Math.round(H * (lockup ? 0.68 : 0.76));
+    const bantalan = produk.jenis === "potongan" ? Math.round(tinggi * 0.12 / 1.24) : 0;
+    f.push(`[${e.produk}:v]format=rgba,scale=-2:${tinggi}:flags=lanczos,trim=duration=${d},setpts=PTS-STARTPTS,fade=t=in:st=${lockup ? 0.15 : 0}:d=${lockup ? 0.5 : 0.35}:alpha=1[prod${i}]`);
+    let dasar = `latar${i}`;
+    if (e.scrim !== undefined) {
+      f.push(`[${e.scrim}:v]format=rgba,trim=duration=${d},setpts=PTS-STARTPTS[scrim${i}]`);
+      f.push(`[${dasar}][scrim${i}]overlay=0:0:format=auto[ls${i}]`);
+      dasar = `ls${i}`;
+    }
+    f.push(`[${dasar}][prod${i}]overlay=x=(W-w)/2:y=${dasarY + bantalan}-h:format=auto[lp${i}]`);
+    dasar = `lp${i}`;
+    if (e.pil !== undefined) {
+      f.push(`[${e.pil}:v]format=rgba,trim=duration=${d},setpts=PTS-STARTPTS,fade=t=in:st=0.9:d=0.35:alpha=1[pil${i}]`);
+      f.push(`[${dasar}][pil${i}]overlay=x=(W-w)/2:y=${BATAS_BAWAH - 70}-h/2:format=auto[lq${i}]`);
+      dasar = `lq${i}`;
+    }
+    f.push(`[${dasar}]format=yuv420p,settb=AVTB[v${i}]`);
+  }
 
   const kepala = Array.from({ length: lockupIdx }, (_, i) => `[v${i}]`).join("");
   f.push(`${kepala}concat=n=${lockupIdx}:v=1:a=0,fps=${FPS},settb=AVTB[badan]`);

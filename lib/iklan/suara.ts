@@ -48,7 +48,12 @@ export async function buatVo(n: NaskahIklan, dir: string): Promise<{ kalimat: Ka
   const kalimat: KalimatVo[] = [];
   let biayaIdr = 0;
   for (const [i, shot] of n.shots.entries()) {
-    const teks = shot.vo.trim();
+    // Lafal hanya untuk TTS: subtitle tetap menampilkan ejaan aslinya.
+    // Render uji Faza v3: "Degreaser" diucapkan "di Grisar".
+    const teks = n.lafal.reduce(
+      (t, l) => (l.tulisan.trim() ? t.replace(new RegExp(l.tulisan.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi"), l.ucapan) : t),
+      shot.vo.trim(),
+    );
     if (!teks) continue;
     const berkas = path.join(dir, `vo-${String(i + 1).padStart(2, "0")}.wav`);
     if (!fs.existsSync(berkas)) {

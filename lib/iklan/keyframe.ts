@@ -40,12 +40,17 @@ const UKURAN_EN: Record<ShotIklan["ukuran"], string> = {
   insert: "Insert shot of hands and object",
 };
 
-const PRODUK_EN: Record<Exclude<ShotIklan["produk"], "pahlawan">, string> = {
+/**
+ * Render uji Faza v3, dua reviewer: label botol yang digambar model selalu
+ * jadi huruf acak ("PAEA AUTO CARE", "IHGINE DEOREASER") dan ukurannya
+ * membesar. Maka produk AI tidak pernah diminta menampilkan label terbaca;
+ * label yang terbaca hanya milik foto asli (shot "asli" dan LOCKUP).
+ */
+const PRODUK_EN: Record<"tidak_tampil" | "dipakai", string> = {
   tidak_tampil: "The product does NOT appear in this image.",
   dipakai:
-    "The product appears naturally in use as part of the scene, recognisable and identical to the reference, not the only focus.",
-  jelas:
-    "The product is clearly visible, large in frame and in sharp focus, fully inside the frame, label facing the camera and legible, never covered by hands.",
+    "The product appears in the hand or in use, recognisable by its exact shape and colours from the reference, at its true real-world size relative to "
+    + "the hands. Its label is turned away from the camera, small or softly out of focus, so NO lettering on it is readable.",
 };
 
 export const pathSesudah = (p: string) => p.replace(/\.jpg$/, "-sesudah.jpg");
@@ -76,11 +81,15 @@ export function promptKeyframe(
   }
   if (catatan) bagian.push(catatan);
   bagian.push(`LOOK (identical for the whole film): ${n.gaya_visual_en} Bright, clean exposure that reads well on a phone screen.`);
-  if (shot.beat === "LOCKUP") {
+  if (shot.beat === "LOCKUP" || shot.produk === "asli") {
     bagian.push(
       `${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`,
-      "END-CARD BACKGROUND: an uncluttered premium surface and softly blurred background in the film's look. The lower-middle of the frame is an EMPTY "
-      + "clean surface where a product will be placed later; the upper third is calm negative space for a title. NO product, NO bottle, NO packaging, NO people, NO text.",
+      shot.beat === "LOCKUP"
+        ? "END-CARD BACKGROUND from the same place, light and time of day as the film: an uncluttered surface and softly blurred background. The lower-middle of the frame is an EMPTY "
+          + "clean surface where a product will be placed later; the upper third is calm negative space for a title."
+        : "PRODUCT-REVEAL BACKGROUND from the film's world: an uncluttered surface with soft directional light suited to a product hero shot, the CENTRE of the frame is an "
+          + "EMPTY clean surface where a product will be placed later, background softly out of focus.",
+      "NO product, NO bottle, NO packaging, NO people, NO hands, NO text, NO logos.",
     );
     return bagian.join("\n");
   }
@@ -90,10 +99,10 @@ export function promptKeyframe(
   }
   const muncul = n.aset.filter((a) => shot.aset.includes(a.id));
   if (muncul.length) bagian.push(`RECURRING ELEMENTS: ${muncul.map((a) => `${a.id} (${a.jenis}): ${a.deskripsi_en}`).join(" ")}`);
-  bagian.push(PRODUK_EN[shot.produk === "pahlawan" ? "jelas" : shot.produk]);
+  bagian.push(PRODUK_EN[shot.produk === "dipakai" ? "dipakai" : "tidak_tampil"]);
   bagian.push(
     "High-end Indonesian TV commercial still, photographic realism, natural skin texture, correct hands with five fingers, "
-    + "believable physics, liquids coming from their real source. Riders wear helmets. "
+    + "believable physics, liquids coming from their real source, actions aimed at the right part. Riders wear helmets. No logos or badges of any other brand on vehicles, clothes or objects. "
     + "Absolutely no added text, captions, subtitles, watermarks, logos, signage lettering or user-interface elements.",
   );
   bagian.push("Vertical 9:16 full-bleed composition, no borders, no letterboxing.");
@@ -180,13 +189,13 @@ export async function buatKeyframes(
 
   // Jangkar aset: indeks shot pertama tempat tiap aset muncul (LOCKUP tidak dihitung).
   const jangkar = new Map<string, number>();
-  n.shots.forEach((s, i) => { if (s.beat !== "LOCKUP") s.aset.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }); });
+  n.shots.forEach((s, i) => { if (s.beat !== "LOCKUP" && s.produk !== "asli") s.aset.forEach((id) => { if (!jangkar.has(id)) jangkar.set(id, i); }); });
   const shotJangkar = new Set(jangkar.values());
 
   const gambar = async (i: number) => {
     if (ada(paths[i])) return;
     const shot = n.shots[i];
-    const pakaiProduk = shot.beat !== "LOCKUP" && shot.produk !== "tidak_tampil";
+    const pakaiProduk = shot.produk === "dipakai";
     // SHOT DEKAT HANYA MEMBAWA ACUAN PROPERTI, maksimal satu.
     //
     // Render uji Faza v3: insert "nozel masuk ke celah mesin" ditolak kurasi
@@ -195,7 +204,7 @@ export async function buatKeyframes(
     // komposisi ke lebar, apa pun bunyi prompt-nya. Di insert/makro yang
     // terlihat hanya tangan dan benda; wajah tidak perlu dikunci di sana.
     const dekat = shot.ukuran === "insert" || shot.ukuran === "macro";
-    const asetAcuan = shot.beat === "LOCKUP"
+    const asetAcuan = shot.beat === "LOCKUP" || shot.produk === "asli"
       ? []
       : shot.aset
         .filter((id) => jangkar.get(id) !== i && ada(paths[jangkar.get(id)!]))

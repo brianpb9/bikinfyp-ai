@@ -50,7 +50,7 @@ async function kie(url: string, init?: RequestInit): Promise<Record<string, unkn
 }
 
 export interface HasilKlip {
-  /** Klip per shot; kosong ("") untuk LOCKUP, yang dibangun dari gambar diam. */
+  /** Klip per shot; kosong ("") untuk LOCKUP dan shot produk asli, yang dibangun dari gambar diam. */
   paths: string[];
   /** Klip SESUDAH untuk shot BUKTI (indeks shot -> path). */
   sesudah: Map<number, string>;
@@ -69,7 +69,9 @@ export async function buatKlip(
   if (!config.kieApiKey) throw new Error("KIE_API_KEY belum diisi.");
   fs.mkdirSync(dir, { recursive: true });
   const nama = (i: number, akhiran = "") => path.join(dir, `klip-${String(i + 1).padStart(2, "0")}${akhiran}.mp4`);
-  const paths = n.shots.map((s, i) => (s.beat === "LOCKUP" ? "" : nama(i)));
+  // LOCKUP dan REVEAL berproduk asli dibangun dari gambar diam + foto produk
+  // asli di perakitan — merender klipnya hanya membayar untuk dibuang.
+  const paths = n.shots.map((s, i) => (s.beat === "LOCKUP" || s.produk === "asli" ? "" : nama(i)));
   const sesudah = new Map([...sesudahKf.keys()].map((i) => [i, nama(i, "-sesudah")] as const));
   const tugas = [
     ...n.shots.map((shot, i) => ({ shot, i, keluar: paths[i], gambar: keyframes[i], slotGambar: i })).filter((t) => t.keluar),
