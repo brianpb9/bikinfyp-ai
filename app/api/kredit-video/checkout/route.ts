@@ -225,6 +225,11 @@ export async function POST(req: Request) {
         `Unsupported payment method: ${method}`,
       );
     }
+    // Kanal yang tidak aktif di merchant TIDAK ditolak di sini, hanya tidak
+    // ditawarkan (/api/meta). Daftar aktif dari Duitku bergantung pada nominal
+    // yang ditanyakan, jadi ia cukup untuk menyaring tampilan tapi bukan dasar
+    // yang aman untuk menolak pesanan bernominal lain. Kalau Duitku sendiri
+    // menolak, pembeli menerima 502 PAYMENT_PROVIDER_FAILED yang jelas.
 
     // ── APA YANG DIBELI ────────────────────────────────────────────────
     //

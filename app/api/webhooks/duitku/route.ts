@@ -8,7 +8,7 @@ import { creditTopup, TOPUP_PACKAGES } from "@/lib/credits";
 import { ambilPaket, kreditkanTopup, mulaiLangganan } from "@/lib/kredit-video-runtime";
 import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 
-import { pastikanSegar } from "@/lib/kredensial";
+import { lingkunganDuitkuPasti, pastikanLingkunganDuitku, pastikanSegar } from "@/lib/kredensial";
 import { emailPembayaranLunas } from "@/lib/email-pembayaran";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +80,33 @@ export async function POST(req: Request) {
       return Response.json(
         { code: "INVALID_SIGNATURE", message_id: "Signature tidak valid.", message_en: "Invalid signature.", retryable: false },
         { status: 401 }
+      );
+    }
+
+    // LINGKUNGAN HARUS PASTI SEBELUM ADA STATUS YANG DITULIS.
+    //
+    // Gerbang sandbox di bawah membaca paymentsEnv(). Selama Duitku belum
+    // mengonfirmasi lingkungan pasangan kunci terpasang, nilai itu cuma tebakan
+    // dari DUITKU_IS_PRODUCTION — dan 13 Sep 2026 tebakan itu SALAH: merchant
+    // production dengan env "sandbox". Di atas tebakan itu, pembayaran
+    // sungguhan akan ditandai sandbox_paid dan dijawab 200, sehingga Duitku
+    // berhenti mengirim ulang dan kreditnya tidak pernah diberikan.
+    //
+    // 503 membuat Duitku MENGULANG callback-nya nanti, saat deteksi sudah bisa
+    // menjawab. Tidak ada status yang disentuh, tidak ada kredit yang diberikan.
+    // Dipanggil langsung, bukan hanya lewat pastikanSegar: callback Duitku yang
+    // tertinggal tetap sah walau gateway aktif sudah dipindah ke Midtrans.
+    await pastikanLingkunganDuitku();
+    if (!lingkunganDuitkuPasti()) {
+      console.error(`[webhook duitku] lingkungan belum pasti — callback ${payload.merchantOrderId} ditunda, Duitku akan mengulang`);
+      return Response.json(
+        {
+          code: "PAYMENT_ENV_UNVERIFIED",
+          message_id: "Lingkungan pembayaran belum terverifikasi. Coba kirim ulang nanti.",
+          message_en: "Payment environment not verified yet; retry later.",
+          retryable: true,
+        },
+        { status: 503 },
       );
     }
 

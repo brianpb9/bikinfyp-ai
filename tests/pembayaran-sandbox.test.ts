@@ -17,6 +17,8 @@ process.env.DB_PATH = `/tmp/racun-test-sandbox-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-sandbox-storage-${process.pid}`;
 process.env.RACUN_WORKER_DISABLED = "1";
 process.env.PAYMENT_GATEWAY = "duitku";
+// Kunci palsu: jangan tanyakan lingkungannya ke Duitku sungguhan (lib/kredensial.ts).
+process.env.DUITKU_DETEKSI_LINGKUNGAN = "0";
 process.env.DUITKU_MERCHANT_CODE = "DS34363";
 process.env.DUITKU_API_KEY = "kunci-uji-sandbox";
 process.env.DUITKU_IS_PRODUCTION = "false";

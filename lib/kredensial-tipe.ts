@@ -11,6 +11,17 @@
 
 export type KelompokKredensial = "Video & AI" | "Pembayaran" | "Email & Login" | "Penyimpanan";
 
+export type StatusLingkunganDuitku = {
+  terpasang: boolean;
+  merchant: string;
+  lingkungan: "production" | "sandbox";
+  /** "terdeteksi" = dijawab Duitku untuk pasangan kunci ini; "env" = DUITKU_IS_PRODUCTION. */
+  sumber: "terdeteksi" | "env";
+  kanal: { kode: string; nama: string; biayaIdr: number }[];
+  diperiksa_at?: string;
+  galat?: string;
+};
+
 export type BarisTampilan = {
   nama: string;
   label: string;

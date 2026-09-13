@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { wajibAdmin } from "@/lib/admin-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { daftarKredensial, redirectUriGoogleTerdaftar } from "@/lib/kredensial";
+import { daftarKredensial, pastikanLingkunganDuitku, redirectUriGoogleTerdaftar, statusLingkunganDuitku } from "@/lib/kredensial";
+import { config } from "@/lib/config";
 import type { BarisTampilan } from "@/lib/kredensial-tipe";
 import { FormKredensial } from "./FormKredensial";
 
@@ -35,6 +36,10 @@ export default async function HalamanKredensial() {
   }
 
   const baris = await daftarKredensial();
+  // Tanpa jaringan bila pasangan kunci sudah dikenali; kalau belum, halaman
+  // ini justru tempat yang tepat untuk bertanya ke Duitku.
+  await pastikanLingkunganDuitku();
+  const duitku = statusLingkunganDuitku();
   const dariDb = baris.filter((b) => b.sumber === "database").length;
   const kosong = baris.filter((b) => b.sumber === "kosong").length;
 
@@ -69,6 +74,47 @@ export default async function HalamanKredensial() {
                 <FormKredensial key={b.nama} baris={b} />
               ))}
             </div>
+            {kelompok === "Pembayaran" && duitku.terpasang && (
+              <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-600">
+                <p className="flex flex-wrap items-center gap-2">
+                  <b className="text-zinc-900">Lingkungan Duitku</b>
+                  <span
+                    className={`rounded px-1.5 py-0.5 text-[11px] font-bold ${
+                      duitku.lingkungan === "production" ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                    }`}
+                  >
+                    {duitku.lingkungan.toUpperCase()}
+                  </span>
+                  <span className="font-mono text-[11px]">{duitku.merchant}</span>
+                </p>
+                <p className="mt-1">
+                  {duitku.sumber === "terdeteksi" ? (
+                    <>
+                      Dikenali otomatis oleh Duitku untuk kode merchant dan API key di atas
+                      {duitku.diperiksa_at && <> · diperiksa {duitku.diperiksa_at.slice(0, 16).replace("T", " ")} UTC</>}. Tidak
+                      bergantung pada <code>DUITKU_IS_PRODUCTION</code>.
+                    </>
+                  ) : (
+                    <>
+                      Belum dikenali Duitku — sementara memakai <code>DUITKU_IS_PRODUCTION</code> dari .env.
+                      {duitku.galat && <span className="mt-1 block text-red-600">{duitku.galat}</span>}
+                    </>
+                  )}
+                </p>
+                {duitku.kanal.length > 0 && (
+                  <p className="mt-1">
+                    Kanal aktif di merchant ini:{" "}
+                    {duitku.kanal.map((k) => `${k.nama}${k.biayaIdr > 0 ? ` (biaya Rp${k.biayaIdr.toLocaleString("id-ID")})` : ""}`).join(", ")}
+                  </p>
+                )}
+                <p className="mt-2">
+                  <b>Callback URL</b> untuk didaftarkan di proyek Duitku:
+                </p>
+                <p className="mt-1 select-all break-all rounded-lg border border-zinc-300 bg-white p-2 font-mono text-[11px] text-zinc-900">
+                  {config.appBaseUrl ? `${config.appBaseUrl.replace(/\/+$/, "")}/api/webhooks/duitku` : "APP_BASE_URL belum diisi di server."}
+                </p>
+              </div>
+            )}
             {kelompok === "Email & Login" && (
               <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-3 text-xs leading-5 text-zinc-600">
                 <p>

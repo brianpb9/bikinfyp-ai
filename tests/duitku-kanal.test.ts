@@ -65,7 +65,8 @@ test("kanal DIVALIDASI DI SERVER, bukan dipercaya dari klien", () => {
   const route = baca("app/api/credits/checkout/route.ts");
   assert.match(route, /kanalSah\(method\)/, "server tidak memvalidasi kanal kiriman klien");
   const meta = baca("app/api/meta/route.ts");
-  assert.match(meta, /payment_channels: KANAL_DUITKU\.map/, "daftar kanal tidak berasal dari server");
+  // Boleh disaring ke kanal yang aktif di merchant, tapi sumbernya tetap daftar server.
+  assert.match(meta, /payment_channels: KANAL_DUITKU\s*(\.filter\([\s\S]{0,120}?\)\)\s*)?\.map/, "daftar kanal tidak berasal dari server");
   const page = baca("app/kredit/page.tsx");
   assert.match(page, /setKanal\(Array\.isArray\(m\.payment_channels\)/, "halaman tidak membaca daftar dari server");
 });

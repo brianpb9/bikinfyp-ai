@@ -18,6 +18,8 @@ process.env.RACUN_WORKER_DISABLED = "1";
 // non-penguji — punya berkasnya sendiri: tests/pembayaran-sandbox.test.ts.
 // Tanpa baris ini gerbang itu ikut campur dan menutupi apa yang diuji di sini.
 process.env.PAYMENT_GATEWAY = "duitku";
+// Kunci palsu: jangan tanyakan lingkungannya ke Duitku sungguhan (lib/kredensial.ts).
+process.env.DUITKU_DETEKSI_LINGKUNGAN = "0";
 process.env.DUITKU_IS_PRODUCTION = "true";
 
 const { getDb, now, uuid } = await import("../lib/db");

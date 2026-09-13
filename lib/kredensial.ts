@@ -38,13 +38,14 @@
  */
 
 import crypto from "node:crypto";
-import { config } from "./config";
+import { config, paymentsProvider } from "./config";
 import { kredensialKey } from "./secrets";
 import { getPool } from "./postgres/pool";
-import type { BarisTampilan, KelompokKredensial } from "./kredensial-tipe";
+import type { BarisTampilan, KelompokKredensial, StatusLingkunganDuitku } from "./kredensial-tipe";
 import { asalDiizinkan } from "@/lib/asal-oauth";
+import { deteksiLingkunganDuitku, type HasilDeteksi, type KanalAktif, type LingkunganDuitku } from "./duitku-deteksi";
 
-export type { BarisTampilan, KelompokKredensial } from "./kredensial-tipe";
+export type { BarisTampilan, KelompokKredensial, StatusLingkunganDuitku } from "./kredensial-tipe";
 
 /** Kredensial yang boleh dikelola dari dashboard, dan ke mana ia dipasang. */
 export type Kredensial = {
@@ -86,6 +87,17 @@ export const KREDENSIAL: readonly Kredensial[] = [
 export function kredensialDikenal(nama: string): Kredensial | undefined {
   return KREDENSIAL.find((k) => k.nama === nama);
 }
+
+/**
+ * Nilai env SAAT PROSES MULAI, untuk dikembalikan ketika barisnya dihapus.
+ *
+ * Tanpa salinan ini "Kembalikan ke .env" hanya menghapus baris database:
+ * `config` tetap memegang nilai lama dari database sampai container dimulai
+ * ulang — padahal halaman berjanji perubahannya berlaku tanpa restart.
+ */
+const nilaiEnvAwal = new Map<string, unknown>(
+  KREDENSIAL.map((k) => [k.nama, (config as unknown as Record<string, unknown>)[k.properti as string]]),
+);
 
 /* ── enkripsi ─────────────────────────────────────────────────────────── */
 
@@ -147,7 +159,16 @@ export async function muatKredensial(): Promise<number> {
     const rows = await bacaBaris();
     let dipasang = 0;
     meta.clear();
+    // Nama yang tidak lagi punya baris kembali ke nilai env-nya.
+    const adaBaris = new Set(rows.map((r) => r.name));
+    for (const k of KREDENSIAL) {
+      if (!adaBaris.has(k.nama)) (config as unknown as Record<string, unknown>)[k.properti as string] = nilaiEnvAwal.get(k.nama);
+    }
     for (const r of rows) {
+      if (r.name === BARIS_LINGKUNGAN_DUITKU) {
+        bacaCatatanDuitku(r.value_enc);
+        continue;
+      }
       const k = kredensialDikenal(r.name);
       if (!k) continue; // baris untuk nama yang sudah tidak dikelola — abaikan
       try {
@@ -160,12 +181,214 @@ export async function muatKredensial(): Promise<number> {
         console.error(`[kredensial] gagal mendekripsi ${r.name} — memakai nilai env`);
       }
     }
+    // Baris catatan yang TIDAK ADA tidak menghapus catatan di memori: ia bisa
+    // saja belum selesai ditulis oleh deteksi yang sedang berjalan di proses
+    // ini. Catatan lama tetap tidak berlaku untuk pasangan kunci lain karena
+    // diikat ke sidiknya.
+    terapkanLingkunganDuitku();
     terakhirDimuat = Date.now();
     return dipasang;
   } catch (err) {
     console.error("[kredensial] gagal memuat dari database, memakai nilai env:", err);
     return 0;
   }
+}
+
+/* ── lingkungan Duitku: dideteksi, bukan dibaca dari env ─────────────── */
+//
+// Lihat lib/duitku-deteksi.ts untuk alasannya. Singkatnya: pasangan kode
+// merchant + API key hanya dikenali Duitku di SATU lingkungan, jadi
+// lingkungannya ditanyakan ke Duitku setiap kali pasangan itu berubah, dan
+// jawabannya menimpa DUITKU_IS_PRODUCTION.
+//
+// Hasilnya disimpan di runtime_secrets (terenkripsi seperti baris lain) supaya
+// proses web yang baru mulai tidak perlu bertanya ulang. Catatan itu diikat ke
+// SIDIK pasangan kuncinya: begitu kode atau kunci diganti, catatan lama tidak
+// berlaku lagi dan Duitku ditanya ulang.
+//
+// WORKER TIDAK PERNAH BERTANYA SENDIRI — ia hanya membaca catatan tersimpan.
+// Itu cukup karena tidak ada jalur worker yang memakai duitkuIsProduction;
+// semua jalur uang (checkout, webhook, status pesanan) hidup di web. Kalau
+// suatu saat worker ikut memproses pembayaran, ia wajib memanggil
+// pastikanLingkunganDuitku() dan lingkunganDuitkuPasti() seperti webhook.
+
+const BARIS_LINGKUNGAN_DUITKU = "DUITKU_LINGKUNGAN_TERDETEKSI";
+const JEDA_ULANG_GAGAL_MS = 60_000;
+
+/**
+ * Saklar EKSPLISIT untuk mematikan deteksi: DUITKU_DETEKSI_LINGKUNGAN=0.
+ *
+ * Hanya untuk uji dan pengembangan offline — tempat kunci Duitku-nya palsu dan
+ * bertanya ke Duitku sungguhan justru salah. Dengan saklar ini
+ * DUITKU_IS_PRODUCTION kembali jadi satu-satunya sumber, dan dianggap pasti.
+ * DIABAIKAN di NODE_ENV=production: operator yang menyalin pengaturan uji ke
+ * server tidak boleh diam-diam mengembalikan perilaku yang membuat checkout
+ * mati 13 Sep 2026.
+ */
+let peringatanSaklar = false;
+function deteksiDimatikan(): boolean {
+  if (process.env.DUITKU_DETEKSI_LINGKUNGAN !== "0") return false;
+  if (process.env.NODE_ENV === "production") {
+    if (!peringatanSaklar) {
+      peringatanSaklar = true;
+      console.error("[kredensial] DUITKU_DETEKSI_LINGKUNGAN=0 DIABAIKAN di production — lingkungan Duitku tetap dideteksi.");
+    }
+    return false;
+  }
+  return true;
+}
+/** DUITKU_IS_PRODUCTION dari env — hanya dipakai selama pasangan kunci belum dikenali. */
+const produksiDariEnv = config.duitkuIsProduction;
+
+type CatatanDuitku = { sidik: string; lingkungan: LingkunganDuitku; kanal: KanalAktif[]; diperiksa_at: string };
+
+let catatanDuitku: CatatanDuitku | null = null;
+let gagalDuitku: { sidik: string; at: number; hasil: HasilDeteksi } | null = null;
+let pemeriksaanBerjalan: { sidik: string; janji: Promise<HasilDeteksi> } | null = null;
+
+/** Sidik pasangan kunci — BUKAN kuncinya. Cukup untuk tahu "masih pasangan yang sama?". */
+function sidikDuitku(merchantCode: string, apiKey: string): string {
+  return crypto.createHash("sha256").update(`${merchantCode}\n${apiKey}`).digest("hex").slice(0, 24);
+}
+
+function sidikSekarang(): string | null {
+  if (!config.duitkuMerchantCode || !config.duitkuApiKey) return null;
+  return sidikDuitku(config.duitkuMerchantCode, config.duitkuApiKey);
+}
+
+function bacaCatatanDuitku(valueEnc: string): void {
+  try {
+    const c = JSON.parse(dekripsi(valueEnc)) as CatatanDuitku;
+    if (c && typeof c.sidik === "string" && (c.lingkungan === "production" || c.lingkungan === "sandbox")) {
+      catatanDuitku = { ...c, kanal: Array.isArray(c.kanal) ? c.kanal : [] };
+    }
+  } catch {
+    console.error(`[kredensial] catatan ${BARIS_LINGKUNGAN_DUITKU} tidak terbaca — lingkungan Duitku akan dideteksi ulang`);
+  }
+}
+
+/** Catatan yang berlaku untuk pasangan kunci SAAT INI, atau null. */
+function catatanBerlaku(): CatatanDuitku | null {
+  const s = sidikSekarang();
+  return s && catatanDuitku?.sidik === s ? catatanDuitku : null;
+}
+
+function terapkanLingkunganDuitku(): void {
+  const c = deteksiDimatikan() ? null : catatanBerlaku();
+  config.duitkuIsProduction = c ? c.lingkungan === "production" : produksiDariEnv;
+}
+
+/**
+ * Apakah lingkungan Duitku SUDAH PASTI untuk pasangan kunci terpasang?
+ *
+ * false berarti config.duitkuIsProduction sedang memakai DUITKU_IS_PRODUCTION
+ * sebagai tebakan. Jalur yang memindahkan uang — webhook — WAJIB menolak
+ * bekerja di atas tebakan: salah menebak "sandbox" menandai pembayaran
+ * sungguhan sebagai uang mainan, salah menebak "production" mengisi dompet
+ * sungguhan dengan uang mainan.
+ */
+export function lingkunganDuitkuPasti(): boolean {
+  return deteksiDimatikan() || catatanBerlaku() !== null;
+}
+
+async function simpanCatatanDuitku(c: CatatanDuitku): Promise<void> {
+  try {
+    await getPool(config.databaseUrl).query(
+      `INSERT INTO runtime_secrets (name, value_enc, updated_at, updated_by)
+            VALUES ($1,$2,$3,'deteksi-otomatis')
+       ON CONFLICT (name) DO UPDATE
+          SET value_enc = EXCLUDED.value_enc, updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by`,
+      [BARIS_LINGKUNGAN_DUITKU, enkripsi(JSON.stringify(c)), c.diperiksa_at],
+    );
+  } catch (err) {
+    // Gagal menyimpan bukan alasan menggagalkan deteksi: proses ini sudah
+    // memegang jawabannya, dan proses lain akan bertanya sendiri.
+    console.error("[kredensial] gagal menyimpan lingkungan Duitku:", err instanceof Error ? err.message : err);
+  }
+}
+
+/**
+ * Pastikan lingkungan Duitku sesuai pasangan kunci yang terpasang.
+ *
+ * Murah bila pasangannya sudah dikenali — tanpa jaringan sama sekali. Duitku
+ * hanya ditanya saat pasangan berubah (atau `paksa`), dan kegagalan ditahan
+ * 60 detik supaya gateway yang sedang mati tidak ditanya di setiap permintaan.
+ *
+ * Selama pasangan belum dikenali, DUITKU_IS_PRODUCTION dari env tetap berlaku.
+ */
+export async function pastikanLingkunganDuitku(opts: { paksa?: boolean; deteksi?: typeof deteksiLingkunganDuitku } = {}): Promise<HasilDeteksi | null> {
+  const s = sidikSekarang();
+  if (!s || (deteksiDimatikan() && !opts.deteksi)) {
+    terapkanLingkunganDuitku();
+    return null;
+  }
+  const berlaku = catatanBerlaku();
+  if (berlaku && !opts.paksa) {
+    terapkanLingkunganDuitku();
+    return { status: "dikenali", lingkungan: berlaku.lingkungan, kanal: berlaku.kanal };
+  }
+  if (!opts.paksa && gagalDuitku?.sidik === s && Date.now() - gagalDuitku.at < JEDA_ULANG_GAGAL_MS) {
+    return gagalDuitku.hasil;
+  }
+  if (pemeriksaanBerjalan?.sidik === s) return pemeriksaanBerjalan.janji;
+
+  const deteksi = opts.deteksi ?? deteksiLingkunganDuitku;
+  const janji = (async () => {
+    const hasil = await deteksi(config.duitkuMerchantCode, config.duitkuApiKey);
+    // Kunci bisa diganti SELAMA pertanyaan berjalan; jawaban untuk pasangan
+    // lama tidak boleh ditempelkan ke pasangan baru.
+    if (sidikSekarang() !== s) return hasil;
+    if (hasil.status === "dikenali") {
+      const lama = catatanDuitku;
+      catatanDuitku = { sidik: s, lingkungan: hasil.lingkungan, kanal: hasil.kanal, diperiksa_at: new Date().toISOString() };
+      gagalDuitku = null;
+      if (lama?.sidik !== s || lama.lingkungan !== hasil.lingkungan) {
+        console.log(`[kredensial] lingkungan Duitku terdeteksi: ${hasil.lingkungan} (merchant ${config.duitkuMerchantCode})`);
+      }
+      await simpanCatatanDuitku(catatanDuitku);
+    } else {
+      gagalDuitku = { sidik: s, at: Date.now(), hasil };
+      console.error(`[kredensial] lingkungan Duitku belum bisa dipastikan (merchant ${config.duitkuMerchantCode}): ${hasil.alasan}`);
+    }
+    terapkanLingkunganDuitku();
+    return hasil;
+  })();
+  pemeriksaanBerjalan = { sidik: s, janji };
+  try {
+    return await janji;
+  } finally {
+    if (pemeriksaanBerjalan?.janji === janji) pemeriksaanBerjalan = null;
+  }
+}
+
+/**
+ * Kode kanal yang AKTIF di merchant terpasang, atau null bila belum diketahui.
+ *
+ * Kanal aktif berbeda per merchant DAN per lingkungan: QRIS (NQ) aktif di
+ * merchant sandbox, tapi tidak ada di merchant production D24570. Menawarkan
+ * kanal yang tidak aktif berarti pembeli baru tahu sesudah menekannya.
+ */
+export function kanalAktifDuitku(): string[] | null {
+  const c = deteksiDimatikan() ? null : catatanBerlaku();
+  // Daftar kosong = tidak diketahui, BUKAN "tidak ada kanal". Menyaring dengan
+  // daftar kosong akan menyembunyikan seluruh tombol bayar.
+  return c && c.kanal.length > 0 ? c.kanal.map((k) => k.kode) : null;
+}
+
+/** Ringkasan untuk halaman admin. Tidak memuat kunci dalam bentuk apa pun. */
+export function statusLingkunganDuitku(): StatusLingkunganDuitku {
+  const c = deteksiDimatikan() ? null : catatanBerlaku();
+  const s = sidikSekarang();
+  const gagal = s && gagalDuitku?.sidik === s && gagalDuitku.hasil.status !== "dikenali" ? gagalDuitku.hasil : null;
+  return {
+    terpasang: s !== null,
+    merchant: config.duitkuMerchantCode,
+    lingkungan: config.duitkuIsProduction ? "production" : "sandbox",
+    sumber: c ? "terdeteksi" : "env",
+    kanal: c?.kanal ?? [],
+    ...(c ? { diperiksa_at: c.diperiksa_at } : {}),
+    ...(gagal ? { galat: gagal.alasan } : {}),
+  };
 }
 
 /** Simpan nilai baru, lalu langsung terapkan di proses ini. */
@@ -228,8 +451,10 @@ export async function daftarKredensial(): Promise<BarisTampilan[]> {
  * sering sekali per 30 detik.
  */
 export async function pastikanSegar(maksUsiaMs = 30_000): Promise<void> {
-  if (Date.now() - terakhirDimuat < maksUsiaMs) return;
-  await muatKredensial();
+  if (Date.now() - terakhirDimuat >= maksUsiaMs) await muatKredensial();
+  // Tanpa jaringan bila pasangan kunci Duitku sudah dikenali; lihat
+  // pastikanLingkunganDuitku.
+  if (paymentsProvider() === "duitku") await pastikanLingkunganDuitku();
 }
 
 /* ── penyegaran berkala ───────────────────────────────────────────────── */

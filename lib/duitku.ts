@@ -12,6 +12,7 @@ import crypto from "node:crypto";
 import { NAMA_PLATFORM_PANJANG } from "./identitas-platform";
 import { config } from "./config";
 import { TOPUP_PACKAGES } from "./credits";
+import { HOST_V2 } from "./duitku-deteksi";
 
 export class DuitkuNotConfigured extends Error {
   constructor() {
@@ -63,14 +64,12 @@ export function duitkuBase(): string {
  * sandbox.duitku.com/webapi. Memakai host yang salah menjawab 404, bukan galat
  * yang menjelaskan.
  *
- * Host sandbox DIVERIFIKASI langsung 2 Sep 2026 dengan merchant DS34363.
- * Host produksi BELUM diverifikasi — belum ada akun produksi untuk mengujinya,
- * jadi ia ditandai di sini alih-alih dianggap benar diam-diam.
+ * Kedua host diverifikasi langsung — lihat HOST_V2 di lib/duitku-deteksi.ts.
+ * `config.duitkuIsProduction` sendiri ditentukan oleh jawaban Duitku atas
+ * pasangan kunci yang terpasang, bukan oleh env (lib/kredensial.ts).
  */
 export function duitkuBaseV2(): string {
-  return config.duitkuIsProduction
-    ? "https://passport.duitku.com/webapi" // BELUM DIUJI — konfirmasi sebelum go-live
-    : "https://sandbox.duitku.com/webapi";
+  return config.duitkuIsProduction ? HOST_V2.production : HOST_V2.sandbox;
 }
 
 /**

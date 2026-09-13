@@ -3,6 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { config, paymentsConfigured, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { KANAL_DUITKU } from "@/lib/duitku";
+import { kanalAktifDuitku, pastikanSegar } from "@/lib/kredensial";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { mesinUntuk } from "@/lib/kualitas-video";
 import type { QualityTier } from "@/lib/providers/types";
@@ -41,6 +42,10 @@ export async function GET(req: Request) {
   try {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
+    // payments_env dan daftar kanal di bawah bergantung pada merchant yang
+    // terpasang di dashboard — tanpa penyegaran, keduanya bisa milik merchant lama.
+    await pastikanSegar();
+    const kanalAktif = kanalAktifDuitku();
     const isByteplus = config.providerVideo === "byteplus";
     return Response.json({
       provider_video: config.providerVideo,
@@ -86,7 +91,12 @@ export async function GET(req: Request) {
       // layar bisa memuat kanal yang server tolak, dan pembeli baru tahu
       // sesudah menekan. Server juga yang memvalidasinya lagi saat checkout,
       // jadi klien tidak pernah menjadi sumber kebenaran soal ini.
-      payment_channels: KANAL_DUITKU.map((k) => ({ code: k.kode, name: k.nama, type: k.jenis })),
+      //
+      // Dan hanya yang AKTIF di merchant terpasang, bila Duitku sudah
+      // menjawabnya — kanal aktif berbeda per merchant dan per lingkungan.
+      payment_channels: KANAL_DUITKU
+        .filter((k) => !kanalAktif || kanalAktif.includes(k.kode))
+        .map((k) => ({ code: k.kode, name: k.nama, type: k.jenis })),
     });
   } catch (err) {
     return errorResponse(err);

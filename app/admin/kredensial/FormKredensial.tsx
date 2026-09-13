@@ -25,14 +25,23 @@ export function FormKredensial({ baris }: { baris: BarisTampilan }) {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name: baris.nama, value: kosongkan ? "" : nilai }),
       });
-      const d = (await res.json().catch(() => ({}))) as { ok?: boolean; aksi?: string; message_id?: string };
+      const d = (await res.json().catch(() => ({}))) as {
+        ok?: boolean; aksi?: string; message_id?: string; duitku?: { status: string; pesan: string };
+      };
       if (!res.ok || !d.ok) throw new Error(d.message_id ?? "Gagal menyimpan.");
       setNilai("");
       setPesan(`Tersimpan — ${d.aksi}. Berlaku sekarang, worker menyusul ≤30 detik.`);
+      if (d.duitku && d.duitku.status !== "dikenali") {
+        // Sengaja TIDAK memuat ulang: pesan ini yang harus terbaca — biasanya
+        // artinya pasangan kuncinya belum lengkap diganti.
+        setGalat(d.duitku.pesan);
+        return;
+      }
+      if (d.duitku) setPesan(`Tersimpan — ${d.duitku.pesan}`);
       // Muat ulang penuh supaya lencana sumber dan samaran nilainya ikut
       // segar. Ini halaman operator yang jarang dibuka; kesegaran data lebih
       // berharga daripada menghindari satu muat ulang.
-      setTimeout(() => window.location.reload(), 900);
+      setTimeout(() => window.location.reload(), d.duitku ? 1800 : 900);
     } catch (e) {
       setGalat(e instanceof Error ? e.message : "Gagal menyimpan.");
     } finally {
