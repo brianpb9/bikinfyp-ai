@@ -58,7 +58,10 @@ export const pathSesudah = (p: string) => p.replace(/\.jpg$/, "-sesudah.jpg");
 
 /** Negative prompt satu shot: dari naskah + kategori + global (lib/iklan/realitas.ts). */
 export function negatifShot(shot: ShotIklan, kategori: KategoriRealitas[]): string[] {
-  const dasar = negatifUntuk(kategori, shot.hindari_en ?? []);
+  const latarKosong = shot.beat === "LOCKUP" || shot.produk === "asli";
+  // Di latar kosong, hindari_en penulis yang menyebut produk tidak pernah dipakai.
+  const dariNaskah = (shot.hindari_en ?? []).filter((h) => !latarKosong || !/\b(bottle|product|label|packag|botol|produk)\b/i.test(h));
+  const dasar = negatifUntuk(kategori, dariNaskah);
   return shot.beat === "LOCKUP" || shot.produk === "asli" ? [...new Set(["product", "bottle", "packaging", "people", "hands", ...dasar])] : dasar;
 }
 

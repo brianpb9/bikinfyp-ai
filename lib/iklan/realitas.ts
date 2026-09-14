@@ -74,6 +74,7 @@ export const REALITAS: Record<KategoriRealitas, PengetahuanRealitas> = {
       "chain drive on a scooter", "motorcycle moving sideways or backwards", "motorcycle floating", "wheels not touching the ground",
       "rider without helmet", "rider with one hand off the handlebar while riding", "rider standing on the seat", "riding inside a house",
       "spraying the seat, tyre or brake disc", "spraying a hot running engine", "water jet on electrical parts", "brand badge of Honda, Yamaha, Suzuki or Kawasaki",
+      "smoke rising from the engine", "steam from the engine", "engine on fire",
     ],
   },
   otomotif_mobil: {
@@ -141,7 +142,8 @@ export const REALITAS: Record<KategoriRealitas, PengetahuanRealitas> = {
   },
   rumah_tangga: {
     label: "rumah tangga",
-    kunci: ["pembersih", "lantai", "cuci", "deterjen", "dapur", "panci", "sapu", "pel", "rak", "wadah", "botol minum", "lampu"],
+    // "pembersih" saja terlalu luas: degreaser mesin ikut terbaca rumah tangga (Faza v5).
+    kunci: ["pembersih lantai", "pembersih kamar mandi", "lantai", "cuci piring", "deterjen", "dapur", "panci", "sapu", "pel lantai", "rak", "wadah", "botol minum", "lampu"],
     fakta: [
       "Household products are used on the surfaces they are made for, in real Indonesian homes: tiled floors, kitchen counters, bathrooms; cleaning shows spraying or pouring, wiping or scrubbing, and a plausible improvement.",
     ],

@@ -225,6 +225,11 @@ REALITY FIRST — the image and video models hallucinate whatever you leave open
   nothing changes place, time of day or clothing between the first and last frame of a shot or between consecutive shots.
 - Keep continuity across shots: a helmet put on stays on; a dirty engine only becomes clean after the product is used.
 - For every shot write hindari_en: the specific mistakes a model is likely to make in that exact shot.
+- Never describe invisible phenomena (heat shimmer, heat haze, smell, aroma, sound waves, "feeling" in the air): image and
+  video models draw them as smoke, fog or lines. Show their visible consequence instead (a person's relaxed face, a steady
+  gauge). Steam is allowed only from hot food or drinks.
+- For the REVEAL (produk = asli) and LOCKUP shots describe ONLY the empty setting — no bottle, product, label or packaging in
+  visual_en, and no hindari_en item that asks for the product to be present (it is composited later).
 
 MAKING IT RENDERABLE — images come from an image model, motion from a video model:
 - visual_en describes a single photograph of the FIRST frame: concrete subject, pose, setting, composition, light.
@@ -313,6 +318,21 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
   if (lockup && !lockup.vo.trim()) galat.push("VO LOCKUP wajib ada: sebut merek dan ajak mencari/membeli.");
   s.forEach((x, i) => {
     if (x.beat !== "LOCKUP" && !x.vo.trim() && !teksPolos(x.teks_layar)) galat.push(`Shot ${i + 1}: shot kosong tanpa VO dan tanpa teks layar.`);
+    // Faza v5, shot 8: "faint heat shimmer above the fins" keluar sebagai kepulan
+    // asap tiga kali berturut-turut — mesin terlihat terbakar.
+    const kasatMata = /\b(heat[- ]?shimmer|shimmer\w*|heat[- ]?haze|haze|mirage|smell\w*|aroma|scent|sound ?waves?|fumes)\b/i;
+    const makanan = (n.kategori_realitas ?? []).includes("makanan_minuman");
+    const ditemukan = `${x.visual_en} ${x.gerak_en}`.match(kasatMata);
+    if (ditemukan && !makanan) galat.push(`Shot ${i + 1}: "${ditemukan[0]}" tak kasat mata — model menggambarnya sebagai asap/kabut. Tunjukkan akibat yang terlihat.`);
+    // Faza v5, shot 4: REVEAL berproduk asli digambarkan dengan botol di atas ledge,
+    // lalu hindari_en menuntut "empty ledge without the bottle" — latar yang
+    // seharusnya kosong ditolak kurasi karena berisi botol karangan.
+    if (x.produk === "asli" || x.beat === "LOCKUP") {
+      const produkDisebut = x.visual_en.match(/\b(bottle|product|label|packag\w*|botol|produk|kemasan|jar|tube|box|can)\b/i);
+      if (produkDisebut) galat.push(`Shot ${i + 1}: shot ${x.beat === "LOCKUP" ? "LOCKUP" : "REVEAL asli"} hanya boleh menggambarkan latar kosong — "${produkDisebut[0]}" disebut di visual_en (produk asli ditempel belakangan).`);
+      const menuntutProduk = x.hindari_en.find((h) => /\b(missing|without|empty)\b.*\b(bottle|product|label|botol|produk)\b|\b(bottle|product|label)\b.*\b(missing|tilted|turned away|lying)\b/i.test(h));
+      if (menuntutProduk) galat.push(`Shot ${i + 1}: hindari_en "${menuntutProduk}" menuntut produk hadir di latar yang harus kosong.`);
+    }
   });
   const semuaKlaim = s.map((x) => `${x.vo} ${teksPolos(x.teks_layar)}`).join(" ");
   const sumber = `${p.deskripsi ?? ""} ${p.klaim ?? ""} ${n.klaim_sumber.join(" ")}`.toLowerCase();
@@ -395,7 +415,10 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
 
 /* ── pemanggilan model ─────────────────────────────────────────────────── */
 
-export class NaskahIklanGagal extends Error {}
+export class NaskahIklanGagal extends Error {
+  /** Pemakaian token sampai gagal — supaya biayanya tetap tercatat. */
+  usage?: { input: number; output: number };
+}
 
 const SkemaAudit = z.object({
   tidak_didukung: z.array(z.object({
@@ -407,6 +430,7 @@ const SkemaAudit = z.object({
 const SkemaAuditRealitas = z.object({
   masalah: z.array(z.object({
     shot: z.number().describe("1-based shot number, or 0 for a whole-film continuity problem"),
+    berat: z.boolean().describe("true ONLY if a normal viewer would notice it as wrong: impossible anatomy or placement of parts, impossible physics or motion, the product used in a way people never use it, unsafe acts, or a state that goes BACKWARDS (clean then dirty again). false for minor nits and vague wording."),
     masalah: z.string().describe("Bahasa Indonesia. What is not how it happens in real life, concretely."),
     perbaikan: z.string().describe("Bahasa Indonesia. The realistic version to write instead."),
   })),
@@ -440,8 +464,10 @@ export async function auditRealitas(n: NaskahIklan, p: ProdukIklan): Promise<{ t
       + "continuity supervisor in one). Check every shot of this storyboard against how things really are built, placed, used and move, and against "
       + "continuity between shots. Flag: wrong anatomy or placement of parts (e.g. an engine where the vehicle has none), a vehicle type whose parts do not "
       + "match its description, movement in an impossible direction or ending somewhere else, unrealistic usage of the product, a result appearing before "
-      + "its cause, props or clothing appearing/disappearing, unsafe riding, or an action described too vaguely for an image model to get right. "
-      + "Do not flag creative choices that are realistic. Return an empty list when everything is realistic.",
+      + "its cause WITHIN THE SAME SHOT, a state going backwards between shots, props or clothing appearing/disappearing, unsafe riding, or an action "
+      + "described too vaguely for an image model to get right. "
+      + "Advertising COMPRESSES TIME: cutting from spraying to a visibly cleaner result in the next shot, or skipping waiting time between shots, is normal "
+      + "editing and is NOT a problem. Do not flag creative choices that are realistic. Return an empty list when everything is realistic.",
     messages: [{
       role: "user",
       content: [
@@ -456,7 +482,10 @@ export async function auditRealitas(n: NaskahIklan, p: ProdukIklan): Promise<{ t
   const usage = { input: j.usage.input_tokens + (j.usage.cache_read_input_tokens ?? 0), output: j.usage.output_tokens };
   try {
     return {
+      // Hanya temuan BERAT yang memblokir. Faza v5 gagal 6 percobaan karena
+      // auditor menolak pemadatan waktu yang wajar dalam iklan, satu nit per putaran.
       temuan: SkemaAuditRealitas.parse(JSON.parse(teks)).masalah
+        .filter((m) => m.berat)
         .map((m) => `Tidak realistis${m.shot ? ` (shot ${m.shot})` : ""}: ${m.masalah} — tulis: ${m.perbaikan}`),
       usage,
     };
@@ -605,7 +634,9 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
       ].join("\n"),
     });
   }
-  throw new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 6 percobaan: ${galatTerakhir.join(" | ")}`);
+  const gagal = new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 6 percobaan: ${galatTerakhir.join(" | ")}`);
+  gagal.usage = usage;
+  throw gagal;
 }
 
 function mimeGambar(b: Buffer): "image/png" | "image/webp" | "image/jpeg" {

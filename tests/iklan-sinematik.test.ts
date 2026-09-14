@@ -288,3 +288,16 @@ test("naskah tanpa negative prompt per shot ditolak", () => {
   n.shots[4].hindari_en = ["only one"];
   assert.match(periksaNaskah(n, produk).join(" "), /Shot 5: hindari_en/);
 });
+
+test("fenomena tak kasat mata dan produk di latar kosong ditolak (temuan Faza v5)", () => {
+  const n = naskahContoh();
+  n.shots[6].visual_en = "clean fins with faint heat shimmer above them";
+  n.shots[2].visual_en = "the black spray bottle stands on the ledge";
+  n.shots[2].hindari_en = ["empty ledge without the bottle", "clutter", "other bottles"];
+  const galat = periksaNaskah(n, produk).join(" ");
+  assert.match(galat, /Shot 7: "heat shimmer" tak kasat mata/);
+  assert.match(galat, /Shot 3: shot REVEAL asli hanya boleh menggambarkan latar kosong — "bottle"/);
+  assert.match(galat, /menuntut produk hadir/);
+  // Negative prompt latar kosong tidak membawa tuntutan produk dari naskah.
+  assert.ok(!negatifShot(n.shots[2], ["otomotif_motor"]).some((h) => /without the bottle/.test(h)));
+});

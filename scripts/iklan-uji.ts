@@ -74,7 +74,18 @@ async function main() {
   const berkasNaskah = path.join(dir, "naskah.json");
   if (bendera("ulang-naskah") || !fs.existsSync(berkasNaskah)) {
     const t0 = Date.now();
-    const { naskah, percobaan, usage } = await tulisNaskahIklan(produk, { gambarProduk: acuan, catatan: arg("catatan") });
+    let hasilNaskah: Awaited<ReturnType<typeof tulisNaskahIklan>>;
+    try {
+      hasilNaskah = await tulisNaskahIklan(produk, { gambarProduk: acuan, catatan: arg("catatan") });
+    } catch (err) {
+      const u = (err as { usage?: { input: number; output: number } }).usage;
+      if (u) {
+        biaya.naskah_llm_idr = (biaya.naskah_llm_idr ?? 0) + Math.round(((u.input * 5 + u.output * 25) / 1e6) * 16500);
+        simpanBiaya();
+      }
+      throw err;
+    }
+    const { naskah, percobaan, usage } = hasilNaskah;
     fs.writeFileSync(berkasNaskah, JSON.stringify(naskah, null, 2));
     // claude-opus-5: $5/1M input, $25/1M output; kurs perkiraan Rp16.500/USD.
     biaya.naskah_llm_idr = (biaya.naskah_llm_idr ?? 0) + Math.round(((usage.input * 5 + usage.output * 25) / 1e6) * 16500);
