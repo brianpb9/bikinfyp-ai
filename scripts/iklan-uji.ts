@@ -22,6 +22,8 @@ import { buatVo } from "../lib/iklan/suara";
 import { susunIklan } from "../lib/iklan/susun";
 import { periksaIklan } from "../lib/iklan/gerbang";
 import { catatanUlang, kurasiKeyframes } from "../lib/iklan/kurasi";
+import { idKlip, kurasiKlip, type KlipDinilai } from "../lib/iklan/kurasi-klip";
+import type { MesinVideo } from "../lib/iklan/klip";
 
 const argv = process.argv.slice(2);
 const arg = (nama: string) => {
@@ -156,9 +158,56 @@ async function main() {
   if (sampai === "keyframe") return;
 
   // 3. KLIP + VO
-  const klip = await buatKlip(naskah, kf.paths, kf.sesudah, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`, kategori);
-  biaya.klip_idr = klip.biayaIdr;
-  biaya.klip_kredit_kie = klip.kredit;
+  const mesin = (arg("mesin") ?? "standard") as MesinVideo;
+  const dirKlip = path.join(dir, mesin === "ultra" ? "klip-ultra" : "klip");
+  let klip = await buatKlip(naskah, kf.paths, kf.sesudah, dirKlip, `iklan-uji-${path.basename(dir)}-${mesin}`, kategori, mesin);
+  biaya[`klip_${mesin}_idr`] = klip.biayaIdr;
+  biaya[mesin === "ultra" ? "klip_ultra_token" : "klip_kredit_kie"] = klip.kredit;
+  simpanBiaya();
+
+  // KURASI KLIP: frame di sepanjang klip. Klip yang cacat sejak awal dirender
+  // ulang SEKALI; yang cacat belakangan dipakai sampai sebelum cacatnya.
+  const berkasKurasiKlip = path.join(dirKlip, "kurasi-klip.json");
+  const batasAman: Record<string, number | null> = fs.existsSync(berkasKurasiKlip) ? JSON.parse(fs.readFileSync(berkasKurasiKlip, "utf8")) : {};
+  const semuaKlip = (): KlipDinilai[] => [
+    ...klip.paths.map((p, i) => ({ id: p ? idKlip(p) : "", path: p, shot: i, sesudah: false })).filter((k) => k.path),
+    ...[...klip.sesudah].map(([i, p]) => ({ id: idKlip(p), path: p, shot: i, sesudah: true })),
+  ];
+  for (let putaran = 1; putaran <= 2 && !bendera("tanpa-kurasi"); putaran++) {
+    const belum = semuaKlip().filter((k) => !(k.id in batasAman));
+    if (!belum.length) break;
+    const { nilai, biayaIdr } = await kurasiKlip(naskah, belum, kategori);
+    biaya.kurasi_klip_idr = (biaya.kurasi_klip_idr ?? 0) + biayaIdr;
+    simpanBiaya();
+    fs.writeFileSync(path.join(dirKlip, `kurasi-klip-putaran-${putaran}.json`), JSON.stringify(nilai, null, 2));
+    const ulang: KlipDinilai[] = [];
+    for (const v of nilai) {
+      const k = belum.find((x) => x.id === v.klip);
+      if (!k) continue;
+      if (!v.lulus) console.log(`[uji] kurasi klip ${putaran}: ${v.klip} aman sampai ${v.aman_sampai_detik ?? "—"}s — ${v.masalah.join("; ")}`);
+      const terlaluPendek = v.aman_sampai_detik === null || v.aman_sampai_detik < 1.6;
+      if (!v.lulus && terlaluPendek && putaran === 1) ulang.push(k);
+      else batasAman[k.id] = v.lulus ? 99 : v.aman_sampai_detik;
+    }
+    fs.writeFileSync(berkasKurasiKlip, JSON.stringify(batasAman, null, 2));
+    if (!ulang.length) break;
+    for (const k of ulang) {
+      fs.renameSync(k.path, k.path.replace(/\.mp4$/, `.tolak.mp4`));
+      fs.rmSync(k.path.replace(/\.mp4$/, ".task"), { force: true });
+      for (const ekor of [".kredit", ".token"]) {
+        const f = k.path.replace(/\.mp4$/, ekor);
+        if (fs.existsSync(f)) fs.renameSync(f, f.replace(ekor, `.tolak${ekor}`));
+      }
+    }
+    klip = await buatKlip(naskah, kf.paths, kf.sesudah, dirKlip, `iklan-uji-${path.basename(dir)}-${mesin}`, kategori, mesin);
+    // Biaya klip yang ditolak tetap dihitung: .tolak.* dijumlahkan di sini.
+    const tolak = fs.readdirSync(dirKlip).filter((f) => /\.tolak\.(kredit|token)$/.test(f))
+      .reduce((t, f) => t + (Number(fs.readFileSync(path.join(dirKlip, f), "utf8")) || 0), 0);
+    biaya[`klip_${mesin}_idr`] = klip.biayaIdr + (mesin === "ultra"
+      ? Math.round((tolak / 1e6) * 4.41 * Number(process.env.USD_IDR ?? 16300))
+      : Math.round(tolak * (Number(process.env.KIE_IDR_PER_CREDIT ?? 0) || 0)));
+    simpanBiaya();
+  }
   const vo = await buatVo(naskah, path.join(dir, "vo"));
   biaya.vo_idr = (biaya.vo_idr ?? 0) + vo.biayaIdr;
   simpanBiaya();
@@ -168,10 +217,11 @@ async function main() {
   const musik = path.join(process.cwd(), "assets", "music", arg("musik") ?? "bg-bed.m4a");
   const hasil = await susunIklan({
     naskah, klip: klip.paths, klipSesudah: klip.sesudah, keyframes: kf.paths, fotoProduk: [await sharp(foto).jpeg({ quality: 95 }).toBuffer(), fs.readFileSync(path.join(dir, "foto-acuan.jpg"))],
-    kalimat: vo.kalimat, musik, dir: path.join(dir, "hasil"), kontak: produk.kontak,
+    kalimat: vo.kalimat, musik, dir: path.join(dir, mesin === "ultra" ? "hasil-ultra" : "hasil"), kontak: produk.kontak, batasAman,
   });
-  const gerbang = await periksaIklan({ video: hasil.path, naskah, produk, slot: hasil.slot, total: hasil.total, dir: path.join(dir, "hasil") });
-  fs.writeFileSync(path.join(dir, "hasil", "gerbang.json"), JSON.stringify(gerbang, null, 2));
+  const dirHasil = path.dirname(hasil.path);
+  const gerbang = await periksaIklan({ video: hasil.path, naskah, produk, slot: hasil.slot, total: hasil.total, dir: dirHasil });
+  fs.writeFileSync(path.join(dirHasil, "gerbang.json"), JSON.stringify(gerbang, null, 2));
   for (const x of gerbang) console.log(`${x.lulus ? "LULUS" : "GAGAL"}  ${x.id} — ${x.nilai}`);
   console.log(`[uji] selesai: ${hasil.path} (${hasil.total.toFixed(2)} dtk). Biaya: ${fs.readFileSync(biayaPath, "utf8")}`);
 }

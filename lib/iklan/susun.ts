@@ -426,6 +426,8 @@ export interface MasukanSusun {
   musik: string;
   dir: string;
   kontak?: string | null;
+  /** Hasil kurasi klip: id klip -> detik terakhir yang aman (null = cacat sejak awal). */
+  batasAman?: Record<string, number | null>;
 }
 
 export async function susunIklan(m: MasukanSusun): Promise<{ path: string; total: number; slot: SlotShot[]; produkLockup: string }> {
@@ -436,11 +438,17 @@ export async function susunIklan(m: MasukanSusun): Promise<{ path: string; total
   // Batas stabil per shot (BUKTI: yang terpendek dari kedua klipnya).
   const maksKlip: (number | undefined)[] = [];
   const catatanStabil: Record<string, number> = {};
+  const amanUntuk = (p: string) => {
+    const b = m.batasAman?.[path.basename(p).replace(/\.mp4$/, "")];
+    return b === undefined ? Infinity : b === null ? BATAS.shotDetikMin + BUANG_AWAL : b;
+  };
   for (const [i, k] of m.klip.entries()) {
     if (!k) continue;
-    let s = await detikStabil(k);
+    // Batas: yang terpendek dari stabilitas warna (adegan melenceng) dan kurasi
+    // klip (objek muncul/berubah) — keduanya diukur dari awal berkas.
+    let s = Math.min(await detikStabil(k), amanUntuk(k) - BUANG_AWAL);
     const kSesudah = m.klipSesudah.get(i);
-    if (kSesudah) s = Math.min(s, await detikStabil(kSesudah));
+    if (kSesudah) s = Math.min(s, await detikStabil(kSesudah), amanUntuk(kSesudah) - BUANG_AWAL);
     catatanStabil[path.basename(k)] = Number(s.toFixed(2));
     if (s < DETIK_KLIP - BUANG_AWAL - 0.2) maksKlip[i] = Math.max(BATAS.shotDetikMin, s);
   }
