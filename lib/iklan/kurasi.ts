@@ -79,6 +79,7 @@ export async function kurasiKeyframes(
   n: NaskahIklan, keyframes: string[], fotoProduk: Buffer,
   pilihan: { utama: number[]; sesudah: Map<number, string> },
   kategori: KategoriRealitas[] = ["umum"],
+  tanpaWajah = false,
 ): Promise<{ nilai: NilaiKeyframe[]; biayaIdr: number }> {
   if (!config.anthropicApiKey) throw new Error("ANTHROPIC_API_KEY belum diisi.");
   const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -87,6 +88,7 @@ export async function kurasiKeyframes(
     { type: "text", text: "PRODUCT PHOTO (authority for how the product looks):" },
     { type: "image", source: { type: "base64", media_type: "image/jpeg", data: await b64(fotoProduk, 700) } },
     { type: "text", text: `FILM LOOK: ${n.gaya_visual_en}\nRECURRING ELEMENTS: ${n.aset.map((a) => `${a.id} (${a.jenis}): ${a.deskripsi_en}`).join(" | ") || "none"}` },
+    ...(tanpaWajah ? [{ type: "text" as const, text: "ENGINE CONSTRAINT: the video engine rejects any image with a visible human face. REJECT every image in which a face (frontal, profile or partial with eyes/nose/mouth) is visible." }] : []),
     // Fakta dunia nyata: reject bila anatomi/penempatan/pemakaian tidak sesuai kenyataan.
     { type: "text", text: `REAL-WORLD FACTS — reject any image that contradicts them (wrong anatomy, parts where the object has none, unrealistic usage):\n${faktaUntuk(kategori)}` },
   ];

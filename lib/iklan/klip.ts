@@ -153,7 +153,9 @@ async function klipUltra(prompt: string, gambar: string, detik: number, keluar: 
 
 /** Durasi klip Ultra: rencana shot + ruang untuk BUANG_AWAL dan pemanjangan timeline. */
 export function detikUltra(durasiShot: number): number {
-  return Math.max(2, Math.min(15, Math.ceil(durasiShot + 0.9)));
+  // Seedance 2.5 i2v menolak duration 3 (HTTP 400 InvalidParameter, 14 Sep 2026)
+  // walau 2.0 menerima 2–15 di mode yang sama. 4 adalah minimum yang aman.
+  return Math.max(4, Math.min(15, Math.ceil(durasiShot + 0.9)));
 }
 
 export async function buatKlip(
@@ -173,7 +175,11 @@ export async function buatKlip(
   ];
   let kredit = 0;
 
-  await Promise.all(tugas.map(async ({ shot, i, keluar, gambar, slotGambar }) => {
+  // allSettled, bukan all: satu penolakan tidak boleh menghentikan proses sementara
+  // permintaan lain masih di jalan. Uji Ultra pertama (14 Sep 2026) berhenti di
+  // galat pertama dan satu task yang sempat diterima BytePlus tertagih tanpa
+  // tercatat — hasilnya harus diselamatkan dengan tangan.
+  const hasilTugas = await Promise.allSettled(tugas.map(async ({ shot, i, keluar, gambar, slotGambar }) => {
     if (fs.existsSync(keluar) && fs.statSync(keluar).size > 10_000) return;
     if (mesin === "ultra") {
       const prompt = promptGerak(n, shot, kategori);
@@ -228,6 +234,8 @@ export async function buatKlip(
       await new Promise((r) => setTimeout(r, 5000));
     }
   }));
+  const gagal = hasilTugas.filter((h): h is PromiseRejectedResult => h.status === "rejected");
+  if (gagal.length) throw new Error(`[iklan/klip] ${gagal.length} klip gagal: ${gagal.map((g) => (g.reason as Error).message).join(" | ").slice(0, 900)}`);
 
   // Kredit dari klip yang dirender di proses sebelumnya ikut dihitung.
   const baca = (p: string, akhiran: string) => {

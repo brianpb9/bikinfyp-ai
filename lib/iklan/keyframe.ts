@@ -65,11 +65,22 @@ export function negatifShot(shot: ShotIklan, kategori: KategoriRealitas[]): stri
   return shot.beat === "LOCKUP" || shot.produk === "asli" ? [...new Set(["product", "bottle", "packaging", "people", "hands", ...dasar])] : dasar;
 }
 
+/**
+ * TANPA WAJAH untuk mesin Ultra. BytePlus Seedance menolak gambar input berwajah
+ * — buatan AI sekalipun ("input image may contain real person", HTTP 400,
+ * uji Ultra 14 Sep 2026: 5 dari 9 klip ditolak). Orang tetap hadir, wajahnya
+ * tidak: dari belakang, leher ke bawah, atau di luar bingkai.
+ */
+export const INSTRUKSI_TANPA_WAJAH =
+  "NO FACE VISIBLE: any person is shown from behind, from the neck down, or with the face outside the frame or fully hidden "
+  + "(e.g. by a full-face helmet with a dark visor). Hands, arms, body language and clothing tell the action.";
+
 export function promptKeyframe(
   n: NaskahIklan, shot: ShotIklan,
   acuan: { produk: boolean; aset: string[] },
   catatan?: string,
   kategori: KategoriRealitas[] = ["umum"],
+  tanpaWajah = false,
 ): string {
   const bagian: string[] = [];
   // Render uji pertama (Faza, shot 4): dua gambar acuan membuat Seedream
@@ -95,7 +106,8 @@ export function promptKeyframe(
   // Fakta dunia nyata dan daftar hindari selalu ikut: Seedream mengarang posisi
   // mesin skuter di dek pijakan pada render uji Faza v4 (Brian, 14 Sep 2026).
   bagian.push(`REAL-WORLD FACTS (must be respected):\n${faktaUntuk(kategori)}`);
-  const avoid = `AVOID (negative prompt): ${negatifShot(shot, kategori).join(", ")}.`;
+  if (tanpaWajah) bagian.push(INSTRUKSI_TANPA_WAJAH);
+  const avoid = `AVOID (negative prompt): ${[...(tanpaWajah ? ["visible face", "face in profile", "eyes"] : []), ...negatifShot(shot, kategori)].join(", ")}.`;
   if (shot.beat === "LOCKUP" || shot.produk === "asli") {
     bagian.push(
       `${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`,
@@ -200,9 +212,10 @@ export interface HasilKeyframe {
  */
 export async function buatKeyframes(
   n: NaskahIklan, fotoProduk: Buffer, dir: string,
-  opts: { paralel?: number; catatan?: Map<number, string>; catatanSesudah?: Map<number, string>; kategori?: KategoriRealitas[] } = {},
+  opts: { paralel?: number; catatan?: Map<number, string>; catatanSesudah?: Map<number, string>; kategori?: KategoriRealitas[]; tanpaWajah?: boolean } = {},
 ): Promise<HasilKeyframe> {
   const kategori = opts.kategori ?? ["umum"];
+  const tanpaWajah = opts.tanpaWajah ?? false;
   fs.mkdirSync(dir, { recursive: true });
   const paths = n.shots.map((_, i) => path.join(dir, `kf-${String(i + 1).padStart(2, "0")}.jpg`));
   let jumlahDibuat = 0;
@@ -234,7 +247,7 @@ export async function buatKeyframes(
     const acuan: Buffer[] = [];
     if (pakaiProduk) acuan.push(fotoProduk);
     for (const id of asetAcuan) acuan.push(fs.readFileSync(paths[jangkar.get(id)!]));
-    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, aset: asetAcuan }, opts.catatan?.get(i), kategori);
+    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, aset: asetAcuan }, opts.catatan?.get(i), kategori, tanpaWajah);
     fs.writeFileSync(paths[i].replace(/\.jpg$/, ".prompt.txt"), prompt);
     const t0 = Date.now();
     fs.writeFileSync(paths[i], await panggilSeedream(prompt, acuan, negatifShot(shot, kategori)));
@@ -260,7 +273,7 @@ export async function buatKeyframes(
     const p = pathSesudah(paths[i]);
     if (!ada(p)) {
       const neg = negatifShot(n.shots[i], kategori);
-      const prompt = `${promptSesudah(n, n.shots[i], opts.catatanSesudah?.get(i))}\nAVOID (negative prompt): changed camera angle, changed framing, different objects, ${neg.join(", ")}.`;
+      const prompt = `${promptSesudah(n, n.shots[i], opts.catatanSesudah?.get(i))}${tanpaWajah ? `\n${INSTRUKSI_TANPA_WAJAH}` : ""}\nAVOID (negative prompt): changed camera angle, changed framing, different objects, ${tanpaWajah ? "visible face, " : ""}${neg.join(", ")}.`;
       fs.writeFileSync(p.replace(/\.jpg$/, ".prompt.txt"), prompt);
       fs.writeFileSync(p, await panggilSeedream(prompt, [fs.readFileSync(paths[i])], neg));
       jumlahDibuat++;

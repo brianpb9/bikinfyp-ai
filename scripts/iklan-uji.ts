@@ -68,7 +68,9 @@ async function main() {
   const produk = JSON.parse(fs.readFileSync(berkasProduk, "utf8")) as ProdukIklan;
   const biayaPath = path.join(dir, "biaya.json");
   const biaya: Record<string, number> = fs.existsSync(biayaPath) ? JSON.parse(fs.readFileSync(biayaPath, "utf8")) : {};
-  const simpanBiaya = () => fs.writeFileSync(biayaPath, JSON.stringify({ ...biaya, total_idr: Object.entries(biaya).filter(([k]) => k !== "total_idr").reduce((t, [, v]) => t + v, 0) }, null, 2));
+  // Hanya kunci *_idr yang dijumlahkan — uji Ultra pertama menjumlahkan token
+  // dan kredit kie.ai sebagai rupiah (total 948.402 untuk biaya ±119 rb).
+  const simpanBiaya = () => fs.writeFileSync(biayaPath, JSON.stringify({ ...biaya, total_idr: Object.entries(biaya).filter(([k]) => k.endsWith("_idr") && k !== "total_idr").reduce((t, [, v]) => t + v, 0) }, null, 2));
 
   const acuan = await fotoAcuan(foto, produk.nama, dir);
 
@@ -105,8 +107,34 @@ async function main() {
   // dengan alasan penolakannya, maksimal dua putaran. Kurasi yang sudah lulus
   // disimpan per berkas, jadi menjalankan ulang tidak menilai ulang gambar yang
   // sama.
-  const dirKf = path.join(dir, "keyframe");
-  let kf = await buatKeyframes(naskah, acuan, dirKf, { kategori });
+  // MESIN ULTRA: Seedance menolak gambar berwajah. Gambar kunci disalin dari uji
+  // Standard; hanya shot yang memuat PEMERAN yang dibuang dan digambar ulang
+  // tanpa wajah — shot lain tetap identik supaya perbandingan mesin tetap bersih.
+  const mesinAwal = (arg("mesin") ?? "standard") as MesinVideo;
+  const tanpaWajah = mesinAwal === "ultra";
+  const dirKf = path.join(dir, tanpaWajah ? "keyframe-ultra" : "keyframe");
+  if (tanpaWajah && !fs.existsSync(dirKf)) {
+    const sumber = path.join(dir, "keyframe");
+    fs.mkdirSync(dirKf, { recursive: true });
+    const berorang = new Set(naskah.shots.map((sh, i) => (sh.aset.some((id) => naskah.aset.find((a) => a.id === id)?.jenis === "pemeran") && sh.beat !== "LOCKUP" && sh.produk !== "asli" ? i : -1)).filter((i) => i >= 0));
+    if (fs.existsSync(sumber)) {
+      const lulus: Record<string, number> = fs.existsSync(path.join(sumber, "kurasi.json")) ? JSON.parse(fs.readFileSync(path.join(sumber, "kurasi.json"), "utf8")) : {};
+      const salinLulus: Record<string, number> = {};
+      for (const f of fs.readdirSync(sumber).filter((x) => /^kf-\d\d(-sesudah)?\.(jpg|prompt\.txt)$/.test(x))) {
+        const i = Number(f.slice(3, 5)) - 1;
+        // Shot berorang yang klip Ultra-nya SUDAH jadi (lolos filter wajah) tetap
+        // memakai gambar lamanya — klip dan gambar kunci tidak boleh berbeda.
+        const klipAda = fs.existsSync(path.join(dir, "klip-ultra", `klip-${String(i + 1).padStart(2, "0")}${f.includes("sesudah") ? "-sesudah" : ""}.mp4`));
+        if (berorang.has(i) && !klipAda) continue;
+        fs.copyFileSync(path.join(sumber, f), path.join(dirKf, f));
+        if (f in lulus) salinLulus[f] = lulus[f];
+      }
+      fs.writeFileSync(path.join(dirKf, "kurasi.json"), JSON.stringify(salinLulus, null, 2));
+    }
+    const ulangWajah = [...berorang].filter((i) => !fs.existsSync(path.join(dirKf, `kf-${String(i + 1).padStart(2, "0")}.jpg`)));
+    console.log(`[uji] ultra: gambar kunci berorang digambar ulang tanpa wajah: shot ${ulangWajah.map((i) => i + 1).join(", ") || "—"}`);
+  }
+  let kf = await buatKeyframes(naskah, acuan, dirKf, { kategori, tanpaWajah });
   biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
   simpanBiaya();
   const berkasKurasi = path.join(dirKf, "kurasi.json");
@@ -117,7 +145,7 @@ async function main() {
     const utama = kf.paths.map((_, i) => i).filter((i) => !sudahLulus(kf.paths[i]));
     const sesudah = new Map([...kf.sesudah].filter(([, p]) => !sudahLulus(p)));
     if (!utama.length && !sesudah.size) break;
-    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, { utama, sesudah }, kategori);
+    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, { utama, sesudah }, kategori, tanpaWajah);
     biaya.kurasi_idr = (biaya.kurasi_idr ?? 0) + biayaIdr;
     simpanBiaya();
     fs.writeFileSync(path.join(dirKf, `kurasi-putaran-${putaran}.json`), JSON.stringify(nilai, null, 2));
@@ -151,14 +179,14 @@ async function main() {
       const s = kf.sesudah.get(i)!;
       if (fs.existsSync(s)) fs.renameSync(s, s.replace(/\.jpg$/, `.tolak${putaran}.jpg`));
     }
-    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan, catatanSesudah, kategori });
+    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan, catatanSesudah, kategori, tanpaWajah });
     biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
     simpanBiaya();
   }
   if (sampai === "keyframe") return;
 
   // 3. KLIP + VO
-  const mesin = (arg("mesin") ?? "standard") as MesinVideo;
+  const mesin = mesinAwal;
   const dirKlip = path.join(dir, mesin === "ultra" ? "klip-ultra" : "klip");
   let klip = await buatKlip(naskah, kf.paths, kf.sesudah, dirKlip, `iklan-uji-${path.basename(dir)}-${mesin}`, kategori, mesin);
   biaya[`klip_${mesin}_idr`] = klip.biayaIdr;

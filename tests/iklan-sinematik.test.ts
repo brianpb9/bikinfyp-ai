@@ -302,10 +302,10 @@ test("fenomena tak kasat mata dan produk di latar kosong ditolak (temuan Faza v5
   assert.ok(!negatifShot(n.shots[2], ["otomotif_motor"]).some((h) => /without the bottle/.test(h)));
 });
 
-test("klip Ultra dirender sepanjang kebutuhan shot (2–15 dtk), bukan minimal 6 seperti Grok", async () => {
+test("klip Ultra dirender sepanjang kebutuhan shot (4–15 dtk), bukan minimal 6 seperti Grok", async () => {
   const { detikUltra } = await import("../lib/iklan/klip");
-  assert.equal(detikUltra(2), 3);
+  assert.equal(detikUltra(2), 4);
   assert.equal(detikUltra(3.5), 5);
-  assert.equal(detikUltra(0.5), 2);
+  assert.equal(detikUltra(0.5), 4);
   assert.equal(detikUltra(20), 15);
 });
