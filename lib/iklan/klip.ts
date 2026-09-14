@@ -16,12 +16,20 @@ import { badanKieVideo } from "../kie-payload";
 import { ambilResultUrls } from "../providers/stubs/kie-grok";
 import { terbitkanGambarProvider } from "../gambar-provider";
 import type { NaskahIklan, ShotIklan } from "./naskah";
+import { REALITAS, type KategoriRealitas } from "./realitas";
+import { negatifShot } from "./keyframe";
 
 export const DETIK_KLIP = 6;
 const MODEL = "grok-imagine/image-to-video";
 const IDR_PER_KREDIT = () => Number(process.env.KIE_IDR_PER_CREDIT ?? "0") || 0;
 
-export function promptGerak(n: NaskahIklan, shot: ShotIklan): string {
+/** Fakta gerak saja (berkendara, memakai, menuang) — prompt video Grok pendek dan fokus pada gerak. */
+function faktaGerak(kategori: KategoriRealitas[]): string {
+  return kategori.flatMap((k) => REALITAS[k].fakta.filter((f) => /\b(rid|driv|mov|pour|spray|appl|walk|roll|start|forward|wheel|lather|bite|sip|put it on)/i.test(f))).join(" ");
+}
+
+export function promptGerak(n: NaskahIklan, shot: ShotIklan, kategori: KategoriRealitas[] = ["umum"]): string {
+  const gerak = faktaGerak(kategori);
   return [
     `${shot.gerak_en} Camera: ${shot.kamera}.`,
     `Look: ${n.gaya_visual_en}`,
@@ -33,6 +41,8 @@ export function promptGerak(n: NaskahIklan, shot: ShotIklan): string {
     "LOCKED LOCATION: the place, time of day and lighting stay exactly the same for the whole shot; the camera never leaves this scene.",
     "Cinematic commercial motion, smooth and controlled, natural physics, stable faces and hands. Riders keep their helmets on.",
     "No text appearing, no subtitles, no logos appearing, no one speaking to camera, no sudden new objects, no scene cut.",
+    gerak ? `REAL-WORLD MOTION: ${gerak}` : "",
+    `AVOID: ${negatifShot(shot, kategori).slice(0, 40).join(", ")}.`,
   ].filter(Boolean).join(" ");
 }
 
@@ -65,6 +75,7 @@ export interface HasilKlip {
  */
 export async function buatKlip(
   n: NaskahIklan, keyframes: string[], sesudahKf: Map<number, string>, dir: string, idUji: string,
+  kategori: KategoriRealitas[] = ["umum"],
 ): Promise<HasilKlip> {
   if (!config.kieApiKey) throw new Error("KIE_API_KEY belum diisi.");
   fs.mkdirSync(dir, { recursive: true });
@@ -85,7 +96,7 @@ export async function buatKlip(
     let taskId = fs.existsSync(berkasTask) ? fs.readFileSync(berkasTask, "utf8").trim() : "";
     if (!taskId) {
       const imageUrl = await terbitkanGambarProvider(gambar, idUji, slotGambar);
-      const prompt = promptGerak(n, shot);
+      const prompt = promptGerak(n, shot, kategori);
       fs.writeFileSync(keluar.replace(/\.mp4$/, ".prompt.txt"), prompt);
       const data = await kie(`${config.kieBaseUrl}${config.kiePathCreate}`, {
         method: "POST",

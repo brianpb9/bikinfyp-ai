@@ -26,6 +26,7 @@ import sharp from "sharp";
 import { z } from "zod";
 import { config } from "../config";
 import type { NaskahIklan } from "./naskah";
+import { faktaUntuk, type KategoriRealitas } from "./realitas";
 
 export const MODEL_KURASI = "claude-opus-5";
 
@@ -77,6 +78,7 @@ async function b64(berkas: string | Buffer, tinggi = 900): Promise<string> {
 export async function kurasiKeyframes(
   n: NaskahIklan, keyframes: string[], fotoProduk: Buffer,
   pilihan: { utama: number[]; sesudah: Map<number, string> },
+  kategori: KategoriRealitas[] = ["umum"],
 ): Promise<{ nilai: NilaiKeyframe[]; biayaIdr: number }> {
   if (!config.anthropicApiKey) throw new Error("ANTHROPIC_API_KEY belum diisi.");
   const client = new Anthropic({ apiKey: config.anthropicApiKey });
@@ -85,6 +87,8 @@ export async function kurasiKeyframes(
     { type: "text", text: "PRODUCT PHOTO (authority for how the product looks):" },
     { type: "image", source: { type: "base64", media_type: "image/jpeg", data: await b64(fotoProduk, 700) } },
     { type: "text", text: `FILM LOOK: ${n.gaya_visual_en}\nRECURRING ELEMENTS: ${n.aset.map((a) => `${a.id} (${a.jenis}): ${a.deskripsi_en}`).join(" | ") || "none"}` },
+    // Fakta dunia nyata: reject bila anatomi/penempatan/pemakaian tidak sesuai kenyataan.
+    { type: "text", text: `REAL-WORLD FACTS — reject any image that contradicts them (wrong anatomy, parts where the object has none, unrealistic usage):\n${faktaUntuk(kategori)}` },
   ];
 
   // Jangkar aset yang tidak sedang dinilai ikut dilampirkan sebagai pembanding.
@@ -101,7 +105,7 @@ export async function kurasiKeyframes(
     const s = n.shots[i];
     isi.push({
       type: "text",
-      text: `SHOT ${i + 1} utama (${s.beat}, ${s.ukuran}). Intended first frame: ${s.visual_en} Recurring: ${s.aset.join(", ") || "none"}. Product: ${s.beat === "LOCKUP" ? "NONE — end-card background only" : s.produk === "asli" ? "NONE — REVEAL background only, real photo composited later" : s.produk}.`,
+      text: `SHOT ${i + 1} utama (${s.beat}, ${s.ukuran}). Intended first frame: ${s.visual_en} Must NOT show: ${(s.hindari_en ?? []).join("; ") || "-"}. Recurring: ${s.aset.join(", ") || "none"}. Product: ${s.beat === "LOCKUP" ? "NONE — end-card background only" : s.produk === "asli" ? "NONE — REVEAL background only, real photo composited later" : s.produk}.`,
     });
     isi.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: await b64(keyframes[i]) } });
     daftar.push(`${i + 1} utama`);

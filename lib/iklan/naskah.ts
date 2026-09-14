@@ -35,6 +35,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { config } from "../config";
+import { faktaUntuk, tebakKategori, type KategoriRealitas } from "./realitas";
 
 export const MODEL_NASKAH_IKLAN = "claude-opus-5";
 
@@ -48,6 +49,7 @@ export const SkemaShotIklan = z.object({
   aset: z.array(z.string()).describe("Ids from `aset` (recurring people AND recurring props/vehicles/places) visible in this shot."),
   produk: z.enum(["tidak_tampil", "dipakai", "asli", "pahlawan"]).describe("tidak_tampil = absent; dipakai = in the hand or in use, recognisable by shape and colour but its lettering is never readable; asli = the REVEAL hero moment built from the seller's REAL product photo composited onto this shot's empty background (describe only the setting); pahlawan = LOCKUP only."),
   transformasi_en: z.string().describe("English. ONLY for the single BUKTI shot: the AFTER state of the exact same frame (same camera, same objects), e.g. 'the same engine fins now clean, bright silver metal, no grime'. Empty string for every other shot."),
+  hindari_en: z.array(z.string()).describe("English NEGATIVE PROMPT for this shot: 3–8 short phrases naming the specific mistakes an image/video model is likely to make HERE (wrong anatomy, wrong placement, wrong motion direction, wrong usage, continuity breaks), e.g. 'engine inside the footboard', 'motorcycle moving sideways', 'helmet missing'."),
   vo: z.string().describe("Bahasa Indonesia. One voice-over sentence starting in this shot, or empty string."),
   teks_layar: z.string().describe("Bahasa Indonesia on-screen text, or empty. Format 'UTAMA|pendukung': a 1–3 word KEY PHRASE, optionally '|' and 2–5 supporting words. E.g. 'DILAP TAK HILANG', 'CUKUP SEMPROT|kerak luruh sendiri', 'MOBILITAS|untuk berbagai jenis usaha'."),
 });
@@ -60,6 +62,7 @@ export const SkemaAset = z.object({
 
 export const SkemaNaskahIklan = z.object({
   merek: z.string().describe("Brand name for the end card, from the product data; never invented."),
+  kategori_realitas: z.array(z.enum(["otomotif_motor", "otomotif_mobil", "fashion_pakaian", "elektronik_audio", "perawatan_diri", "makanan_minuman", "rumah_tangga", "umum"])).describe("The real-world categories whose REALITY FACTS apply to this film (from the list given)."),
   klaim_sumber: z.array(z.string()).describe("Bahasa Indonesia. Every benefit or claim that is LITERALLY present in the seller's description or printed on the product label in the photo. These are the ONLY claims the film may make."),
   lafal: z.array(z.object({ tulisan: z.string(), ucapan: z.string() })).describe("How the Indonesian narrator should pronounce foreign brand/product words used in the VO, e.g. {tulisan: 'Degreaser', ucapan: 'di-gri-ser'}. Empty if none."),
   nama_produk_pendek: z.string().describe("Short product name for the end card, ≤4 words."),
@@ -213,6 +216,16 @@ WHAT YOUR FILM MUST DO:
   packaging.
 - lafal: give the narrator a phonetic spelling for any foreign brand or product word in the VO.
 
+REALITY FIRST — the image and video models hallucinate whatever you leave open:
+- Every shot must be something that genuinely happens in real life, done the way real people actually do it, with objects
+  built the way they are really built. Follow the REALITY FACTS given with the product; they override your imagination.
+- Name the exact type of every recurring object in \`aset\` (e.g. "everyday Indonesian automatic scooter, engine and CVT unit
+  at the lower rear left beside the rear wheel") and only film parts that exist where that object really has them.
+- Motion is physically continuous: vehicles move forward in the direction they face, people finish actions they start,
+  nothing changes place, time of day or clothing between the first and last frame of a shot or between consecutive shots.
+- Keep continuity across shots: a helmet put on stays on; a dirty engine only becomes clean after the product is used.
+- For every shot write hindari_en: the specific mistakes a model is likely to make in that exact shot.
+
 MAKING IT RENDERABLE — images come from an image model, motion from a video model:
 - visual_en describes a single photograph of the FIRST frame: concrete subject, pose, setting, composition, light.
   Real everyday Indonesian people, homes, streets, warung, kos, kantor, bengkel — and the everyday objects the target buyer
@@ -246,6 +259,17 @@ function blokProduk(p: ProdukIklan): string {
     p.kontak ? `Kontak untuk end card: ${p.kontak}` : "",
   ];
   return baris.filter(Boolean).join("\n");
+}
+
+/** Kategori realitas dari data produk — dipakai sebelum naskah ada. */
+export function kategoriProduk(p: ProdukIklan): KategoriRealitas[] {
+  return tebakKategori([p.nama, p.kategori, p.deskripsi, p.visual].filter(Boolean).join(" "));
+}
+
+/** Kategori yang berlaku untuk naskah: pilihan penulis digabung tebakan dari data produk. */
+export function kategoriNaskah(n: NaskahIklan, p: ProdukIklan): KategoriRealitas[] {
+  const semua = [...new Set([...(n.kategori_realitas ?? []), ...kategoriProduk(p)])];
+  return semua.length > 1 ? semua.filter((k) => k !== "umum") : semua;
 }
 
 /* ── pemeriksaan ────────────────────────────────────────────────────────── */
@@ -312,6 +336,9 @@ export function periksaNaskah(n: NaskahIklan, p: ProdukIklan): string[] {
     if (x.durasi < min || x.durasi > maks) galat.push(`Shot ${i + 1} (${x.beat}): durasi ${x.durasi} detik; wajib ${min}–${maks}.`);
     if (i > 0 && s[i - 1].ukuran === x.ukuran) galat.push(`Shot ${i}–${i + 1}: ukuran shot sama berurutan (${x.ukuran}).`);
     if (kata(x.vo).length > BATAS.kataVoPerKalimatMaks) galat.push(`Shot ${i + 1}: VO ${kata(x.vo).length} kata; maksimal ${BATAS.kataVoPerKalimatMaks}.`);
+    if (x.beat !== "LOCKUP" && x.produk !== "asli" && x.hindari_en.filter((h) => h.trim()).length < 3) {
+      galat.push(`Shot ${i + 1}: hindari_en (negative prompt) minimal 3 frasa kesalahan yang mungkin dibuat model di shot ini.`);
+    }
     const [utama = "", pendukung = ""] = x.teks_layar.split("|");
     if (kata(utama).length > 3) galat.push(`Shot ${i + 1}: frasa kunci teks layar lebih dari 3 kata.`);
     if (kata(pendukung).length > 5) galat.push(`Shot ${i + 1}: teks pendukung lebih dari 5 kata.`);
@@ -376,6 +403,67 @@ const SkemaAudit = z.object({
     alasan: z.string().describe("Bahasa Indonesia. Why it goes beyond the seller's data"),
   })),
 });
+
+const SkemaAuditRealitas = z.object({
+  masalah: z.array(z.object({
+    shot: z.number().describe("1-based shot number, or 0 for a whole-film continuity problem"),
+    masalah: z.string().describe("Bahasa Indonesia. What is not how it happens in real life, concretely."),
+    perbaikan: z.string().describe("Bahasa Indonesia. The realistic version to write instead."),
+  })),
+});
+
+/**
+ * AUDIT REALITAS — sebelum satu gambar pun dibayar.
+ *
+ * Brian 14 Sep 2026 menemukan halusinasi yang lolos kurasi gambar karena
+ * NASKAHNYA sendiri sudah tidak realistis: shot "tangan membersihkan mesin di
+ * dek pijakan skuter". Kurasi hanya membandingkan gambar dengan maksud shot; bila
+ * maksudnya salah, gambarnya "benar". Jadi naskah diperiksa terhadap fakta
+ * dunia nyata lebih dulu.
+ */
+export async function auditRealitas(n: NaskahIklan, p: ProdukIklan): Promise<{ temuan: string[]; usage: { input: number; output: number } }> {
+  const client = new Anthropic({ apiKey: config.anthropicApiKey });
+  const shots = n.shots.map((x, i) => [
+    `Shot ${i + 1} (${x.beat}, ${x.ukuran}, ${x.durasi}s, produk=${x.produk}) aset=[${x.aset.join(", ")}]`,
+    `  first frame: ${x.visual_en}`,
+    `  motion: ${x.gerak_en} | camera: ${x.kamera}`,
+    x.transformasi_en ? `  after state: ${x.transformasi_en}` : "",
+  ].filter(Boolean).join("\n")).join("\n");
+  const stream = client.beta.messages.stream({
+    model: MODEL_NASKAH_IKLAN,
+    max_tokens: 8000,
+    betas: ["server-side-fallback-2026-07-01"],
+    fallbacks: "default",
+    thinking: { type: "adaptive" },
+    output_config: { effort: "medium", format: betaZodOutputFormat(SkemaAuditRealitas) },
+    system: "You are a stickler for real-world accuracy on a commercial film set in Indonesia (a mechanic, a stylist, a product demonstrator and a "
+      + "continuity supervisor in one). Check every shot of this storyboard against how things really are built, placed, used and move, and against "
+      + "continuity between shots. Flag: wrong anatomy or placement of parts (e.g. an engine where the vehicle has none), a vehicle type whose parts do not "
+      + "match its description, movement in an impossible direction or ending somewhere else, unrealistic usage of the product, a result appearing before "
+      + "its cause, props or clothing appearing/disappearing, unsafe riding, or an action described too vaguely for an image model to get right. "
+      + "Do not flag creative choices that are realistic. Return an empty list when everything is realistic.",
+    messages: [{
+      role: "user",
+      content: [
+        "REALITY FACTS:", faktaUntuk(kategoriNaskah(n, p)), "",
+        "RECURRING ELEMENTS:", ...n.aset.map((a) => `- ${a.id} (${a.jenis}): ${a.deskripsi_en}`), "",
+        `FILM LOOK: ${n.gaya_visual_en}`, "", "SHOTS:", shots,
+      ].join("\n"),
+    }],
+  });
+  const j = await stream.finalMessage();
+  const teks = j.content.filter((b) => b.type === "text").map((b) => (b as { text: string }).text).join("");
+  const usage = { input: j.usage.input_tokens + (j.usage.cache_read_input_tokens ?? 0), output: j.usage.output_tokens };
+  try {
+    return {
+      temuan: SkemaAuditRealitas.parse(JSON.parse(teks)).masalah
+        .map((m) => `Tidak realistis${m.shot ? ` (shot ${m.shot})` : ""}: ${m.masalah} — tulis: ${m.perbaikan}`),
+      usage,
+    };
+  } catch {
+    return { temuan: [], usage };
+  }
+}
 
 /**
  * AUDIT KLAIM oleh model yang TIDAK menulis naskahnya.
@@ -449,6 +537,9 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
       opts.gambarProduk ? "Gambar terlampir adalah foto produk dari penjual — itulah produk yang harus tampil persis sama." : "",
       "",
       blokProduk(p),
+      "",
+      "REALITY FACTS (wajib dihormati setiap shot):",
+      faktaUntuk(kategoriProduk(p)),
       opts.catatan ? `\nCatatan sutradara untuk versi ini:\n${opts.catatan}` : "",
     ].filter((b) => b !== "").join("\n"),
   });
@@ -459,7 +550,7 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
   /** Semua pelanggaran yang pernah ditemukan — dikirim ulang supaya perbaikan tidak memunculkan yang lama lagi. */
   const riwayatGalat: string[] = [];
 
-  for (let percobaan = 1; percobaan <= 5; percobaan++) {
+  for (let percobaan = 1; percobaan <= 6; percobaan++) {
     const stream = client.beta.messages.stream({
       model: MODEL_NASKAH_IKLAN,
       max_tokens: 32000,
@@ -488,10 +579,13 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
     }
     galatTerakhir = periksaNaskah(naskah, p);
     if (galatTerakhir.length === 0) {
-      const audit = await auditKlaim(naskah, p, opts.gambarProduk);
-      usage.input += audit.usage.input;
-      usage.output += audit.usage.output;
-      galatTerakhir = audit.temuan.map((t) => `Klaim tidak didukung data penjual: "${t.kutipan}" — ${t.alasan}`);
+      const [klaim, realitas] = await Promise.all([auditKlaim(naskah, p, opts.gambarProduk), auditRealitas(naskah, p)]);
+      usage.input += klaim.usage.input + realitas.usage.input;
+      usage.output += klaim.usage.output + realitas.usage.output;
+      galatTerakhir = [
+        ...klaim.temuan.map((t) => `Klaim tidak didukung data penjual: "${t.kutipan}" — ${t.alasan}`),
+        ...realitas.temuan,
+      ];
       if (galatTerakhir.length === 0) return { naskah, percobaan, usage };
     }
 
@@ -511,7 +605,7 @@ export async function tulisNaskahIklan(p: ProdukIklan, opts: { gambarProduk?: Bu
       ].join("\n"),
     });
   }
-  throw new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 5 percobaan: ${galatTerakhir.join(" | ")}`);
+  throw new NaskahIklanGagal(`Naskah masih melanggar aturan setelah 6 percobaan: ${galatTerakhir.join(" | ")}`);
 }
 
 function mimeGambar(b: Buffer): "image/png" | "image/webp" | "image/jpeg" {

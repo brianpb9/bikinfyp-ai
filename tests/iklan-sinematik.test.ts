@@ -11,6 +11,9 @@ process.env.STORAGE_DIR = `/tmp/racun-test-iklan-storage-${process.pid}`;
 
 const { periksaNaskah } = await import("../lib/iklan/naskah");
 const { adaPitaBlur } = await import("../lib/iklan/gerbang");
+const R = await import("../lib/iklan/realitas");
+const { promptKeyframe, negatifShot } = await import("../lib/iklan/keyframe");
+const { promptGerak } = await import("../lib/iklan/klip");
 const fs = await import("node:fs");
 const { susunTimeline, buatAss, titikMelenceng, BATAS_BAWAH } = await import("../lib/iklan/susun");
 type NaskahIklan = import("../lib/iklan/naskah").NaskahIklan;
@@ -31,11 +34,13 @@ function naskahContoh(ubah: Partial<NaskahIklan> = {}): NaskahIklan {
     aset: i < 3 ? ["montir", "skuter"] : [],
     produk: b === "LOCKUP" ? "pahlawan" : b === "REVEAL" ? "asli" : i < 2 ? "tidak_tampil" : "dipakai",
     transformasi_en: b === "BUKTI" ? "the same engine casing now clean bright silver" : "",
+    hindari_en: ["engine inside the footboard", "motorcycle moving sideways", "helmet missing"],
     vo: ["Kerak tak hilang.", "Mesin terawat, perjalanan tenang.", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "", "Mesin terawat, perjalanan tenang.", "Mesin terawat, perjalanan tenang."][i],
     teks_layar: ["DILAP TAK HILANG", "", "PEMBERSIH KERAK|untuk mesin motor", "BERSIH", "", "SELA SEMPIT", "", "TENANG BERANGKAT", "", ""][i],
   }));
   return {
     merek: "Faza Auto Care",
+    kategori_realitas: ["otomotif_motor"],
     klaim_sumber: ["Pembersih Kerak Mesin"],
     lafal: [{ tulisan: "Degreaser", ucapan: "di-gri-ser" }],
     nama_produk_pendek: "Engine Degreaser",
@@ -239,4 +244,47 @@ test("shot kosong tanpa VO dan teks ditolak; harga penjual wajib di ajakan", () 
   const galat = periksaNaskah(n, { ...produk, harga_idr: 24900 }).join(" ");
   assert.match(galat, /Shot 6: shot kosong/);
   assert.match(galat, /Harga dari penjual wajib tampil di ajakan/);
+});
+
+// ── REALITAS (Brian 14 Sep 2026: "posisi mesin di dalam jok motor", "alur motor berjalan") ──
+
+test("kategori realitas dikenali dari data produk", () => {
+  assert.ok(R.tebakKategori("Faza Engine Degreaser pembersih kerak mesin motor").includes("otomotif_motor"));
+  assert.ok(R.tebakKategori("BOUSH Shift kaos boxy oversize cotton combed").includes("fashion_pakaian"));
+  assert.ok(R.tebakKategori("Speaker portable bluetooth karaoke 18 inch").includes("elektronik_audio"));
+  assert.deepEqual(R.tebakKategori("barang misterius"), ["umum"]);
+});
+
+test("fakta motor menyebut letak mesin skuter yang benar dan melarang letak yang dihalusinasikan", () => {
+  const f = R.faktaUntuk(["otomotif_motor"]);
+  assert.match(f, /LOWER REAR/);
+  assert.match(f, /NO engine in the flat footboard/);
+  assert.match(f, /moves forward in the direction it faces/);
+  const neg = R.negatifUntuk(["otomotif_motor"]);
+  for (const h of ["engine inside the footboard", "engine under the seat", "motorcycle moving sideways or backwards", "rider without helmet"]) {
+    assert.ok(neg.includes(h), `negative prompt tanpa "${h}"`);
+  }
+  assert.equal(new Set(neg).size, neg.length, "negative prompt berduplikat");
+});
+
+test("prompt gambar dan gerak membawa fakta dunia nyata + AVOID dari naskah, kategori, dan global", () => {
+  const n = naskahContoh();
+  const shot = n.shots[1];
+  shot.hindari_en = ["rider standing on the footboard"];
+  const pg = promptKeyframe(n, shot, { produk: false, aset: [] }, undefined, ["otomotif_motor"]);
+  assert.match(pg, /REAL-WORLD FACTS/);
+  assert.match(pg, /AVOID \(negative prompt\): rider standing on the footboard, /, "hindari dari naskah tidak didahulukan");
+  assert.match(pg, /engine inside the footboard/);
+  assert.match(pg, /extra fingers/);
+  const pv = promptGerak(n, shot, ["otomotif_motor"]);
+  assert.match(pv, /REAL-WORLD MOTION: .*forward/);
+  assert.match(pv, /AVOID: rider standing on the footboard/);
+  // Latar lockup/reveal wajib menolak produk dan orang.
+  assert.ok(negatifShot(n.shots[9], ["otomotif_motor"]).includes("product"));
+});
+
+test("naskah tanpa negative prompt per shot ditolak", () => {
+  const n = naskahContoh();
+  n.shots[4].hindari_en = ["only one"];
+  assert.match(periksaNaskah(n, produk).join(" "), /Shot 5: hindari_en/);
 });

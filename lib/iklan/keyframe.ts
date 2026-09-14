@@ -26,6 +26,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config";
 import type { NaskahIklan, ShotIklan } from "./naskah";
+import { faktaUntuk, negatifUntuk, type KategoriRealitas } from "./realitas";
 
 const MODEL = "dola-seedream-5-0-pro-260628";
 /** 9:16. Di atas batas minimum piksel Seedream, di bawah 2K supaya cepat. */
@@ -55,10 +56,17 @@ const PRODUK_EN: Record<"tidak_tampil" | "dipakai", string> = {
 
 export const pathSesudah = (p: string) => p.replace(/\.jpg$/, "-sesudah.jpg");
 
+/** Negative prompt satu shot: dari naskah + kategori + global (lib/iklan/realitas.ts). */
+export function negatifShot(shot: ShotIklan, kategori: KategoriRealitas[]): string[] {
+  const dasar = negatifUntuk(kategori, shot.hindari_en ?? []);
+  return shot.beat === "LOCKUP" || shot.produk === "asli" ? [...new Set(["product", "bottle", "packaging", "people", "hands", ...dasar])] : dasar;
+}
+
 export function promptKeyframe(
   n: NaskahIklan, shot: ShotIklan,
   acuan: { produk: boolean; aset: string[] },
   catatan?: string,
+  kategori: KategoriRealitas[] = ["umum"],
 ): string {
   const bagian: string[] = [];
   // Render uji pertama (Faza, shot 4): dua gambar acuan membuat Seedream
@@ -81,6 +89,10 @@ export function promptKeyframe(
   }
   if (catatan) bagian.push(catatan);
   bagian.push(`LOOK (identical for the whole film): ${n.gaya_visual_en} Bright, clean exposure that reads well on a phone screen.`);
+  // Fakta dunia nyata dan daftar hindari selalu ikut: Seedream mengarang posisi
+  // mesin skuter di dek pijakan pada render uji Faza v4 (Brian, 14 Sep 2026).
+  bagian.push(`REAL-WORLD FACTS (must be respected):\n${faktaUntuk(kategori)}`);
+  const avoid = `AVOID (negative prompt): ${negatifShot(shot, kategori).join(", ")}.`;
   if (shot.beat === "LOCKUP" || shot.produk === "asli") {
     bagian.push(
       `${UKURAN_EN[shot.ukuran]}. ${shot.visual_en}`,
@@ -90,6 +102,7 @@ export function promptKeyframe(
         : "PRODUCT-REVEAL BACKGROUND from the film's world: an uncluttered surface with soft directional light suited to a product hero shot, the CENTRE of the frame is an "
           + "EMPTY clean surface where a product will be placed later, background softly out of focus.",
       "NO product, NO bottle, NO packaging, NO people, NO hands, NO text, NO logos.",
+      avoid,
     );
     return bagian.join("\n");
   }
@@ -106,6 +119,7 @@ export function promptKeyframe(
     + "Absolutely no added text, captions, subtitles, watermarks, logos, signage lettering or user-interface elements.",
   );
   bagian.push("Vertical 9:16 full-bleed composition, no borders, no letterboxing.");
+  bagian.push(avoid);
   return bagian.join("\n");
 }
 
@@ -127,7 +141,7 @@ function dataUri(b: Buffer): string {
   return `data:${mime};base64,${b.toString("base64")}`;
 }
 
-async function panggilSeedream(prompt: string, acuan: Buffer[]): Promise<Buffer> {
+async function panggilSeedream(prompt: string, acuan: Buffer[], negatif: string[] = []): Promise<Buffer> {
   if (!config.byteplusApiKey) throw new Error("BYTEPLUS_ARK_API_KEY belum diisi.");
   const kirim = async (gambar: Buffer[]) => fetch(`${config.byteplusBaseUrl}/images/generations`, {
     method: "POST",
@@ -136,6 +150,9 @@ async function panggilSeedream(prompt: string, acuan: Buffer[]): Promise<Buffer>
       model: MODEL,
       prompt,
       ...(gambar.length === 1 ? { image: dataUri(gambar[0]) } : gambar.length > 1 ? { image: gambar.map(dataUri) } : {}),
+      // Diterima API (HTTP 200, diuji 14 Sep 2026). Karena tidak ada cara
+      // memastikan model memakainya, daftar yang sama juga ditulis di prompt.
+      ...(negatif.length ? { negative_prompt: negatif.join(", ") } : {}),
       response_format: "url",
       size: UKURAN,
       stream: false,
@@ -180,8 +197,9 @@ export interface HasilKeyframe {
  */
 export async function buatKeyframes(
   n: NaskahIklan, fotoProduk: Buffer, dir: string,
-  opts: { paralel?: number; catatan?: Map<number, string>; catatanSesudah?: Map<number, string> } = {},
+  opts: { paralel?: number; catatan?: Map<number, string>; catatanSesudah?: Map<number, string>; kategori?: KategoriRealitas[] } = {},
 ): Promise<HasilKeyframe> {
+  const kategori = opts.kategori ?? ["umum"];
   fs.mkdirSync(dir, { recursive: true });
   const paths = n.shots.map((_, i) => path.join(dir, `kf-${String(i + 1).padStart(2, "0")}.jpg`));
   let jumlahDibuat = 0;
@@ -213,10 +231,10 @@ export async function buatKeyframes(
     const acuan: Buffer[] = [];
     if (pakaiProduk) acuan.push(fotoProduk);
     for (const id of asetAcuan) acuan.push(fs.readFileSync(paths[jangkar.get(id)!]));
-    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, aset: asetAcuan }, opts.catatan?.get(i));
+    const prompt = promptKeyframe(n, shot, { produk: pakaiProduk, aset: asetAcuan }, opts.catatan?.get(i), kategori);
     fs.writeFileSync(paths[i].replace(/\.jpg$/, ".prompt.txt"), prompt);
     const t0 = Date.now();
-    fs.writeFileSync(paths[i], await panggilSeedream(prompt, acuan));
+    fs.writeFileSync(paths[i], await panggilSeedream(prompt, acuan, negatifShot(shot, kategori)));
     jumlahDibuat++;
     console.log(`[iklan/keyframe] shot ${i + 1}/${n.shots.length} (${shot.beat}, acuan=${acuan.length}) ${Math.round((Date.now() - t0) / 1000)}s`);
   };
@@ -238,9 +256,10 @@ export async function buatKeyframes(
   await jalankan(n.shots.map((s, i) => (s.transformasi_en.trim() ? i : -1)).filter((i) => i >= 0), async (i) => {
     const p = pathSesudah(paths[i]);
     if (!ada(p)) {
-      const prompt = promptSesudah(n, n.shots[i], opts.catatanSesudah?.get(i));
+      const neg = negatifShot(n.shots[i], kategori);
+      const prompt = `${promptSesudah(n, n.shots[i], opts.catatanSesudah?.get(i))}\nAVOID (negative prompt): changed camera angle, changed framing, different objects, ${neg.join(", ")}.`;
       fs.writeFileSync(p.replace(/\.jpg$/, ".prompt.txt"), prompt);
-      fs.writeFileSync(p, await panggilSeedream(prompt, [fs.readFileSync(paths[i])]));
+      fs.writeFileSync(p, await panggilSeedream(prompt, [fs.readFileSync(paths[i])], neg));
       jumlahDibuat++;
       console.log(`[iklan/keyframe] shot ${i + 1} SESUDAH`);
     }

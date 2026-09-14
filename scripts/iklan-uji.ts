@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { tulisNaskahIklan, type NaskahIklan, type ProdukIklan } from "../lib/iklan/naskah";
+import { kategoriNaskah, tulisNaskahIklan, type NaskahIklan, type ProdukIklan } from "../lib/iklan/naskah";
 import { buatKeyframes } from "../lib/iklan/keyframe";
 import { buatKlip } from "../lib/iklan/klip";
 import { buatVo } from "../lib/iklan/suara";
@@ -82,6 +82,8 @@ async function main() {
     console.log(`[uji] naskah: ${naskah.shots.length} shot, ${percobaan} percobaan, ${Math.round((Date.now() - t0) / 1000)}s`);
   }
   const naskah = JSON.parse(fs.readFileSync(berkasNaskah, "utf8")) as NaskahIklan;
+  const kategori = kategoriNaskah(naskah, produk);
+  console.log(`[uji] kategori realitas: ${kategori.join(", ")}`);
   if (sampai === "naskah") return;
 
   // 2. KEYFRAME + KURASI
@@ -91,7 +93,7 @@ async function main() {
   // disimpan per berkas, jadi menjalankan ulang tidak menilai ulang gambar yang
   // sama.
   const dirKf = path.join(dir, "keyframe");
-  let kf = await buatKeyframes(naskah, acuan, dirKf);
+  let kf = await buatKeyframes(naskah, acuan, dirKf, { kategori });
   biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
   simpanBiaya();
   const berkasKurasi = path.join(dirKf, "kurasi.json");
@@ -102,7 +104,7 @@ async function main() {
     const utama = kf.paths.map((_, i) => i).filter((i) => !sudahLulus(kf.paths[i]));
     const sesudah = new Map([...kf.sesudah].filter(([, p]) => !sudahLulus(p)));
     if (!utama.length && !sesudah.size) break;
-    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, { utama, sesudah });
+    const { nilai, biayaIdr } = await kurasiKeyframes(naskah, kf.paths, acuan, { utama, sesudah }, kategori);
     biaya.kurasi_idr = (biaya.kurasi_idr ?? 0) + biayaIdr;
     simpanBiaya();
     fs.writeFileSync(path.join(dirKf, `kurasi-putaran-${putaran}.json`), JSON.stringify(nilai, null, 2));
@@ -136,14 +138,14 @@ async function main() {
       const s = kf.sesudah.get(i)!;
       if (fs.existsSync(s)) fs.renameSync(s, s.replace(/\.jpg$/, `.tolak${putaran}.jpg`));
     }
-    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan, catatanSesudah });
+    kf = await buatKeyframes(naskah, acuan, dirKf, { catatan, catatanSesudah, kategori });
     biaya.keyframe_idr = (biaya.keyframe_idr ?? 0) + kf.biayaIdr;
     simpanBiaya();
   }
   if (sampai === "keyframe") return;
 
   // 3. KLIP + VO
-  const klip = await buatKlip(naskah, kf.paths, kf.sesudah, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`);
+  const klip = await buatKlip(naskah, kf.paths, kf.sesudah, path.join(dir, "klip"), `iklan-uji-${path.basename(dir)}`, kategori);
   biaya.klip_idr = klip.biayaIdr;
   biaya.klip_kredit_kie = klip.kredit;
   const vo = await buatVo(naskah, path.join(dir, "vo"));
