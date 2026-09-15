@@ -463,6 +463,11 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
         <p className="text-[11px] text-zinc-400">
           Dimuat {new Date().toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" })} WIB
         </p>
+        <p className="pt-1 text-xs">
+          <Link href="/admin/kredensial" className="font-semibold text-amber-700 underline underline-offset-2">Kredensial partner</Link>
+          <span className="px-2 text-zinc-300">·</span>
+          <Link href="/admin/iklan" className="font-semibold text-amber-700 underline underline-offset-2">Iklan Sinematik (beta)</Link>
+        </p>
       </header>
 
       <nav className="flex flex-wrap gap-1.5">

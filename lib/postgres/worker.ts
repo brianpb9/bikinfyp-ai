@@ -37,6 +37,7 @@ import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "../provi
 import { assertVisualSpec } from "../providers/types";
 import { isMockProviderName, type QualityTier } from "../providers/types";
 import { buildPhotoPanVideo } from "../media/photo-video";
+import { FORMAT_IKLAN } from "../iklan/format";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
@@ -476,6 +477,19 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // findReusableClips() di runProviderPipeline melewati provider bila klip
     // dari upaya sebelumnya masih ada & valid di disk (lihat resume-clips.ts).
     if (!(await jobs.transition(jobId, "GENERATING_VISUAL", { worker: "postgres" }))) return;
+
+    // BETA KHUSUS ADMIN — cabang sendiri, jalur retail tidak disentuh. Job
+    // format ini dibuat tanpa hold kredit (lihat app/api/admin/iklan), jadi
+    // ia juga keluar sebelum blok capture di bawah.
+    if (row.format === FORMAT_IKLAN) {
+      const { jalankanJobIklan } = await import("./worker-iklan");
+      await jalankanJobIklan(row, {
+        pindah: (state) => jobs.transition(row.id, state, { worker: "postgres-iklan" }),
+        setProviders: async (video, voice) => { await jobs.setProviders(row.id, video, voice); },
+        simpan: (relVideo, local, qc) => persistReadyOutput(row, jobs, pool, relVideo, local, qc),
+      });
+      return;
+    }
 
     if (deterministicFixtureAllowed()) {
       await runDeterministicFixture(row, jobs, pool);

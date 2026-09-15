@@ -51,9 +51,14 @@ test("setiap jalur pembuat job juga membuat snapshot Skor FYP", () => {
   const jalur = jalurPembuatJob();
   assert.ok(jalur.length >= 2, `harus menemukan minimal 2 jalur pembuat job, ketemu ${jalur.length}`);
 
+  // Melewati skor boleh — ASAL SADAR. Satu-satunya cara melewatinya adalah
+  // memanggil bolehDiskorFyp(), yang daftarnya hidup di lib/fyp-score. Jadi
+  // jalur yang tidak menyebut skor sama sekali tetap gagal di sini, sementara
+  // jalur yang memang di luar jangkauan model (iklan merek 30 detik) tidak
+  // dipaksa mengarang angka — lihat FORMAT_BERSKOR.
   const tanpaSnapshot = jalur.filter((p) => {
     const isi = fs.readFileSync(p, "utf8");
-    return !/createFypSnapshot|pgSaveFypSnapshot/.test(isi);
+    return !/createFypSnapshot|pgSaveFypSnapshot|bolehDiskorFyp/.test(isi);
   });
 
   assert.deepEqual(
@@ -67,9 +72,11 @@ test("setiap jalur pembuat job juga membuat snapshot Skor FYP", () => {
 // Memetakan TVC ke "other" akan menghasilkan angka yang terlihat sah padahal
 // modelnya tidak pernah melihat iklan merek — itu mengarang bukti.
 test("format di luar jangkauan model dilewati dengan alasan tertulis, bukan dipetakan paksa", () => {
-  // Keputusan ini ikut pindah ke sel render bersama — dibaca dari sana, bukan
-  // dari salah satu route yang memanggilnya.
-  const p = path.join(process.cwd(), "lib", "dashboard", "render-cell.ts");
+  // Keputusannya kini hidup di modul skor itu sendiri, bukan di salah satu
+  // jalur pembuat job: begitu daftarnya disalin ke jalur baru, salinan yang
+  // basi akan kehilangan prediksinya tanpa satu pun error — cara kegagalan
+  // diam ini lahir pertama kali.
+  const p = path.join(process.cwd(), "lib", "fyp-score", "index.ts");
   const isi = fs.readFileSync(p, "utf8");
   assert.match(isi, /FORMAT_BERSKOR/, "daftar format yang boleh diskor hilang");
   assert.match(isi, /SENGAJA dilewati/, "alasan melewati TVC/iklan jasa harus tertulis di kode");

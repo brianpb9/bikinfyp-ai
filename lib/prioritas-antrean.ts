@@ -34,6 +34,17 @@ export const PRIORITAS = {
   /** Angka LEBIH KECIL = didahulukan (aturan BullMQ). */
   brand: 1,
   retail: 2,
+  /**
+   * Render internal yang TIDAK dibayar siapa pun: beta Iklan Sinematik dari
+   * /admin/iklan. Ia antre paling belakang karena satu-satunya orang yang
+   * dirugikan kalau ia menunggu adalah kita sendiri.
+   *
+   * Yang TIDAK diselesaikan angka ini: concurrency worker 1, jadi begitu
+   * render beta MULAI, job berbayar berikutnya menunggu sampai ia selesai
+   * (±15–25 menit). Selama beta ini masih dipakai di server produksi, jalankan
+   * saat antrean sepi — atau beri worker sendiri.
+   */
+  beta: 3,
 } as const;
 
 export type AsalJob = keyof typeof PRIORITAS;

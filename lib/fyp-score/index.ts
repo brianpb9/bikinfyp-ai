@@ -23,6 +23,25 @@ export { buildPlanFeatures } from "./features";
 export { loadFypArtifact, scoreFeatures } from "./model";
 export { topFixes } from "./fixes";
 
+/**
+ * FORMAT YANG BOLEH DISKOR — jangkauan model, bukan daftar keinginan.
+ *
+ * TVC, iklan jasa, dan Iklan Sinematik SENGAJA dilewati, bukan dipetakan
+ * paksa: model dilatih pada konten organik TikTok (vlog, skit, tutorial) dan
+ * tidak punya padanan untuk iklan merek 30 detik. Memaksakan "other" akan
+ * menghasilkan angka yang terlihat sah padahal tidak berarti.
+ *
+ * Tinggal di sini, bukan di salah satu jalur pembuat job: begitu daftarnya
+ * disalin, jalur berikutnya akan menyalin versi yang sudah basi — dan yang
+ * hilang bukan error, melainkan diam-diam prediksinya saja.
+ */
+export const FORMAT_BERSKOR: readonly string[] = ["hands_only", "vo_broll", "talking_head"];
+
+/** Apakah format ini masuk jangkauan model FYP? */
+export function bolehDiskorFyp(format: string): boolean {
+  return FORMAT_BERSKOR.includes(format);
+}
+
 export interface ScriptPlanScore {
   score: number;
   rawProbability: number;

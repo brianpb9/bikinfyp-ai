@@ -21,7 +21,7 @@ import { enqueueJob } from "@/lib/job-queue";
 import type { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
-import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
+import { bolehDiskorFyp, scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import type { QualityTier } from "@/lib/providers/types";
 import { jenisUntukTier } from "@/lib/kredit-video";
 import { pakaiKreditOrg } from "@/lib/kredit-video-runtime";
@@ -30,13 +30,9 @@ export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
   | { status: "failed"; script_id: string; reason: string };
 
-/**
- * TVC dan iklan jasa SENGAJA dilewati, bukan dipetakan paksa: model dilatih
- * pada konten organik TikTok (vlog, skit, tutorial) dan tidak punya padanan
- * untuk iklan merek 30 detik. Memaksakan "other" akan menghasilkan angka yang
- * terlihat sah padahal tidak berarti.
- */
-const FORMAT_BERSKOR = ["hands_only", "vo_broll", "talking_head"];
+// Format mana yang boleh diskor — dan kenapa TVC/iklan merek SENGAJA dilewati
+// — hidup di lib/fyp-score (FORMAT_BERSKOR, bolehDiskorFyp). Dibaca dari sana,
+// tidak disalin: salinan yang basi kehilangan prediksinya tanpa satu pun error.
 
 export interface SelRender {
   userId: string;
@@ -214,7 +210,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   // 10 Agustus, 12 job tidak punya skor karena createFypSnapshot cuma dipanggil
   // dari /api/jobs retail, sementara dashboard brand membuat job lewat jalur
   // ini. Tidak ada yang menyadarinya selama enam hari karena kegagalannya diam.
-  if (FORMAT_BERSKOR.includes(sel.format)) {
+  if (bolehDiskorFyp(sel.format)) {
     try {
       const plan = scoreScriptPlan({
         hookFamily: script.hook_family as Parameters<typeof scoreScriptPlan>[0]["hookFamily"],
