@@ -31,7 +31,10 @@ export function CampaignThumb({
   if (videoKey) {
     return (
       <video
-        src={createSignedUrl(videoKey)}
+        // #t=0.1 memaksa browser mencari frame pertama. Tanpa itu iOS Safari
+        // menggambar kotak HITAM sampai videonya disentuh — sama seperti yang
+        // sudah lama dijaga di JobThumb.
+        src={`${createSignedUrl(videoKey)}#t=0.1`}
         preload="metadata"
         muted
         playsInline

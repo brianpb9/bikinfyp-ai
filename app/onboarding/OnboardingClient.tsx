@@ -10,6 +10,7 @@ import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { SiteFooter } from "../_components/SiteFooter";
 import { Logo } from "../_components/Logo";
+import { KlipContoh } from "../_components/KlipContoh";
 
 /** Satu paket seperti yang dikirim /api/harga-publik. */
 type PaketPublik = { id: string; label: string; jelas: string; harga_idr: number };
@@ -35,35 +36,14 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
  *  Contoh videonya sengaja dinaikkan mutunya (270px -> 360px, bitrate 2-3x),
  *  dan itu menambah ~1,9 MB. Strip ini ada DI BAWAH lipatan: memuatnya di awal
  *  berarti menagih kuota pengunjung untuk sesuatu yang mungkin tidak pernah
- *  mereka lihat — mahal di jaringan seluler Indonesia. Dengan menunda src,
- *  yang terunduh saat halaman dibuka hanya hero. */
+ *  mereka lihat — mahal di jaringan seluler Indonesia.
+ *
+ *  Penundaan itu sendiri sekarang hidup di KlipContoh, bersama poster yang
+ *  dulu tidak ada: sebelum audit 19 Sep 2026, strip ini menunda src TANPA
+ *  poster, jadi yang dilihat pengunjung sebelum menggulir bukan contoh video
+ *  melainkan empat kotak abu-abu. */
 function LazyClip({ src }: { src: string }) {
-  const ref = useRef<HTMLVideoElement>(null);
-  const [show, setShow] = useState(false);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    // Browser tanpa IntersectionObserver (mis. WebView lawas) langsung dimuat —
-    // lebih baik boros kuota daripada kotak hitam permanen.
-    if (typeof IntersectionObserver === "undefined") return setShow(true);
-    const io = new IntersectionObserver(
-      ([e]) => { if (e.isIntersecting) { setShow(true); io.disconnect(); } },
-      { rootMargin: "200px" }, // mulai unduh sedikit sebelum masuk layar
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-  return (
-    <video
-      ref={ref}
-      src={show ? src : undefined}
-      autoPlay
-      muted
-      loop
-      playsInline
-      className="h-40 w-[90px] bg-zinc-200 object-cover"
-    />
-  );
+  return <KlipContoh src={src} className="h-40 w-[90px]" />;
 }
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
@@ -244,7 +224,7 @@ export default function OnboardingClient({ brand }: { brand: boolean }) {
               <Logo tinggi={30} />
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
-              <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
+              <KlipContoh src="/demo/contoh-hero.mp4" prioritas className="aspect-[9/16] w-full" />
             </div>
             {/* JUDUL: yang dijual bukan "tanpa syuting" — itu caranya, bukan
                 masalahnya. Masalah penjual TikTok Shop adalah konten harus

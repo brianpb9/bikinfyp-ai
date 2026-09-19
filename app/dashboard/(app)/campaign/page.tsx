@@ -25,6 +25,7 @@ import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import type { QualityTier } from "@/lib/providers/types";
+import { KlipContoh } from "../../../_components/KlipContoh";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
@@ -754,10 +755,9 @@ export default function CampaignPage() {
                       sendiri-sendiri, rasio aslinya tetap dipertahankan. */}
                   <div className="relative mb-3 aspect-[9/16] max-h-72 w-full overflow-hidden rounded-xl bg-zinc-900">
                     {k.preview ? (
-                      <video
+                      <KlipContoh
                         src={k.preview}
-                        autoPlay muted loop playsInline
-                        className="absolute inset-0 h-full w-full object-cover"
+                        className="absolute inset-0 h-full w-full"
                       />
                     ) : (
                       <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-500">

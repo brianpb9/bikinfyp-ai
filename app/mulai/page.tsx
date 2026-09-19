@@ -9,6 +9,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { track } from "../_components/track";
+import { KlipContoh } from "../_components/KlipContoh";
+import { Logo } from "../_components/Logo";
 
 type Product = "affiliate" | "ads";
 
@@ -49,26 +51,49 @@ export default function MulaiQuizPage() {
   return (
     <main className="mx-auto min-h-dvh w-full max-w-md bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-10 pt-8">
       <div className="mb-5 flex items-center justify-between">
-        <span className="font-display text-base font-extrabold text-zinc-900">Bikin<span className="text-amber-500">FYP</span>.AI</span>
+        {/* KOMPONEN Logo, bukan wordmark yang diketik.
+            Halaman ini tertinggal saat merek berganti ke AIUGC.ID: sampai
+            audit 19 Sep 2026 ia masih memajang wordmark lama — justru di
+            halaman yang dilihat traffic iklan lebih dulu daripada halaman mana
+            pun. Penjaganya sudah ada (tests/identitas-terkunci) tapi tidak
+            menangkapnya, karena wordmark-nya dipecah jadi tiga potong antar
+            <span> sehingga tidak pernah terbaca sebagai satu kata. */}
+        <Logo tinggi={24} />
         <span className="text-xs font-semibold text-zinc-400">kuis 30 detik · langkah {step}/3</span>
       </div>
-      <div className="mb-6 flex gap-1.5">
+      <div className="mb-3 flex gap-1.5">
         {[1, 2, 3].map((s) => (
           <div key={s} className={`h-1.5 flex-1 rounded-full ${s <= step ? "bg-amber-500" : "bg-zinc-200"}`} />
         ))}
+      </div>
+      {/* JALAN MUNDUR. Kuis ini maju otomatis begitu satu kartu ditekan — salah
+          tekan berarti terkunci di langkah berikutnya, dan satu-satunya jalan
+          keluar adalah memuat ulang halaman (audit UI 19 Sep 2026). Bilah
+          kemajuan di atas menjanjikan langkah yang bisa ditelusuri; tanpa
+          tombol ini janji itu cuma hiasan. */}
+      <div className="mb-3 h-5">
+        {step > 1 && (
+          <button
+            type="button"
+            onClick={() => setStep((s) => (s === 3 ? 2 : 1))}
+            className="-ml-1 px-1 text-sm font-semibold text-zinc-500 active:text-zinc-800"
+          >
+            ← Kembali
+          </button>
+        )}
       </div>
 
       {step === 1 && (
         <section>
           <h1 className="font-display text-2xl font-bold text-zinc-900">Mau bikin video apa?</h1>
           <p className="mt-1 text-sm text-zinc-500">Pilih yang paling dekat — bisa ganti kapan saja kok.</p>
-          <div className="mt-4 grid grid-cols-2 gap-3">
+          <div className="mt-4 grid grid-cols-2 items-stretch gap-3">
             <button
               type="button"
               onClick={() => { setProduct("affiliate"); track("quiz_product", { product: "affiliate" }); setStep(2); }}
-              className="overflow-hidden rounded-3xl border-2 border-amber-300 bg-white text-left shadow-sm active:scale-[0.98]"
+              className="flex flex-col overflow-hidden rounded-3xl border-2 border-amber-300 bg-white text-left shadow-sm active:scale-[0.98]"
             >
-              <video src="/previews/format-tangan.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
+              <KlipContoh src="/previews/format-tangan.mp4" prioritas className="aspect-[9/16] w-full" />
               <div className="p-3">
                 <p className="font-display text-base font-bold leading-tight">AI UGC Affiliate</p>
                 <p className="mt-1 text-xs leading-4 text-zinc-500">Jualan produk fisik ke TikTok Shop</p>
@@ -77,9 +102,9 @@ export default function MulaiQuizPage() {
             <button
               type="button"
               onClick={() => { setProduct("ads"); track("quiz_product", { product: "ads" }); setStep(2); }}
-              className="overflow-hidden rounded-3xl border-2 border-zinc-200 bg-white text-left shadow-sm active:scale-[0.98]"
+              className="flex flex-col overflow-hidden rounded-3xl border-2 border-zinc-200 bg-white text-left shadow-sm active:scale-[0.98]"
             >
-              <video src="/previews/format-wajah.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
+              <KlipContoh src="/previews/format-wajah.mp4" prioritas className="aspect-[9/16] w-full" />
               <div className="p-3">
                 <p className="font-display text-base font-bold leading-tight">AI UGC Ads</p>
                 <p className="mt-1 text-xs leading-4 text-zinc-500">Promosi app, jasa, atau toko</p>

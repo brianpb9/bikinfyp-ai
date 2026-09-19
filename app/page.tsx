@@ -7,6 +7,7 @@ import { PrimaryButton } from "./_components/ui";
 import { relTime } from "./_components/flow";
 import { JobThumb } from "./_components/JobThumb";
 import { SiteFooter } from "./_components/SiteFooter";
+import { KlipContoh } from "./_components/KlipContoh";
 
 interface JobItem {
   id: string;
@@ -108,6 +109,18 @@ export default function HomePage() {
             <img src="/icons/ui/empty-video.png" alt="" className="mx-auto h-12 w-12" />
             <p className="mt-2 font-display text-lg font-bold text-zinc-900">Belum ada video</p>
             <p className="mt-1 text-sm leading-6 text-zinc-600">Yuk bikin yang pertama — gratis pakai video bonus kamu!</p>
+          </div>
+          {/* CONTOH HASIL DI KEADAAN KOSONG.
+              Layar pertama sesudah daftar dulu berisi ikon, dua kalimat, lalu
+              setengah layar kosong — pengguna baru diminta menghabiskan jatah
+              pertamanya tanpa pernah melihat satu pun keluaran produk ini
+              (audit UI 19 Sep 2026). Ruang itu sekarang dipakai memperlihatkan
+              apa yang akan ia dapat. */}
+          <div className="px-6 pb-6">
+            <div className="mx-auto w-40 overflow-hidden rounded-2xl ring-1 ring-black/5">
+              <KlipContoh src="/demo/contoh-hero.mp4" className="aspect-[9/16] w-full" />
+            </div>
+            <p className="mt-2 text-xs text-zinc-400">Contoh hasil — dari satu foto produk.</p>
           </div>
         </div>
       )}

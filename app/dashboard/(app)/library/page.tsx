@@ -219,7 +219,7 @@ export default function LibraryPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={v.thumb_url} alt="" className="h-full w-full object-cover" />
                 ) : v.video_url ? (
-                  <video src={v.video_url} preload="metadata" muted className="h-full w-full object-cover" />
+                  <video src={`${v.video_url}#t=0.1`} preload="metadata" muted playsInline className="h-full w-full bg-zinc-100 object-cover" />
                 ) : (
                   <div className="flex h-full w-full items-center justify-center text-zinc-600">
                     {TERMINAL.has(v.state) ? <VideoOff size={16} /> : <Loader2 size={16} className="animate-spin" />}

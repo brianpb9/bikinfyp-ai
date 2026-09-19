@@ -49,7 +49,10 @@ export function PreviewVideo({
     <div className={`relative w-full overflow-hidden bg-zinc-900 ${className}`} style={{ aspectRatio: aspect }}>
       <video
         ref={applyAspect}
-        src={src}
+        // #t=0.1 + preload metadata: frame pertama digambar walau autoplay
+        // ditolak (hemat daya/data) — kalau tidak, yang tersisa kotak kosong.
+        src={`${src}#t=0.1`}
+        preload="metadata"
         autoPlay
         muted
         loop

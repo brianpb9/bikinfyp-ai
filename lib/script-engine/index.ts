@@ -118,7 +118,13 @@ export class TemplateTidakDisajikan extends Error {
    */
   readonly sebabTeknis: string;
   constructor(sebabTeknis: string) {
-    super("Naskahnya belum bisa kami selesaikan sekarang. Coba lagi sebentar lagi ya.");
+    // KALIMATNYA MENYEBUT DUA HAL YANG BISA DIPEGANG PENGGUNA: datanya tidak
+    // hilang, dan tidak ada yang terpotong. Versi sebelumnya cuma "coba lagi
+    // sebentar lagi" — dan orang yang baru saja mengisi produk, memilih paket
+    // berbayar, lalu ditolak tanpa keterangan wajar menduga jatahnya sudah
+    // dipotong (audit UI 19 Sep 2026). Keduanya benar: produk disimpan di
+    // langkah 1, dan kredit baru ditahan saat job dibuat, bukan di sini.
+    super("Naskahnya belum bisa kami selesaikan sekarang. Data produkmu sudah tersimpan dan jatah videomu belum terpotong — coba lagi sebentar ya.");
     this.name = "TemplateTidakDisajikan";
     this.sebabTeknis = sebabTeknis;
   }

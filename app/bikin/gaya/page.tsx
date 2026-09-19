@@ -13,6 +13,7 @@ import { templateTeratas, type TemplatePilihan } from "@/lib/template-pilihan";
 import { HOOK_LEVELS, type HookLevel } from "@/lib/config/hooks";
 import type { QualityTier } from "@/lib/providers/types";
 import { setaraBaru } from "@/lib/kualitas-video";
+import { KlipContoh } from "../../_components/KlipContoh";
 
 // Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
 // kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
@@ -251,14 +252,18 @@ export default function GayaPage() {
             <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dipilih untuk produkmu</p>
             <h2 className="font-display text-xl font-bold">🏆 Template Terbukti</h2>
           </div>
-          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {/* snap-x: kartu berhenti rapi di tepi, bukan menggantung setengah.
+              Kartu yang terpotong di tepi layar memang penanda bahwa strip ini
+              bisa digeser — tapi tanpa snap ia berhenti di tengah kata dan
+              terbaca seperti kerusakan, bukan undangan (audit UI 19 Sep). */}
+          <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {daftarTemplate.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 aria-pressed={templateId === t.id}
                 onClick={() => applyTemplate(t.id)}
-                className={`w-44 shrink-0 rounded-2xl border-2 p-3 text-left shadow-sm transition-transform active:scale-[0.98] ${
+                className={`w-44 shrink-0 snap-start rounded-2xl border-2 p-3 text-left shadow-sm transition-transform active:scale-[0.98] ${
                   templateId === t.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
                 }`}
               >
@@ -295,7 +300,7 @@ export default function GayaPage() {
                 }`}
               >
                 {f.previewVideo ? (
-                  <video src={f.previewVideo} autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
+                  <KlipContoh src={f.previewVideo} prioritas className="aspect-[9/16] w-full" />
                 ) : f.previewImage ? (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img src={f.previewImage} alt="" className="aspect-[9/16] w-full object-cover" loading="lazy" decoding="async" />

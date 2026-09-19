@@ -6,6 +6,7 @@ import { apiFetch, ApiFail } from "../../_components/api";
 import { buildBrandApproach } from "@/lib/brand-approach";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { LogoBrands } from "../../_components/Logo";
+import { KlipContoh } from "../../_components/KlipContoh";
 
 // Onboarding organisasi.
 //
@@ -284,13 +285,13 @@ export default function OnboardingPage() {
                 className={`min-w-0 flex-1 ${i === 1 ? "lg:-translate-y-6" : ""} transition-transform duration-500`}
               >
                 <div className="overflow-hidden rounded-2xl bg-zinc-800 shadow-2xl shadow-black/50 ring-1 ring-white/10">
-                  <video
+                  <KlipContoh
                     // key memaksa elemen dibuat ulang saat kategori berganti;
                     // tanpa ini browser menahan frame video lama di klip baru.
                     key={t.src}
                     src={t.src}
-                    autoPlay muted loop playsInline
-                    className="aspect-[9/16] w-full object-cover"
+                    prioritas
+                    className="aspect-[9/16] w-full"
                   />
                 </div>
                 <figcaption className="mt-3">

@@ -3,6 +3,7 @@ import {
   ArrowRight, Check, Coins, Eye, Film, LayoutTemplate, ShieldCheck, Sparkles,
 } from "lucide-react";
 import { LogoBrands } from "../_components/Logo";
+import { KlipContoh } from "../_components/KlipContoh";
 
 export const metadata = {
   title: "AIUGC.ID Brands — Video iklan AI untuk brand Indonesia",
@@ -90,7 +91,7 @@ export default function BrandsLandingPage() {
                 key={f.label}
                 className={`relative aspect-[9/16] overflow-hidden rounded-2xl bg-zinc-900 shadow-lg ${i === 1 ? "translate-y-6" : ""}`}
               >
-                <video src={f.src} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full object-cover" />
+                <KlipContoh src={f.src} className="absolute inset-0 h-full w-full" />
                 <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
                   {f.label}
                 </span>
@@ -127,7 +128,7 @@ export default function BrandsLandingPage() {
             {FORMATS.map((f) => (
               <div key={f.label} className="overflow-hidden rounded-2xl border border-zinc-200">
                 <div className="relative aspect-[9/16] bg-zinc-900">
-                  <video src={f.src} autoPlay muted loop playsInline className="absolute inset-0 h-full w-full object-cover" />
+                  <KlipContoh src={f.src} className="absolute inset-0 h-full w-full" />
                 </div>
                 <div className="p-4">
                   <p className="font-display text-base font-bold">{f.label}</p>

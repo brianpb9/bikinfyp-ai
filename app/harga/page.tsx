@@ -4,6 +4,7 @@ import { hargaKredit, daftarPaket } from "../../lib/kredit-video-runtime";
 import { JENIS_VIDEO } from "../../lib/kredit-video";
 import { KUALITAS } from "../../lib/kualitas-video";
 import { SiteFooter } from "../_components/SiteFooter";
+import { KlipContoh } from "../_components/KlipContoh";
 
 // HALAMAN HARGA PUBLIK — bisa dibuka TANPA login.
 //
@@ -77,9 +78,46 @@ export default async function HargaPage() {
         <p className="text-xs text-zinc-500">
           Yang kamu dapat: satu video iklan produkmu, siap diunduh dan diposting.
         </p>
+
+        {/* CONTOH HASIL. Sampai audit UI 19 Sep 2026 halaman ini menjual video
+            dengan teks saja — nol video di layar. Orang diminta memilih antara
+            tiga angka tanpa pernah melihat satu pun keluarannya.
+
+            SATU contoh, tidak dilabeli per tier: kita belum punya render
+            pembanding yang benar-benar dibuat oleh masing-masing tier, dan
+            menempelkan klip mana saja di bawah nama tier berarti menjual
+            dengan bukti yang dikarang. Begitu render pembandingnya ada, di
+            sinilah tempatnya. */}
+        {/* Lebarnya dibatasi, bukan selebar kolom: klip 9:16 selebar kartu
+            setinggi ~790px dan mendorong SELURUH daftar harga keluar layar —
+            contohnya jadi menutupi barang yang mau dijualnya. */}
+        <figure className="overflow-hidden rounded-2xl border border-zinc-200 bg-white p-3">
+          <div className="mx-auto w-44 overflow-hidden rounded-xl ring-1 ring-black/5">
+            <KlipContoh src="/demo/contoh-hero.mp4" prioritas className="aspect-[9/16] w-full" />
+          </div>
+          <figcaption className="mt-2 text-center text-xs text-zinc-500">
+            Contoh hasil — dibuat dari satu foto produk, tanpa syuting.
+          </figcaption>
+        </figure>
+
         <ul className="space-y-2">
-          {harga.map((t) => (
-            <li key={t.id} className="rounded-2xl border border-zinc-200 bg-white p-4">
+          {harga.map((t, i) => (
+            <li
+              key={t.id}
+              // Satu tier ditandai, bukan tiga kartu berbobot sama: tanpa
+              // penanda, pembaca harus membandingkan sendiri tiga paragraf
+              // untuk menebak mana yang dimaksudkan untuk dia. Yang ditandai
+              // adalah yang TENGAH — bukan yang termahal; menandai yang
+              // termahal sebagai "disarankan" itu menjual, bukan menolong.
+              className={`rounded-2xl border bg-white p-4 ${
+                i === 1 ? "relative border-amber-300 shadow-sm ring-1 ring-amber-100" : "border-zinc-200"
+              }`}
+            >
+              {i === 1 && (
+                <span className="absolute -top-2.5 left-4 rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  Paling pas buat mulai
+                </span>
+              )}
               <div className="flex items-baseline justify-between gap-3">
                 <span className="font-display font-bold text-zinc-900">{t.nama}</span>
                 <span className="whitespace-nowrap font-display text-lg font-bold text-amber-700">

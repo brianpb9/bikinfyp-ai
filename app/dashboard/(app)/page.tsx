@@ -126,7 +126,9 @@ export default async function DashboardHomePage() {
                 <Link href="/dashboard/library" className="group block" title={v.caption ?? v.product_name}>
                   <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-zinc-900">
                     <video
-                      src={createSignedUrl(v.video_key)}
+                      // #t=0.1 memaksa frame pertama digambar; tanpa itu iOS
+                      // Safari menahan kotak hitam sampai videonya disentuh.
+                      src={`${createSignedUrl(v.video_key)}#t=0.1`}
                       preload="metadata" muted playsInline
                       className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
                     />

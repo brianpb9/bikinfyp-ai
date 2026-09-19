@@ -22,7 +22,10 @@ export const ERR = {
   UNAUTHORIZED: () =>
     new ApiError(401, {
       code: "UNAUTHORIZED",
-      message_id: "Kamu belum masuk. Login dulu ya, pakai nomor HP.",
+      // Dulu berbunyi "pakai nomor HP" — peninggalan OTP WhatsApp. Login sudah
+      // lama pakai EMAIL, jadi galat ini menyuruh orang memakai pintu yang
+      // tidak ada lagi (audit UI 19 Sep 2026).
+      message_id: "Kamu belum masuk. Login dulu ya, pakai email.",
       message_en: "Not authenticated. Please log in first.",
       retryable: false,
     }),

@@ -60,3 +60,36 @@ test("TIDAK ADA sisa 'bikinfyp' lain di kode maupun aset publik", () => {
   for (const d of ["app", "lib", "public"]) telusuri(d);
   assert.deepEqual(temuan, [], `masih ada "bikinfyp" di luar pengecualian: ${temuan.join(", ")}`);
 });
+
+test("wordmark lama TIDAK lolos dengan dipecah antar-tag", () => {
+  // LUBANG YANG DITUTUP DI SINI, ditemukan audit UI 19 Sep 2026.
+  //
+  // Penjaga di atas mencari kata "bikinfyp" per baris. /mulai — halaman
+  // pendaratan traffic iklan — memajang wordmark lama selama berminggu-minggu
+  // dan lolos setiap kali, karena di kode ia ditulis begini:
+  //
+  //     Bikin<span className="text-amber-500">FYP</span>.AI
+  //
+  // Tidak ada satu baris pun yang memuat kata utuhnya, jadi tidak ada yang
+  // gagal. Yang membaca layar melihat merek lama; yang membaca kode melihat
+  // tes hijau.
+  //
+  // Di sini tag JSX dibuang DULU, baru teksnya diperiksa — persis seperti
+  // mata pengguna membacanya.
+  const temuan: string[] = [];
+  const telusuri = (dir: string) => {
+    for (const e of fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })) {
+      const rel = path.join(dir, e.name);
+      if (e.isDirectory()) { telusuri(rel); continue; }
+      if (!/\.tsx$/.test(e.name)) continue;
+      const isi = baca(rel)
+        .replace(/\{\/\*[\s\S]*?\*\/\}/g, " ")   // komentar JSX (boleh menyebut sejarah)
+        .replace(/\/\*[\s\S]*?\*\//g, " ")       // komentar blok
+        .replace(/^\s*\/\/.*$/gm, " ")           // komentar baris
+        .replace(/<[^>]+>/g, "");                // TAG DIBUANG — inilah intinya
+      if (/bikin\s*fyp/i.test(isi)) temuan.push(rel);
+    }
+  };
+  telusuri("app");
+  assert.deepEqual(temuan, [], `wordmark lama masih terbaca di layar (tag dibuang dulu): ${temuan.join(", ")}`);
+});

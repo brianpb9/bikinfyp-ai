@@ -11,6 +11,40 @@ import { guessCategory } from "@/lib/category-guess";
 // diimpor langsung ke client component karena pakai node:fs/sharp).
 const MAX_PHOTOS = 8;
 
+/**
+ * Satu kolom isian: LABEL di atas, petunjuk di bawah.
+ *
+ * Sebelum audit UI 19 Sep 2026, kolom di halaman ini memakai placeholder
+ * sebagai label. Dua akibatnya terlihat langsung di ponsel: kalimatnya
+ * terpotong di tengah kata ("...biar AI menjaga mer"), dan begitu orang mulai
+ * mengetik, satu-satunya keterangan tentang kolom itu lenyap — persis saat ia
+ * paling dibutuhkan untuk memeriksa apakah isiannya benar.
+ *
+ * Label juga yang membuat kolomnya terbaca pembaca layar sebagai sesuatu yang
+ * punya nama; placeholder tidak dijanjikan dibacakan.
+ */
+function Kolom({
+  label, children, wajib = false, opsional = false, petunjuk,
+}: {
+  label: string;
+  children: React.ReactNode;
+  wajib?: boolean;
+  opsional?: boolean;
+  petunjuk?: string;
+}) {
+  return (
+    <label className="block">
+      <span className="mb-1 flex items-baseline gap-1.5 text-sm font-semibold text-zinc-700">
+        {label}
+        {wajib && <span className="text-amber-600" aria-hidden="true">*</span>}
+        {opsional && <span className="text-xs font-normal text-zinc-400">opsional</span>}
+      </span>
+      {children}
+      {petunjuk && <span className="mt-1 block text-xs leading-4 text-zinc-500">{petunjuk}</span>}
+    </label>
+  );
+}
+
 // S2 — INPUT PRODUK (Langkah 1/5)
 export default function ProdukPage() {
   const router = useRouter();
@@ -310,7 +344,16 @@ export default function ProdukPage() {
             type="button"
             onClick={extract}
             disabled={extractLoading || url.trim().length < 8}
-            className="min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 font-semibold text-zinc-700 active:bg-zinc-50 disabled:text-zinc-400"
+            // TIGA TOMBOL ABU-ABU BEREBUT (audit UI 19 Sep): "Ambil Data",
+            // "Isi manual aja", dan "Lanjut" semuanya tampil abu — dua di
+            // antaranya terbaca mati, dan tidak ada yang terbaca utama. Tombol
+            // ini sekarang MENYALA begitu link-nya masuk akal, jadi keadaannya
+            // menjawab sendiri "yang mana yang bisa saya tekan sekarang".
+            className={`min-h-[48px] w-full rounded-2xl border-2 font-semibold transition-colors ${
+              extractLoading || url.trim().length < 8
+                ? "border-zinc-200 text-zinc-400"
+                : "border-amber-400 bg-amber-50 text-amber-800 active:bg-amber-100"
+            }`}
           >
             {extractLoading ? "Membaca link & fotonya..." : "Ambil Data"}
           </button>
@@ -333,65 +376,23 @@ export default function ProdukPage() {
 
         {(showManual || productId) && (
           <section className="space-y-3 rounded-3xl border-2 border-zinc-100 bg-zinc-50 p-4">
-            <h3 className="font-bold">{productId ? "Konfirmasi produk" : "Isi manual (3 kolom aja)"}</h3>
-            <input
-              type="text"
-              placeholder="Nama produk (mis. Serum Glow Bright)"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
-            />
-            <input
-              type="text"
-              inputMode="numeric"
-              placeholder="Harga (mis. 85000)"
-              value={price}
-              onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
-              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
-            />
-            {price && <p className="text-sm text-zinc-500">= {rupiah(parseInt(price || "0", 10) || 0)}</p>}
-            {/* Merek untuk pengecekan label otomatis. Dari link: terisi usulan
-                server yang WAJIB dikoreksi user kalau salah. */}
-            <input
-              type="text"
-              placeholder="Merek di label (mis. Scarlett) — biar AI menjaga mereknya persis"
-              value={brand}
-              onChange={(e) => setBrand(e.target.value)}
-              maxLength={60}
-              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
-            />
-            {brand && (
-              <p className="text-xs text-zinc-500">
-                Pastikan tulisannya persis seperti di label produk — dipakai AI untuk menjaga merekmu tidak berubah di video.
-              </p>
-            )}
-            <input
-              type="text"
-              placeholder="Deskripsi visual produk (opsional, biar konsisten): mis. botol dropper amber 30ml, label putih tulisan hitam"
-              value={visualDesc}
-              onChange={(e) => setVisualDesc(e.target.value)}
-              maxLength={200}
-              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
-            />
-            <select
-              value={category}
-              onChange={(e) => { setCategory(e.target.value); setKategoriDitentukan(true); setKategoriDitebak(false); }}
-              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
-            >
-              {CATEGORY_OPTIONS.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.label}
-                </option>
-              ))}
-            </select>
-            {/* Tebakan yang tidak diberitahukan itu diam-diam mengubah hasil
-                orang. Katakan bahwa kita menebak — dan bahwa boleh diganti. */}
-            {kategoriDitebak && (
-              <p className="-mt-2 text-sm text-zinc-500">
-                Kategorinya kami tebak dari nama produk — ganti kalau meleset.
-              </p>
-            )}
+            <div>
+              <h3 className="font-bold">{productId ? "Konfirmasi produk" : "Isi sendiri"}</h3>
+              {/* "3 kolom aja" DIBUANG: formnya tidak pernah 3 kolom — ada
+                  nama, harga, merek, deskripsi, kategori, foto, dan promo.
+                  Janji yang dibantah layarnya sendiri dua detik kemudian
+                  membuat semua janji lain ikut diragukan (audit UI 19 Sep). */}
+              {!productId && (
+                <p className="mt-0.5 text-sm text-zinc-500">Foto, nama, dan harga sudah cukup — sisanya opsional.</p>
+              )}
+            </div>
 
+            {/* FOTO DULUAN, bukan paling bawah.
+                Foto pertama adalah patokan utama AI menggambar produk — ia
+                penentu mutu video, dan sebelumnya ia tombol 80px di ujung
+                paling bawah, di bawah lima kolom teks dan enam butir tips.
+                Yang paling menentukan hasil harus jadi yang paling mudah
+                dilihat dan ditekan. */}
             <div>
               <p className="mb-2 text-sm font-semibold text-zinc-700">
                 Foto produk ({extractedPreviews.length + photos.length}/{MAX_PHOTOS})
@@ -399,21 +400,11 @@ export default function ProdukPage() {
                   <span className="ml-1 font-normal text-emerald-600">— dari link ✓</span>
                 )}
               </p>
-              <div className="mb-2 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs leading-5 text-amber-900">
-                <p className="font-bold">📸 Foto yang bagus = video yang bagus</p>
-                <ul className="mt-1 list-disc space-y-0.5 pl-4">
-                  <li><b>Foto pertama paling penting</b> — jadi patokan utama AI menggambar produkmu di video.</li>
-                  <li>Produk terlihat jelas & memenuhi frame, label menghadap kamera.</li>
-                  <li>Latar bersih & cahaya terang (dekat jendela sudah cukup).</li>
-                  <li>Hindari kolase, teks/watermark tempelan, atau foto buram.</li>
-                  <li>Foto 2–{MAX_PHOTOS} (opsional): sudut lain / detail tekstur / produk dipakai.</li>
-                </ul>
-              </div>
               <div className="flex flex-wrap gap-2">
                 {extractedPreviews.map((src, i) => (
                   <div key={`x${i}`} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`foto dari link ${i + 1}`} className="h-20 w-20 rounded-xl object-cover ring-2 ring-emerald-400" loading="lazy" decoding="async" />
+                    <img src={src} alt={`foto dari link ${i + 1}`} className="h-24 w-24 rounded-xl object-cover ring-2 ring-emerald-400" loading="lazy" decoding="async" />
                     <button
                       type="button"
                       aria-label={`Buang foto dari link ${i + 1}`}
@@ -427,7 +418,7 @@ export default function ProdukPage() {
                 {previews.map((src, i) => (
                   <div key={i} className="relative">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={src} alt={`foto ${i + 1}`} className="h-20 w-20 rounded-xl object-cover" decoding="async" />
+                    <img src={src} alt={`foto ${i + 1}`} className="h-24 w-24 rounded-xl object-cover" decoding="async" />
                     <button
                       type="button"
                       aria-label={`Buang foto ${i + 1}`}
@@ -442,9 +433,14 @@ export default function ProdukPage() {
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
-                    className="flex h-20 w-20 items-center justify-center rounded-xl border-2 border-dashed border-zinc-300 text-2xl text-zinc-400"
+                    // Kotak pertama dibuat SELEBAR kartu saat belum ada foto:
+                    // sasaran 80px untuk masukan terpenting di halaman ini
+                    // membuatnya terbaca seperti pelengkap.
+                    className={`flex items-center justify-center rounded-xl border-2 border-dashed border-amber-300 bg-amber-50/60 text-amber-700 ${
+                      extractedPreviews.length + photos.length === 0 ? "h-24 w-full gap-2 text-sm font-semibold" : "h-24 w-24 text-2xl"
+                    }`}
                   >
-                    ＋
+                    {extractedPreviews.length + photos.length === 0 ? <>＋ Pilih foto produk</> : "＋"}
                   </button>
                 )}
               </div>
@@ -456,7 +452,96 @@ export default function ProdukPage() {
                 hidden
                 onChange={(e) => pickPhotos(e.target.files)}
               />
+              {/* TIPS DILIPAT. Enam butir terbuka mendorong tombol unggah ke
+                  bawah lipatan — nasihat yang menghalangi pekerjaan yang
+                  dinasihatinya. Tetap satu ketukan bagi yang mau membacanya. */}
+              <details className="mt-2 rounded-xl border border-amber-100 bg-amber-50/70 px-3 py-2 text-xs leading-5 text-amber-900">
+                <summary className="cursor-pointer font-bold">📸 Foto yang bagus = video yang bagus</summary>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <li><b>Foto pertama paling penting</b> — jadi patokan utama AI menggambar produkmu di video.</li>
+                  <li>Produk terlihat jelas &amp; memenuhi frame, label menghadap kamera.</li>
+                  <li>Latar bersih &amp; cahaya terang (dekat jendela sudah cukup).</li>
+                  <li>Hindari kolase, teks/watermark tempelan, atau foto buram.</li>
+                  <li>Foto 2–{MAX_PHOTOS} (opsional): sudut lain / detail tekstur / produk dipakai.</li>
+                </ul>
+              </details>
             </div>
+
+            {/* LABEL DI ATAS KOLOM, bukan placeholder.
+                Placeholder dipakai sebagai label sampai audit 19 Sep 2026, dan
+                dua di antaranya terpotong di tengah kata pada lebar ponsel —
+                "...biar AI menjaga mer" dan "...biar konsisten): m". Lebih
+                buruk lagi: begitu orang mulai mengetik, satu-satunya keterangan
+                tentang kolom itu hilang sama sekali. */}
+            <Kolom label="Nama produk" wajib>
+              <input
+                type="text"
+                placeholder="mis. Serum Glow Bright"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
+              />
+            </Kolom>
+
+            <Kolom label="Harga" wajib petunjuk={price ? `= ${rupiah(parseInt(price || "0", 10) || 0)}` : undefined}>
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="mis. 85000"
+                value={price}
+                onChange={(e) => setPrice(e.target.value.replace(/[^\d]/g, ""))}
+                className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
+              />
+            </Kolom>
+
+            {/* Merek untuk pengecekan label otomatis. Dari link: terisi usulan
+                server yang WAJIB dikoreksi user kalau salah. */}
+            <Kolom
+              label="Merek di label"
+              petunjuk={brand
+                ? "Tulis persis seperti di label produk — dipakai AI supaya merekmu tidak berubah di video."
+                : "Biar AI menjaga tulisan mereknya persis seperti di label."}
+            >
+              <input
+                type="text"
+                placeholder="mis. Scarlett"
+                value={brand}
+                onChange={(e) => setBrand(e.target.value)}
+                maxLength={60}
+                className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
+              />
+            </Kolom>
+
+            <Kolom label="Deskripsi visual produk" opsional petunjuk="Biar bentuknya konsisten di semua adegan.">
+              <input
+                type="text"
+                placeholder="mis. botol dropper amber 30ml"
+                value={visualDesc}
+                onChange={(e) => setVisualDesc(e.target.value)}
+                maxLength={200}
+                className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
+              />
+            </Kolom>
+
+            <Kolom
+              label="Kategori"
+              // Tebakan yang tidak diberitahukan itu diam-diam mengubah hasil
+              // orang. Katakan bahwa kita menebak — dan bahwa boleh diganti.
+              petunjuk={kategoriDitebak ? "Kami tebak dari nama produk — ganti kalau meleset." : undefined}
+            >
+              <select
+                value={category}
+                onChange={(e) => { setCategory(e.target.value); setKategoriDitentukan(true); setKategoriDitebak(false); }}
+                className="min-h-[52px] w-full appearance-none rounded-2xl border-2 border-zinc-200 bg-white bg-[length:12px] bg-[right_1rem_center] bg-no-repeat px-4 pr-10 outline-none focus:border-amber-500"
+                style={{ backgroundImage: "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 8'><path d='M1 1l5 5 5-5' stroke='%2371717a' stroke-width='2' fill='none' stroke-linecap='round'/></svg>\")" }}
+              >
+                {CATEGORY_OPTIONS.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
+                ))}
+              </select>
+            </Kolom>
 
             <div className="rounded-2xl border border-zinc-200 bg-white">
               <button
