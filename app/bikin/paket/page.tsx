@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "../../_components/api";
+import { apiFetch, pesanUntukPengguna } from "../../_components/api";
 import { ErrorText } from "../../_components/ui";
 import Link from "next/link";
 
@@ -33,7 +33,7 @@ function PaketInner() {
         setPkg(d);
         setChecked(d.compliance_checklist.slice(0, 3).map(() => false));
       })
-      .catch((e) => setError(e instanceof Error ? e.message : "Gagal memuat paket."));
+      .catch((e) => setError(pesanUntukPengguna(e, "Paketnya belum bisa dimuat. Cek koneksimu, lalu coba lagi ya.")));
   }, [jobId]);
 
   async function copy(key: string, text: string) {

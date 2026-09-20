@@ -78,7 +78,7 @@ function SkripInner() {
           setScripts([d.script]);
           setProductInfo({ name: d.script.product_name, priceIdr: d.script.price_idr });
         })
-        .catch((e) => setError(e instanceof Error ? e.message : "Gagal memuat skrip."));
+        .catch((e) => setError(pesanUntukPengguna(e, "Skripnya belum bisa dimuat. Cek koneksimu, lalu coba lagi ya.")));
       return;
     }
     const f = loadFlow();

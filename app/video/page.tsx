@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { apiFetch } from "../_components/api";
+import { apiFetch, pesanUntukPengguna } from "../_components/api";
 import { PrimaryButton } from "../_components/ui";
 import { relTime } from "../_components/flow";
 import { track } from "../_components/track";
@@ -66,7 +66,7 @@ function ReportForm({ job }: { job: JobItem }) {
       track("report_saved");
       setMsg("✓ Tersimpan. Makasih — data ini bikin Skor FYP makin akurat.");
     } catch (e) {
-      setMsg(e instanceof Error ? e.message : "Gagal menyimpan. Coba lagi ya.");
+      setMsg(pesanUntukPengguna(e, "Gagal menyimpan. Coba lagi ya."));
     } finally {
       setBusy(false);
     }

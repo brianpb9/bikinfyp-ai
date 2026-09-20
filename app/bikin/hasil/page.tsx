@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { apiFetch } from "../../_components/api";
+import { apiFetch, pesanUntukPengguna } from "../../_components/api";
 import { ProgressDots, SecondaryButton, WarnCard, ErrorText } from "../../_components/ui";
 import { saveFlow } from "../../_components/flow";
 
@@ -24,7 +24,7 @@ function HasilInner() {
     if (!jobId) return;
     apiFetch<OutputPackage>(`/api/jobs/${jobId}/output`)
       .then(setPkg)
-      .catch((e) => setError(e instanceof Error ? e.message : "Gagal memuat hasil."));
+      .catch((e) => setError(pesanUntukPengguna(e, "Hasilnya belum bisa dimuat. Cek koneksimu, lalu coba lagi ya.")));
     apiFetch<{ script_id: string }>(`/api/jobs/${jobId}`)
       .then((j) => setScriptId(j.script_id))
       .catch(() => {});

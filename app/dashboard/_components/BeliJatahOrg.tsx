@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useRef, useState } from "react";
+import { pesanUntukPengguna } from "../../_components/api";
 
 /**
  * Beli JATAH VIDEO untuk organisasi, dari dashboard brand.
@@ -79,7 +80,7 @@ export function BeliJatahOrg({ jenis }: { jenis: Jenis[] }) {
       if (d.redirect_url) window.location.href = d.redirect_url;
       else throw new Error("Gateway tidak memberi alamat pembayaran.");
     } catch (e) {
-      setGalat(e instanceof Error ? e.message : "Gagal memulai pembayaran.");
+      setGalat(pesanUntukPengguna(e, "Pembayarannya belum bisa dimulai. Coba lagi sebentar ya."));
       setSibuk(false);
       kunci.current = false;
     }

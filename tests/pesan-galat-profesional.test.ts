@@ -88,7 +88,20 @@ test("tidak ada layar yang menampilkan err.message mentah lagi", () => {
       // sampai ke layar siapa pun, dan membuangnya justru menghapus jejak yang
       // dibutuhkan saat menelusuri pembayaran yang gagal.
       if (!/^["']use client["']/m.test(src)) continue;
-      if (/err instanceof Error \? err\.message/.test(src)) bocor.push(path.relative(process.cwd(), f));
+      // LAYAR OPERATOR DIKECUALIKAN, SENGAJA. /admin dibuka orang yang memang
+      // mencari sebabnya; menyaring pesan di sana justru membuang keterangan
+      // yang ia butuhkan untuk menolong pengguna.
+      if (/^app\/admin\//.test(path.relative(process.cwd(), f))) continue;
+      // NAMA VARIABELNYA APA SAJA.
+      //
+      // Versi pertama tes ini hanya mencocokkan `err`. Selama berbulan-bulan ia
+      // hijau sementara LIMA layar pengguna tetap menampilkan pesan mentah —
+      // semuanya menamai variabelnya `e`, bukan `err` (audit UI 20 Sep 2026).
+      // Yang bocor bukan cuma jelek: "Failed to fetch" dan "NetworkError when
+      // attempting to fetch resource" adalah bahasa Inggris teknis di layar
+      // penjual Indonesia, dan tidak satu pun memberi tahu apa yang harus
+      // dilakukan. Penggantinya sudah ada sejak lama: pesanUntukPengguna().
+      if (/\b(\w+) instanceof Error \? \1\.message/.test(src)) bocor.push(path.relative(process.cwd(), f));
     }
   };
   telusuri(dir);
