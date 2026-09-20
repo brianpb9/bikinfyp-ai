@@ -194,7 +194,14 @@ export function hitungProgres(input: {
 
 /** "3 menit lagi" / "40 detik lagi" — dibulatkan ke atas supaya tidak menjanjikan lebih cepat. */
 export function teksSisa(sisaDetik: number | null): string {
-  if (sisaDetik === null) return "Sebentar lagi — rendernya lagi lebih lama dari biasanya";
+  // "Sebentar lagi — rendernya lagi lebih lama dari biasanya" MEMBANTAH
+  // DIRINYA SENDIRI, dan dibaca justru saat orang paling gelisah: cabang ini
+  // menyala setelah perkiraan habis, yang pada job 66 menit (terlihat saat
+  // audit UI 20 Sep 2026) berarti satu jam penuh dijanjikan "sebentar lagi".
+  // Janji yang meleset berkali-kali lebih merusak daripada menunggu lama yang
+  // diakui apa adanya — dan kalimat berikutnya di layar sudah memberi tahu
+  // bahwa HP boleh ditutup.
+  if (sisaDetik === null) return "Lebih lama dari biasanya — masih jalan, tidak macet";
   if (sisaDetik < 60) return `Sekitar ${Math.max(10, Math.ceil(sisaDetik / 10) * 10)} detik lagi`;
   return `Sekitar ${Math.ceil(sisaDetik / 60)} menit lagi`;
 }

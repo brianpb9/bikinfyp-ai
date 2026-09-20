@@ -13,7 +13,7 @@ interface OutputPackage {
   hashtags: string[];
   suggested_post_time: string;
   compliance_checklist: string[];
-  virality_checklist: { score: number; checks: { id: string; label: string; passed: boolean }[] } | null;
+  virality_checklist: { score: number; checks: { id: string; label: string; passed: boolean; perbaikan?: string }[] } | null;
   notice: string;
 }
 
@@ -124,12 +124,18 @@ function PaketInner() {
 
       {pkg.virality_checklist && (
         <section className="space-y-2 rounded-2xl border-2 border-zinc-100 bg-white p-4 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Cek Kelayakan Posting (v1, kasar)</p>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Cek sebelum posting</p>
           <ul className="space-y-1.5">
             {pkg.virality_checklist.checks.map((c) => (
               <li key={c.id} className="flex items-start gap-2 text-sm">
-                <span className={c.passed ? "text-emerald-600" : "text-red-500"}>{c.passed ? "✓" : "✕"}</span>
-                <span className={c.passed ? "text-zinc-700" : "text-red-700"}>{c.label}</span>
+                <span className={c.passed ? "text-emerald-600" : "text-amber-600"}>{c.passed ? "✓" : "!"}</span>
+                <span className={c.passed ? "text-zinc-700" : "text-zinc-800"}>
+                  {c.label}
+                  {/* Yang gagal SELALU membawa cara memperbaikinya. */}
+                  {!c.passed && c.perbaikan && (
+                    <span className="mt-0.5 block text-xs leading-4 text-amber-700">{c.perbaikan}</span>
+                  )}
+                </span>
               </li>
             ))}
           </ul>

@@ -74,7 +74,14 @@ test("KELEWAT WAKTU dikatakan, bukan dibekukan", () => {
   const p = hitungProgres({ state: "QC_CHECK", berjalanDetik: 5000, tier: "premium" });
   assert.equal(p.kelewat, true);
   assert.equal(p.sisaDetik, null, "sisa waktu negatif tidak boleh ditampilkan");
-  assert.match(teksSisa(null), /lebih lama dari biasanya/, "kelewat waktu harus dikatakan apa adanya");
+  assert.match(teksSisa(null), /lebih lama dari biasanya/i, "kelewat waktu harus dikatakan apa adanya");
+  // DAN TIDAK BOLEH MENJANJIKAN CEPAT DI KALIMAT YANG SAMA.
+  //
+  // Kalimatnya dulu berbunyi "Sebentar lagi — rendernya lagi lebih lama dari
+  // biasanya": membantah dirinya sendiri, dan dibaca justru saat orang paling
+  // gelisah. Terlihat di audit UI 20 Sep 2026 pada job yang sudah berjalan 66
+  // menit dan masih dijanjikan "sebentar lagi".
+  assert.doesNotMatch(teksSisa(null), /sebentar lagi/i, "kelewat waktu tidak boleh sekaligus menjanjikan cepat");
 });
 
 test("hitungan mundur dibulatkan KE ATAS — jangan menjanjikan lebih cepat", () => {

@@ -59,14 +59,39 @@ export function KlipContoh({
     // Browser tanpa IntersectionObserver (Safari lama) langsung diberi
     // videonya — lebih baik boros daripada diam-diam tidak pernah memutar.
     if (typeof IntersectionObserver === "undefined") { setTampil(true); return; }
-    const io = new IntersectionObserver(
-      (entries) => { if (entries.some((e) => e.isIntersecting)) { setTampil(true); io.disconnect(); } },
-      // 200px sebelum masuk layar: cukup untuk mulai memuat, tidak cukup jauh
-      // untuk menarik seluruh halaman sekaligus.
-      { rootMargin: "200px" }
-    );
-    io.observe(el);
-    return () => io.disconnect();
+
+    let io: IntersectionObserver | null = null;
+    let batal = false;
+
+    const amati = () => {
+      if (batal || !ref.current) return;
+      io = new IntersectionObserver(
+        (entries) => { if (entries.some((e) => e.isIntersecting)) { setTampil(true); io?.disconnect(); } },
+        // 96px, bukan 200px: dengan 200px strip contoh /onboarding — yang
+        // duduk 135px di bawah lipatan pada layar 390x844 — masih ikut
+        // terunduh seluruhnya.
+        { rootMargin: "96px" },
+      );
+      io.observe(ref.current);
+    };
+
+    // PENGAMATAN DITUNDA SAMPAI TATA LETAK TENANG.
+    //
+    // Terukur 20 Sep 2026: strip contoh /onboarding jelas di bawah lipatan,
+    // tapi klipnya TETAP terunduh semua (1,7 MB). Sebabnya bukan marginnya:
+    // pada cat pertama, gambar dan font di atasnya belum memesan tingginya,
+    // jadi strip itu sempat berada jauh lebih tinggi, memotong zona pemicu,
+    // dan src-nya terpasang untuk selamanya. Mengamati sesudah `load` membuat
+    // yang dinilai posisi sebenarnya, bukan posisi sesaat sebelum halaman
+    // selesai disusun.
+    if (document.readyState === "complete") amati();
+    else window.addEventListener("load", amati, { once: true });
+
+    return () => {
+      batal = true;
+      window.removeEventListener("load", amati);
+      io?.disconnect();
+    };
   }, [tampil]);
 
   useEffect(() => {

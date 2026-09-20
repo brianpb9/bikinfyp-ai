@@ -15,6 +15,15 @@ export interface ViralityCheck {
   id: string;
   label: string;
   passed: boolean;
+  /**
+   * Apa yang harus dilakukan kalau cek ini GAGAL.
+   *
+   * Sebelum audit UI 20 Sep 2026 daftar ini hanya memberi tanda ✕ merah dan
+   * berhenti di situ: pengguna diberi tahu videonya kurang, tanpa satu pun
+   * cara memperbaikinya. Penilaian tanpa jalan keluar bukan bantuan — ia
+   * cuma membuat orang ragu memposting.
+   */
+  perbaikan?: string;
 }
 
 export interface ViralityChecklistResult {
@@ -35,16 +44,19 @@ export function computeViralityChecklist(input: {
       id: "duration_range",
       label: `Durasi ${MIN_DURATION_SEC}-${MAX_DURATION_SEC} detik (rentang aman buat short-form)`,
       passed: input.durationSec >= MIN_DURATION_SEC && input.durationSec <= MAX_DURATION_SEC,
+      perbaikan: `Bikin versi lain dengan durasi ${MIN_DURATION_SEC}-${MAX_DURATION_SEC} detik.`,
     },
     {
       id: "has_cta",
       label: "Ada ajakan aksi (CTA) yang jelas di akhir",
       passed: input.hasCta,
+      perbaikan: "Tambahkan ajakan di caption — mis. \"cek keranjang kuning\" — atau bikin versi lain dengan CTA di akhir.",
     },
     {
       id: "has_audio_or_caption",
       label: "Ada suara atau caption tersinkron (bukan video bisu tanpa teks)",
       passed: input.hasAudioOrCaption,
+      perbaikan: "Pilih paket bersuara saat bikin versi lain, atau tambahkan teks di aplikasi editmu.",
     },
   ];
   const score = Math.round((checks.filter((c) => c.passed).length / checks.length) * 100);

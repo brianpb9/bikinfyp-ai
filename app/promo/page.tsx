@@ -60,7 +60,7 @@ export default function PromoPage() {
   const [error, setError] = useState<string | null>(null);
   const [noCredits, setNoCredits] = useState(false);
   const [priceIdr, setPriceIdr] = useState<number | null>(null);
-  const [checklist, setChecklist] = useState<{ score: number; checks: { id: string; label: string; passed: boolean }[] } | null>(null);
+  const [checklist, setChecklist] = useState<{ score: number; checks: { id: string; label: string; passed: boolean; perbaikan?: string }[] } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<number | null>(null);
 
@@ -201,7 +201,7 @@ export default function PromoPage() {
 
   async function poll(id: string) {
     try {
-      const job = await apiFetch<{ state: string; error_message: string | null; output_url: string | null; virality_checklist: { score: number; checks: { id: string; label: string; passed: boolean }[] } | null }>(`/api/promo/jobs/${id}`);
+      const job = await apiFetch<{ state: string; error_message: string | null; output_url: string | null; virality_checklist: { score: number; checks: { id: string; label: string; passed: boolean; perbaikan?: string }[] } | null }>(`/api/promo/jobs/${id}`);
       if (job.state === "READY") {
         setVideoUrl(job.output_url);
         setChecklist(job.virality_checklist);
@@ -456,12 +456,18 @@ export default function PromoPage() {
 
           {checklist && (
             <section className="space-y-2 rounded-2xl border-2 border-zinc-100 bg-white p-4">
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Cek Kelayakan Posting (v1, kasar)</p>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Cek sebelum posting</p>
               <ul className="space-y-1.5">
                 {checklist.checks.map((c) => (
                   <li key={c.id} className="flex items-start gap-2 text-sm">
-                    <span className={c.passed ? "text-emerald-600" : "text-red-500"}>{c.passed ? "✓" : "✕"}</span>
-                    <span className={c.passed ? "text-zinc-700" : "text-red-700"}>{c.label}</span>
+                    <span className={c.passed ? "text-emerald-600" : "text-amber-600"}>{c.passed ? "✓" : "!"}</span>
+                    <span className={c.passed ? "text-zinc-700" : "text-zinc-800"}>
+                      {c.label}
+                      {/* Yang gagal SELALU membawa cara memperbaikinya. */}
+                      {!c.passed && c.perbaikan && (
+                        <span className="mt-0.5 block text-xs leading-4 text-amber-700">{c.perbaikan}</span>
+                      )}
+                    </span>
                   </li>
                 ))}
               </ul>
